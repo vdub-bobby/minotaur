@@ -1,3 +1,39 @@
+;-------------------------------------------------------------------------
+;---------Tank Battalion Atari 2600 port----------------------------------
+;-------------------------------------------------------------------------
+;	Bob Montgomery
+;	(c) 2012
+;
+;
+;	To do:
+;	Rewrite tank movement routines so that tanks (a) always move (i.e. don't
+;		get stuck in corners or dead-ends) and (b) don't reverse unless that
+;		is the only direction to move
+;	Figure out good AI for tank movement/firing routines
+;	Add explosion graphics
+;	Sound FX
+;	Music?
+;	Title/splash screen?
+;	Power-Ups - ???
+;	Maze generation routine done?  Tweaking?  Rewrite?
+;	Collisions!
+;	Score
+;	Level objectives moving through levels
+;	Difficulty settings
+;	Gameplay tweaking
+;	Graphics/colors
+;	PAL60 version
+;	2-player?  (unlikely but...)
+;	Other...?
+
+;	BUG KILLING!
+
+
+
+
+
+
+
 
 	processor 6502
 	include vcs.h
