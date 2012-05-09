@@ -9,6 +9,9 @@
 ;	Rewrite tank movement routines so that tanks (a) always move (i.e. don't
 ;		get stuck in corners or dead-ends) and (b) don't reverse unless that
 ;		is the only direction to move
+;			New routine:
+;				first, determine directions possible to move
+;				next, choose one of those and move 
 ;	Figure out good AI for tank movement/firing routines
 ;	Add explosion graphics
 ;	Sound FX
@@ -749,37 +752,38 @@ DivideByTwoPositive
 
 ;****************************************************************************
 
-
+;--X is index into which tank
+;--X, Y position the tank is going to move towards is pushed on stack 
 ChooseTankDirectionSubroutine
 	lda #0
-	pha
+	pha						;we will save new direction on stack
 	txa
-	tay
+	tay						;get tank index into Y so we can use X for stack ptr
 	tsx
-	lda $05,X
+	lda $05,X				;X position we are aiming for
 	cmp TankX,Y
-	beq MoveTankOnYAxis
+	beq MoveTankOnYAxis		;if equal don't move tank horizontally
 	lda #0
-	rol
+	rol						;get carry into A (carry set=tank is to the left of target, carry clear=tank to the right)
 	tax
 	lda TankDirection,X
 	tsx
-	sta $01,X
+	sta $01,X				;save new horizontal direction
 MoveTankOnYAxis
-	lda $04,X
+	lda $04,X				;Y position we are aiming for
 	cmp TankY,Y
 	beq NoVerticalTankMovement
 	lda #0
-	rol
+	rol						;similar to horizontal movement, use carry as index into offset table
 	tax
 	lda TankDirection+2,X
 	tsx
-	ora $01,X
+	ora $01,X				;ORA vertical direction into direction variable on stack
 	sta $01,X
 NoVerticalTankMovement
 	tya
-	tax
-	pla
+	tax						;get tank index back into X
+	pla						;pull new tank direction off stack into A
 	rts
 
 TankDirection
@@ -792,12 +796,18 @@ MoveEnemyTanksSubroutine
 ; 	ldx #3
 ; MoveEnemiesLoop
 
+	;--hack:
+	;	can't move all 3 enemies every frame, takes too long.
+	;	So instead move one per frame (moving none every 4th frame)
+	;	Works well enough for now, work on optimizing this routine later
+
 	lda FrameCounter
 	and #3
 	beq ReturnFromTankMovementSubroutine
 	tax
 
-	;--plan for now:  every time enemy tank hits intersection, change direction randomly
+	;--plan for now:  every time enemy tank hits intersection, change direction
+	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
 	
 	lda TankX,X
 	and #$07
@@ -837,6 +847,7 @@ NotTankTwo
 	pha
 	jmp ChooseTankDirection
 	
+	;other tank moves somewhat randomly
 NotTankOne	
 	jsr UpdateRandomNumber
 	pha
@@ -846,9 +857,9 @@ NotTankOne
 	
 ChooseTankDirection
 	jsr ChooseTankDirectionSubroutine
-	sta TankStatus,X
+	sta TankStatus,X					;returns with new direction in accumulator
 	pla
-	pla
+	pla									;pull target for tank off stack and discard
 	
 NotAtIntersection
 
@@ -861,8 +872,9 @@ NotAtIntersection
 	;push movementflag (zero) onto stack
 	lda #0
 	pha
-	lda TankStatus,X
-	eor #$FF
+	lda TankStatus,X			;this holds new, desired direction for tank.
+	eor #$FF					;flip all bits so that is interchangeable with reading from joystick
+								;and can use same routine for both.
 	jmp TankMovementSubroutine
 ReturnFromTankMovementSubroutine
 ; 	pla
@@ -1326,12 +1338,9 @@ ReadControllersSubroutine
 	lda SWCHA	;A holds joystick
 	ldx #0		;index into which tank
 	
-TankMovementSubroutine
-	pha			;--save directions
-	jsr CheckForWallSubroutine
-	;--returns with allowed directions in A
-	
-	
+TankMovementSubroutine				;jump here when moving enemy tanks
+	pha			;--save desired direction of tank
+	jsr CheckForWallSubroutine		;--returns with allowed directions in A
 	
 	;--if no directions are allowed, but tank is trying to move, turn tank but do not move.
 	and #$F0	;clear bottom nibble
@@ -1341,11 +1350,8 @@ TankMovementSubroutine
 	txa
 	pha		;save index into which tank
 	tsx
-	inx
-	inx
-	inx
 	lda #$FF
-	sta $00,X	;movementflag
+	sta $03,X	;movementflag
 	pla
 	tax			;restore tank index
 	jmp ProcessDirections
@@ -1355,27 +1361,22 @@ MovementAllowed
 	pha		;save index into which tank
 	
 	tsx
-	inx
-	inx
-	lda $00,X
-	inx
-	sta $00,X	;overwrite allowed directions
+	lda $02,X	;load allowed directions (see above)
+	sta $03,X	;overwrite desired directions (either joystick (if player) or calc direction if enemy)
 	pla
 	tax			;restore tank index
 	pla			;pull allowed directions off
 ProcessDirections
-	pla
-	jsr EliminateDiagonalSubroutine
+	pla			;pulls 
+	jsr EliminateDiagonalSubroutine		;tanks cannot move diagonally
 
-	tay	;--save directions in Y
+	tay	;--save direction in Y
 	
 	txa
 	pha	;save tank index
 	
 	tsx
-	inx
-	inx
-	asl $00,X		;get movement in carry flag
+	asl $02,X		;get movement flag into carry flag
 
 	pla
 	tax	;restore tank index
@@ -1383,7 +1384,7 @@ ProcessDirections
 	tya	;get saved directions back in A	
 	and #J0UP
 	bne NoUp
-	bcs TurnUpward
+	bcs TurnUpward			;carry holds movement flag (carry clear=no movement)
 	inc TankY,X
 TurnUpward
 	lda TankStatus,X
@@ -1394,7 +1395,7 @@ NoUp
 	tya
 	and #J0DOWN
 	bne NoDown
-	bcs TurnDownward
+	bcs TurnDownward		;carry holds movement flag (carry clear=no movement)
 	dec TankY,X
 TurnDownward
 	lda TankStatus,X
@@ -1405,7 +1406,7 @@ NoDown
 	tya
 	and #J0RIGHT
 	bne NoRight
-	bcs TurnRightward
+	bcs TurnRightward		;carry holds movement flag (carry clear=no movement)
 	inc TankX,X
 TurnRightward	
 	lda TankStatus,X
@@ -1416,7 +1417,7 @@ NoRight
 	tya
 	and #J0LEFT
 	bne NoLeft
-	bcs TurnLeftward
+	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
 	dec TankX,X
 TurnLeftward
 	lda TankStatus,X
@@ -1425,7 +1426,7 @@ TurnLeftward
 	sta TankStatus,X
 NoLeft
 
-	pla		;pop movement flag off of stack
+	pla		;pop movement flag off of stack and discard
 
 	;are any balls available for firing
 	ldx #1
