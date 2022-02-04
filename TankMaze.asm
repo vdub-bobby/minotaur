@@ -205,6 +205,9 @@ MazeNumber ds 1
 
 GameStatus ds 1
 
+
+
+
 TriggerDebounce ds 1
 ConsoleDebounce ds 1
 
