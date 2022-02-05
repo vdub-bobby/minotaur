@@ -11,6 +11,9 @@
 ;		is the only direction to move
 ;			New routine:
 ;				first, determine directions possible to move
+;					if only 1, go that direction
+;					if >1, eliminate the direction that you just came from
+;					choose one of 3 remaining
 ;				next, choose one of those and move 
 ;	Figure out good AI for tank movement/firing routines
 ;	Add explosion graphics
@@ -826,6 +829,34 @@ FindYIntersectionLoop
 	adc #BLOCKHEIGHT
 	bne NotAtIntersection
 	
+	;--here is where we choose which way each tank will go
+	;
+	;--new routine: 
+	;	get allowable directions
+	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
+	jsr CheckForWallSubroutine	;--returns with allowable directions in A
+	
+	
+	and #$F0	;clear bottom nibble
+	
+	
+	;--if single direction, then move that direction
+	pha			;--save direction
+	
+	lsr
+	lsr
+	lsr
+	lsr			;--get in bottom nibble
+	tay
+	lda NumberOfBitsSet,Y
+	cmp #1
+	bne MoreThanOneAllowedDirection
+	pla			;get direction back off stack
+	sta TankStatus,X
+	jmp DirectionChosen
+MoreThanOneAllowedDirection
+	pla			;get direction back off of stack
+	
 	cpx #2
 	bne NotTankTwo
 	;--tank #2 moves towards player:
@@ -865,7 +896,7 @@ ChooseTankDirection
 	sta TankStatus,X					;returns with new direction in accumulator
 	pla
 	pla									;pull target for tank off stack and discard
-	
+DirectionChosen
 NotAtIntersection
 
 
@@ -888,6 +919,12 @@ ReturnFromTankMovementSubroutine
 ; 	bne MoveEnemiesLoop
 	
 	rts
+
+;****************************************************************************
+
+NumberOfBitsSet
+	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+
 
 ;****************************************************************************
 
@@ -1849,6 +1886,9 @@ CheckForWallSubroutine
 	;result is in Temp
 	lda Temp
 	bne CannotMoveLeft
+	cpx #0
+	bne NoWallL
+	;--this check is only for player 0
 	lda TankX,X
 	sec
 	sbc #1
@@ -1865,7 +1905,7 @@ CannotMoveLeft
 	tya
 	ora #J0LEFT
 	tay
-	jmp CheckVerticalMovement
+	;jmp CheckVerticalMovement
 NoWallL
 NotMovingLeft
 	tya
@@ -1889,6 +1929,9 @@ NotMovingLeft
 	;result is in Temp
 	lda Temp
 	bne CannotMoveRight
+	;--this extra check is only for player 0
+	cpx #0
+	bne NoWallR
 	lda TankX,X
 	clc
 	adc #8
@@ -1928,6 +1971,9 @@ CheckVerticalMovement
 	;result is in Temp
 	lda Temp
 	bne CannotMoveUp
+	;--this is only for player 0
+	cpx #0
+	bne NoWallU
 	;--temp+1 is unchanged
 	lda TankX,X
 	clc
@@ -1941,7 +1987,7 @@ CannotMoveUp
 	tya
 	ora #J0UP
 	tay
-	jmp DoneWithMovementChecks
+	;jmp DoneWithMovementChecks
 NotAtTopEdge
 NoWallU	
 NotMovingUp	
@@ -1964,6 +2010,9 @@ NotMovingUp
 	;result is in Temp
 	lda Temp
 	bne CannotMoveDown
+	;--following check only for player 0
+	cpx #0
+	bne NoWallD
 	;--temp+1 is unchanged
 	lda TankX,X
 	clc
