@@ -201,7 +201,7 @@ RESET		=	%00000001
    	org $80
 
 FrameCounter ds 1
-
+TankMovementCounter ds 1
 RandomNumber ds 1
 
 MazeNumber ds 1
@@ -270,6 +270,7 @@ Start
 
 ;--Some Initial Setup
 
+	dec TankMovementCounter	;start this at $FF (for debugging purposes, for now...)
 
 ; 	jsr GenerateMazeSubroutine	
 	
@@ -812,6 +813,7 @@ MoveEnemyTanksSubroutine
 	lda FrameCounter
 	and #3
 	bne MoveAnEnemyTank
+	;dec TankMovementCounter
 	jmp ReturnFromTankMovementSubroutine
 MoveAnEnemyTank
 	tax
@@ -821,7 +823,9 @@ MoveAnEnemyTank
 	
 	lda TankX,X
 	and #$07
-	bne NotAtIntersection
+	beq AtIntersectionX
+	jmp NotAtIntersection
+AtIntersectionX
 	lda TankY,X
 	sec
 	sbc #1
@@ -829,8 +833,9 @@ FindYIntersectionLoop
 	sbc #BLOCKHEIGHT
 	bcs FindYIntersectionLoop
 	adc #BLOCKHEIGHT
-	bne NotAtIntersection
-	
+	beq AtIntersectionY
+	jmp NotAtIntersection
+AtIntersectionY	
 	;--here is where we choose which way each tank will go
 	;
 	;--new routine: 
@@ -838,13 +843,19 @@ FindYIntersectionLoop
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 	
+	;--new (2/9/2022) - look for tank in adjacent spot and don't move into it if a tank is there
+
 	
 	and #$F0	;clear bottom nibble
 	eor #$F0
 	
 	;--if single direction, then move that direction
 	pha			;--save direction
+
+
 	
+	
+
 	lsr
 	lsr
 	lsr
@@ -881,13 +892,32 @@ PreventReverses
 	;J0DOWN		=	%00100000
 	;J0UP		=	%00010000
 MoreThanTwoAllowedDirections	
-	pla			;get direction back off of stack
+	;pla			;get allowed directions back off of stack
 	
+	;--find current direction, clear it's opposite, and then save the remaining allowable directions
+	lda TankStatus,X
+	lsr
+	lsr
+	lsr
+	lsr			;index into table with opposite directions
+	tay
+	pla
+	eor PreventReverses,Y
+	pha
 	
-	
-	
+	;--if TankMovementCounter < 8, then move tanks towards various corners, otherwise, follow regular pattern
+	ldy TankMovementCounter
 	cpx #2
 	bne NotTankTwo
+	cpy #128
+	bcs RegularMovementTwo
+	; move to upper left corner
+	lda #0
+	pha
+	lda #255
+	pha
+	jmp ChooseTankDirection
+RegularMovementTwo
 	;--tank #2 moves towards player:
 	lda TankX
 	pha
@@ -896,10 +926,19 @@ MoreThanTwoAllowedDirections
 	jmp ChooseTankDirection
 	
 NotTankTwo
+	
 	cpx #1
 	bne NotTankOne
-	;--move tank 1 towards midpoint between player and base
 
+	cpy #128
+	bcs RegularMovementOne
+	;--move to upper right corner
+	lda #255
+	pha
+	pha
+	jmp ChooseTankDirection
+RegularMovementOne
+	;--move tank 1 towards midpoint between player and base
 	lda TankX
 	sec
 	sbc #80
@@ -912,21 +951,53 @@ NotTankTwo
 	pha
 	jmp ChooseTankDirection
 	
-	;other tank moves somewhat randomly
-NotTankOne	
-	jsr UpdateRandomNumber
-	pha
-	jsr UpdateRandomNumber
-	pha
-
 	
+NotTankOne	
+	cpy #128
+	bcs RegularMovementThree
+	;--move towards base
+	lda #80
+	pha
+	lda #0
+	pha
+	jmp ChooseTankDirection	
+RegularMovementThree
+	;other tank moves somewhat randomly
+	jsr UpdateRandomNumber
+	pha
+	jsr UpdateRandomNumber
+	pha
 ChooseTankDirection
 	jsr ChooseTankDirectionSubroutine
 	sta TankStatus,X					;returns with new direction in accumulator
 	pla
 	pla									;pull target for tank off stack and discard
+
+	;--now compare to allowable directions
+	pla	;	--get allowable directions off stack
+	pha	;	but leave on stack
+	and TankStatus,X
+	bne DirectionIsFine
+	;--direction is not ok
+	;	for now, randomly pick one of the allowed directions
+	lda RandomNumber
+	and #3
+	tay
+TryAnotherDirection
+	pla	;--get allowed directions
+	pha	;--but leave on stack
+	and MovementMask,Y
+	bne FoundGoodDirection
+	dey
+	bpl TryAnotherDirection
+FoundGoodDirection
+	sta TankStatus,X
+		
+DirectionIsFine
+	pla
 DirectionChosen
 NotAtIntersection
+
 
 
 	;push return address onto stack
@@ -942,10 +1013,6 @@ NotAtIntersection
 								;and can use same routine for both.
 	jmp TankMovementSubroutine
 ReturnFromTankMovementSubroutine
-; 	pla
-; 	tax
-; 	dex
-; 	bne MoveEnemiesLoop
 	
 	rts
 
@@ -953,7 +1020,8 @@ ReturnFromTankMovementSubroutine
 
 NumberOfBitsSet
 	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
-
+MovementMask
+	.byte ~J0UP, ~J0DOWN, ~J0LEFT, ~J0RIGHT
 
 ;****************************************************************************
 
@@ -1411,6 +1479,8 @@ ReadControllersSubroutine
 	
 TankMovementSubroutine				;jump here when moving enemy tanks
 	pha			;--save desired direction of tank
+	
+	;--can skip this check if enemy tank, already checked when choosing direction
 	jsr CheckForWallSubroutine		;--returns with allowed directions in A
 	
 	;--if no directions are allowed, but tank is trying to move, turn tank but do not move.
