@@ -811,7 +811,9 @@ MoveEnemyTanksSubroutine
 
 	lda FrameCounter
 	and #3
-	beq ReturnFromTankMovementSubroutine
+	bne MoveAnEnemyTank
+	jmp ReturnFromTankMovementSubroutine
+MoveAnEnemyTank
 	tax
 
 	;--plan for now:  every time enemy tank hits intersection, change direction
@@ -838,7 +840,7 @@ FindYIntersectionLoop
 	
 	
 	and #$F0	;clear bottom nibble
-	
+	eor #$F0
 	
 	;--if single direction, then move that direction
 	pha			;--save direction
@@ -849,13 +851,40 @@ FindYIntersectionLoop
 	lsr			;--get in bottom nibble
 	tay
 	lda NumberOfBitsSet,Y
+	;--if can only move a single direction, go that direction
 	cmp #1
 	bne MoreThanOneAllowedDirection
 	pla			;get direction back off stack
 	sta TankStatus,X
 	jmp DirectionChosen
 MoreThanOneAllowedDirection
+	;--if can only move in two directions, go whichever ISN'T back the way we came from
+	cmp #2
+	bne MoreThanTwoAllowedDirections
+	;--find current direction, clear it's opposite, and then move the one remaining direction
+	lda TankStatus,X
+	lsr
+	lsr
+	lsr
+	lsr			;index into table with opposite directions
+	tay
+	pla
+	eor PreventReverses,Y
+	sta TankStatus,X
+	jmp DirectionChosen
+
+PreventReverses
+	.byte 	0, J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
+
+	;J0RIGHT		=	%10000000
+	;J0LEFT		=	%01000000
+	;J0DOWN		=	%00100000
+	;J0UP		=	%00010000
+MoreThanTwoAllowedDirections	
 	pla			;get direction back off of stack
+	
+	
+	
 	
 	cpx #2
 	bne NotTankTwo
