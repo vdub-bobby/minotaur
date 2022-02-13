@@ -183,6 +183,10 @@ BWCOLOR		=	%00001000
 SELECT		=	%00000010
 RESET		=	%00000001
 
+
+TANKAISWITCH	=	128
+
+
 ;-------------------------End Constants-----------------------------------
 
 ;---Macros
@@ -793,6 +797,11 @@ NoVerticalTankMovement
 	tya
 	tax						;get tank index back into X
 	pla						;pull new tank direction off stack into A
+	
+	eor #$FF	;flip bits
+	jsr EliminateDiagonalSubroutine
+	eor #$FF
+	
 	rts
 
 TankDirection
@@ -813,7 +822,7 @@ MoveEnemyTanksSubroutine
 	lda FrameCounter
 	and #3
 	bne MoveAnEnemyTank
-	;dec TankMovementCounter
+	dec TankMovementCounter
 	jmp ReturnFromTankMovementSubroutine
 MoveAnEnemyTank
 	tax
@@ -843,7 +852,7 @@ AtIntersectionY
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 	
-	;--new (2/9/2022) - look for tank in adjacent spot and don't move into it if a tank is there
+	
 
 	
 	and #$F0	;clear bottom nibble
@@ -909,7 +918,7 @@ MoreThanTwoAllowedDirections
 	ldy TankMovementCounter
 	cpx #2
 	bne NotTankTwo
-	cpy #128
+	cpy #TANKAISWITCH
 	bcs RegularMovementTwo
 	; move to upper left corner
 	lda #0
@@ -930,7 +939,7 @@ NotTankTwo
 	cpx #1
 	bne NotTankOne
 
-	cpy #128
+	cpy #TANKAISWITCH
 	bcs RegularMovementOne
 	;--move to upper right corner
 	lda #255
@@ -953,7 +962,7 @@ RegularMovementOne
 	
 	
 NotTankOne	
-	cpy #128
+	cpy #TANKAISWITCH
 	bcs RegularMovementThree
 	;--move towards base
 	lda #80
@@ -1441,28 +1450,22 @@ DoneCountingBits
 	cpy #2
 	bcc DirectionsFine
 	;--too many directions - must narrow down to 1
-	pha						;save directions
-	ora TankStatus,X		;first, eliminate previous direction
-	and #$F0
-	cmp #$F0				
-	beq DirectionsNotFine		;if eliminated all movement, 
-	tay
-	pla
-	tya
-	jmp DirectionsFine
-DirectionsNotFine
-	;--otherwise, back to the drawing board:
-	pla						;restore directions 
-	ora #J0LEFT|J0RIGHT		;eliminate left & right
-	cmp #$F0
-	bne EliminateDown
-	and #~J0RIGHT
-	bne DirectionsFine		;branch always
-EliminateDown
-	ora #J0DOWN
-	cmp #$F0
+	;  assumption is that an actual diagnonal is here -
+	;	  i.e., L+U, or R+U, but NOT L+R or U+D nor three or four directions
+
+	pha	;save desired directions on the stack
+	; randomly eliminate either horizontal or vertical movement
+	lda RandomNumber
+	lsr				;random bit
+	pla ;get desired directions back into accumulator
+	bcs EliminateHorizontal
+	;--else eliminate vertial
+	ora #J0RIGHT|J0LEFT
 	bne DirectionsFine
-	eor #J0DOWN
+EliminateHorizontal
+	ora #J0UP|J0DOWN
+
+	
 DirectionsFine
 
 	rts
@@ -1885,9 +1888,22 @@ PositioningLoop
 	bpl PositioningLoop
 	
 	
+	;--set PF color based on which tank AI routine we are on
+	lda #WALLCOLOR
+	ldy TankMovementCounter
+	cpy #TANKAISWITCH
+	bcs RegularAIRoutineColor
+	and #$F0
+RegularAIRoutineColor
+	sta COLUPF
+	
+	
 	;--clear collision registers
 	sta CXCLR
 
+	
+	
+	
 	rts
 	
 ;****************************************************************************
