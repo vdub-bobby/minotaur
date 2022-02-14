@@ -184,7 +184,7 @@ SELECT		=	%00000010
 RESET		=	%00000001
 
 
-TANKAISWITCH	=	128
+TANKAISWITCH	=	64
 
 
 ;-------------------------End Constants-----------------------------------
@@ -425,8 +425,8 @@ KernelRoutineGame
 	
 	
 	ldy #BLOCKHEIGHT
-	lda #$FF
 	ldx #$80
+	lda #$FF
 TopWallLoop
 	sta WSYNC
 	stx PF0
@@ -732,7 +732,7 @@ OverscanRoutine
 GameNotOn
 	jsr ReadConsoleSwitchesSubroutine
 
-
+	jsr UpdateRandomNumber
 
 WaitForOverscanEnd
 	lda INTIM
@@ -808,6 +808,8 @@ TankDirection
 	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
 
 ;****************************************************************************
+TankOnScreenTiming
+	.byte 0, 85, 170
 
 MoveEnemyTanksSubroutine
 
@@ -827,6 +829,20 @@ MoveEnemyTanksSubroutine
 MoveAnEnemyTank
 	tax
 
+	lda TankStatus,X
+	bne TankOnscreenMoveIt
+	;tank offscreen
+	lda TankMovementCounter
+	cmp TankOnScreenTiming-1,X
+	bne DoNotBringTankOnscreenYet
+	lda #MAZEAREAHEIGHT+TANKHEIGHT
+	sta TankY,X
+	lda #J0DOWN
+	sta TankStatus,X
+DoNotBringTankOnscreenYet
+	rts
+TankOnscreenMoveIt
+	
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
 	
@@ -999,6 +1015,8 @@ TryAnotherDirection
 	bne FoundGoodDirection
 	dey
 	bpl TryAnotherDirection
+	ldy #3					;loop around
+	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction, that the tank can never be stuck and unable to move
 FoundGoodDirection
 	sta TankStatus,X
 		
@@ -1030,7 +1048,7 @@ ReturnFromTankMovementSubroutine
 NumberOfBitsSet
 	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
 MovementMask
-	.byte ~J0UP, ~J0DOWN, ~J0LEFT, ~J0RIGHT
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 
 ;****************************************************************************
 
@@ -1102,6 +1120,69 @@ BallHasNotHitBlock
 	bpl CheckBallCollisionsLoop
 
 
+	;--now check if bullet has hit an enemy tank
+	ldx #3
+CheckBulletTankCollisionOuterLoop
+	;first check if tank is offscreen
+	lda TankY,X
+	cmp #MAZEAREAHEIGHT+TANKHEIGHT+4
+	beq EnemyTankOffscreen
+	
+	;now compare ball location to tank location
+	ldy #3
+CheckBulletTankCollisionInnerLoop
+	lda BulletX,Y
+	cmp #BALLOFFSCREEN
+	beq BulletOffScreen
+	;--compare X position
+	clc
+	adc #1
+	cmp TankX,X
+	bcc BulletDidNotHitTank 
+	sbc #1
+	sta Temp
+	lda TankX,X
+	clc
+	adc #8
+	cmp Temp
+	bcc BulletDidNotHitTank
+	;--compare Y position
+	lda BulletY,Y
+	sec
+	sbc #1
+	cmp TankY,X
+	bcs BulletDidNotHitTank
+	adc #1
+	sta Temp
+	lda TankY,X
+	sec
+	sbc #TANKHEIGHT
+	cmp Temp
+	bcs BulletDidNotHitTank
+	
+	
+	
+	;--bullet did hit tank.
+	;	remove bullet and tank from screen
+	lda #BALLOFFSCREEN
+	sta BulletX,Y
+	sta BulletY,Y
+	lda #MAZEAREAHEIGHT+TANKHEIGHT+4
+	sta TankY,X
+	lda StartingEnemyTankXPosition,X
+	sta TankX,X
+	lda #0
+	sta TankStatus,X
+BulletDidNotHitTank
+BulletOffScreen
+	dey
+	bpl CheckBulletTankCollisionInnerLoop
+	
+EnemyTankOffscreen
+	dex
+	bne CheckBulletTankCollisionOuterLoop
+	
+	
 	rts
 
 ;****************************************************************************
@@ -1124,24 +1205,21 @@ ReadConsoleSwitchesSubroutine
 	ora #GAMEON
 	sta GameStatus
 	
-	lda #16
-	sta TankX
-	lda #16
-	sta TankX+1
-	lda #72
-	sta TankX+2
-	lda #136
-	sta TankX+3
+	ldx #3
+SetStartingEnemyTankLocationsLoop
+	lda StartingEnemyTankXPosition,X
+	sta TankX,X
+	lda StartingEnemyTankYPosition,X
+	sta TankY,X
+	dex
+	bpl SetStartingEnemyTankLocationsLoop
 	
-	lda #TANKHEIGHT+1
-	sta TankY
-	lda #MAZEAREAHEIGHT+1
-	sta TankY+1
-	sta TankY+2
-	sta TankY+3
+
+
 	
-	lda #$FF
+	lda #J0DOWN
 	sta TankStatus+1
+	lda #0
 	sta TankStatus+2
 	sta TankStatus+3
 	
@@ -1157,6 +1235,13 @@ NoRESET
 RESETNotReleased
 DoneWithConsoleSwitches
 	rts
+
+StartingEnemyTankXPosition
+	.byte 16, 16, 72, 136
+
+StartingEnemyTankYPosition
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+	
 
 ;****************************************************************************
 	
