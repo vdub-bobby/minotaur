@@ -551,8 +551,9 @@ Wait1b
 	bpl BackFromSwitch1b
 	
 KernelLastRow				;		31		branch here crosses page boundary
-	lda #$80
-	sta PF2
+	;lda #$80
+	;sta PF2
+	SLEEP 5
 	;line 1 of last row, this row has BASE (not wall)
 KernelLastRowLoop			;		36
 	lda BaseColor
@@ -1399,11 +1400,14 @@ DoneMakingMaze
 
 	;--final touchup:
 	;	open up area directly above base:
+	;--- change to CLOSE up area directly above base, not sure about this.
 	lda PF2Left
-	and #$0F
+	;and #$0F
+	ora #$F0
 	sta PF2Left
 	lda PF2Right
-	and #$0F
+	;and #$0F
+	ora #$F0
 	sta PF2Right
 	;	leave room for enemy tanks to enter at upper right corners:
 	lda PF1Left+MAZEROWS-2
