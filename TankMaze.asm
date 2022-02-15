@@ -256,7 +256,8 @@ PF1Left ds MAZEROWS-1
 PF2Left ds MAZEROWS-1
 PF2Right ds MAZEROWS-1
 PF1Right ds MAZEROWS-1
-
+LastRowL ds 1
+LastRowR ds 1
 
 MiscPtr ds 2
 Temp ds 1
@@ -550,19 +551,21 @@ Wait1b
 	bpl BackFromSwitch1b
 	
 KernelLastRow				;		31		branch here crosses page boundary
-	SLEEP 4
-
-KernelLastRowLoop			;		35
+	SLEEP 5
+	;lda #$0
+	;sta PF2					;+5		36
+KernelLastRowLoop			;		36
 	;draw player 0
 	cpy Player0Top				
 	beq Switch0b
 	bpl Wait0b
 	lda (Player0Ptr),Y
-	sta GRP0				;+15	50
+	sta GRP0				;+15	51
 BackFromSwitch0b
 	
-
-	SLEEP 4
+	lda LastRowL
+	sta PF2
+	;SLEEP 3					;		54
 
 	;draw player 1
 	lda #TANKHEIGHT*2-1
@@ -588,12 +591,14 @@ DoDraw10b
 	sbc #TANKHEIGHT-4
 	sta ENAM1				;+12	20
 	
-
-	
-	
+	lda #0
+	sta PF1				;+5		25
 	lda #$80
-	sta PF2				;+5		25
-	SLEEP 10			;+10	35
+	sta PF2				;+5		30
+	
+
+	SLEEP 2			;+10	35
+	
 	lda BaseColor
 	sta COLUPF			;+6		41
 	
@@ -606,14 +611,14 @@ DoDraw10b
 	
 	lda #WALLCOLOR		
 	sta COLUPF			;+5		56
-	nop
+	
 	
 		
 	cpy Player0Top				
 	beq Switch1b
 	bpl Wait1b
 	lda (Player0Ptr+2),Y		
-	sta GRP0			;+15	73
+	sta GRP0			;+15	71
 BackFromSwitch1b
 	
 	
@@ -625,16 +630,18 @@ BackFromSwitch1b
 	.byte $2C
 DoDraw11b
 	lda (Player1Ptr+2),Y
-	sta GRP1			;+18	15
+	sta GRP1			;+18	13
 	
-	lda #0
-	sta PF1
-	sta PF2				;+8		23
+	lda LastRowL
+	sta PF2				;+6		19
+
 	
-	SLEEP 7
+	SLEEP 12				;		31
+	
+
 	
 	dey
-	bne KernelLastRowLoop		;+5		29	
+	bne KernelLastRowLoop		;+5		36
 	
 	
 	
@@ -1409,6 +1416,11 @@ DoneMakingMaze
 	and #$0F
 	sta PF2Right+MAZEROWS-2
 	
+	;--add walls on bottom row surrounding base
+	lda #%10110000
+	sta LastRowL
+	lda #%10001100
+	sta LastRowR
 	
 	;--restore original random number
 	pla
