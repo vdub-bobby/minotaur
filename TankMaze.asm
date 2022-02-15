@@ -551,21 +551,23 @@ Wait1b
 	bpl BackFromSwitch1b
 	
 KernelLastRow				;		31		branch here crosses page boundary
-	SLEEP 5
-	;lda #$0
-	;sta PF2					;+5		36
+	lda #$80
+	sta PF2
+	;line 1 of last row, this row has BASE (not wall)
 KernelLastRowLoop			;		36
+	lda BaseColor
+	sta COLUPF				;+6		42
 	;draw player 0
 	cpy Player0Top				
 	beq Switch0b
 	bpl Wait0b
 	lda (Player0Ptr),Y
-	sta GRP0				;+15	51
+	sta GRP0				;+15	57
 BackFromSwitch0b
 	
-	lda LastRowL
-	sta PF2
-	;SLEEP 3					;		54
+	lda #WALLCOLOR
+	sta COLUPF				;+5		62
+	
 
 	;draw player 1
 	lda #TANKHEIGHT*2-1
@@ -575,50 +577,50 @@ BackFromSwitch0b
 	.byte $2C
 DoDraw10b
 	lda (Player1Ptr),Y
-	sta GRP1				;+18	72
+	sta GRP1				;+18	 4
 
 
-
+	;line 2 of last row, has WALL (not base)
 	;draw missile 0
 	lda #TANKHEIGHT-2
 	dcp MissileYTemp
 	sbc #TANKHEIGHT-4
-	sta ENAM0				;+12	 8
+	sta ENAM0				;+12	16
 	
 	
 	lda #TANKHEIGHT-2
 	dcp MissileYTemp+1
 	sbc #TANKHEIGHT-4
-	sta ENAM1				;+12	20
+	sta ENAM1				;+12	28
 	
-	lda #0
-	sta PF1				;+5		25
-	lda #$80
-	sta PF2				;+5		30
+	
+	lda LastRowL
+	sta PF2					;+6		34
 	
 
-	SLEEP 2			;+10	35
 	
-	lda BaseColor
-	sta COLUPF			;+6		41
+	
+	
+	
+	SLEEP 6					;		40
+	
+	lda LastRowR
+	sta PF2					;+6		46
 	
 	tsx
 	cpy BallY
 	php
-	txs					;+10	51
+	txs						;+10	56
 	
 	
-	
-	lda #WALLCOLOR		
-	sta COLUPF			;+5		56
-	
+	;SLEEP 5					;		56
 	
 		
 	cpy Player0Top				
 	beq Switch1b
 	bpl Wait1b
 	lda (Player0Ptr+2),Y		
-	sta GRP0			;+15	71
+	sta GRP0				;+15	71
 BackFromSwitch1b
 	
 	
@@ -636,14 +638,15 @@ DoDraw11b
 	sta PF2				;+6		19
 
 	
-	SLEEP 12				;		31
+	SLEEP 7			;		31
 	
 
-	
+	lda #$80
+	sta PF2				;+5		31
 	dey
 	bne KernelLastRowLoop		;+5		36
 	
-	
+	sty PF2		;AKSHUALLY don't display base on last row
 	
 	
 	ldy #BLOCKHEIGHT
@@ -1417,9 +1420,9 @@ DoneMakingMaze
 	sta PF2Right+MAZEROWS-2
 	
 	;--add walls on bottom row surrounding base
-	lda #%10110000
+	lda #$30
 	sta LastRowL
-	lda #%10001100
+	;lda #%00000000
 	sta LastRowR
 	
 	;--restore original random number
