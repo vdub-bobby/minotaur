@@ -82,8 +82,8 @@ BULLETCLEAR		=	3
 
 TRIGGERDEBOUNCEVALUE = 20
 
-BULLETSPEEDHOR		=		2
-BULLETSPEEDVER		=		2
+BULLETSPEEDHOR		=		1
+BULLETSPEEDVER		=		1
 
 BASECOLOR		=		GREEN
 
@@ -1094,6 +1094,21 @@ GetRowBulletIsInLoop
 	iny
 	jmp GetRowBulletIsInLoop
 FoundWhichRowBulletIsIn
+	;--special check for row = 0
+	tya
+	bne BulletNotOnBottomRow
+	;--all we care is left or right of center
+	lda BulletX,X
+	cmp #80
+	bcc BulletOnLeftLastRow
+	lda #0
+	sta LastRowR
+	beq RemovedWallBlock
+BulletOnLeftLastRow
+	lda #0
+	sta LastRowL
+	beq RemovedWallBlock
+BulletNotOnBottomRow
 	lda BulletX,X
 	sec
 	sbc #16
@@ -1122,6 +1137,7 @@ FoundWhichRowBulletIsIn
 	sta (MiscPtr),Y	
 	pla
 	tax
+RemovedWallBlock
 	;--bullet has hit block, remove bullet from screen:
 	lda #BALLOFFSCREEN
 	sta BulletX,X
@@ -1520,7 +1536,7 @@ BulletOnScreen
 EliminateDiagonalSubroutine
 	;--trashes Y.
 	;--X is index into which tank
-	;--A holds direction of joystick
+	;--A holds direction of joystick (filtered to allowed directions)
 	;--now get directions down to a single direction (i.e., no diagonals)
 	;--first, determine if trying to move diagonally:
 	;	need to count cleared bits in the top nibble
@@ -1558,7 +1574,27 @@ DoneCountingBits
 	;	  i.e., L+U, or R+U, but NOT L+R or U+D nor three or four directions
 
 	pha	;save desired directions on the stack
-	; randomly eliminate either horizontal or vertical movement
+	; for Enemy Tanks=randomly eliminate either horizontal or vertical movement
+	; for Player Tank=do previous routine which allowed tank to slide along
+	txa
+	bne EnemyTankEliminateDiagonal
+	;--otherwise, back to the drawing board:
+	;-- assumption for player tank is if holding at a diagonal and we come to 
+	;	an intersection, player always wants to turn
+	;--so if moving up/down, start by eliminating those directions
+	lda TankStatus
+	and #J0LEFT|J0RIGHT
+	beq EliminateLeftRight
+	pla
+	ora #~(J0UP|J0DOWN)
+	bne DirectionsFine
+	
+EliminateLeftRight
+	pla						;restore directions 
+	ora #~(J0LEFT|J0RIGHT)		;eliminate left & right
+	bne DirectionsFine		;branch always
+
+EnemyTankEliminateDiagonal
 	lda RandomNumber
 	lsr				;random bit
 	pla ;get desired directions back into accumulator
@@ -1587,7 +1623,7 @@ ReadControllersSubroutine
 TankMovementSubroutine				;jump here when moving enemy tanks
 	pha			;--save desired direction of tank
 	
-	;--can skip this check if enemy tank, already checked when choosing direction
+	
 	jsr CheckForWallSubroutine		;--returns with allowed directions in A
 	
 	;--if no directions are allowed, but tank is trying to move, turn tank but do not move.
@@ -1611,11 +1647,11 @@ MovementAllowed
 	tsx
 	lda $02,X	;load allowed directions (see above)
 	sta $03,X	;overwrite desired directions (either joystick (if player) or calc direction if enemy)
-	pla
+	pla			;pull tank index off stack
 	tax			;restore tank index
-	pla			;pull allowed directions off
+	pla			;pull allowed directions off (of original desired directions)
 ProcessDirections
-	pla			;pulls 
+	pla			;pulls allowed directions off (of original desired directions)
 	jsr EliminateDiagonalSubroutine		;tanks cannot move diagonally
 
 	tay	;--save direction in Y
@@ -1687,10 +1723,16 @@ FindAvailableBallLoop
 	bmi NoAvailableBalls
 FoundAvailableBall	
 	;--now read joystick trigger if debounce is zero:
-	lda TriggerDebounce
-	bne TriggerNotDebounced
 	lda INPT4
-	bmi NoTrigger
+	bpl TriggerHit
+	;--if trigger not hit, set debounce to zero
+	lda #0
+	sta TriggerDebounce
+	beq DoneFiring
+TriggerHit
+	ldy TriggerDebounce
+	bne TriggerNotDebounced
+
 	;--bullet is fired!
 	;set trigger debounce
 	lda #TRIGGERDEBOUNCEVALUE
@@ -1748,7 +1790,7 @@ NotFiringLeft
 NotFiring
 DoneFiring
 NoAvailableBalls	
-NoTrigger
+
 TriggerNotDebounced
 
 	
@@ -2016,17 +2058,8 @@ RegularAIRoutineColor
 IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
 	;--special case for first row which is always open (except for the base, but we'll deal with that later)
-	;;temp:
-; 	pha
-; 	lda #0
-; 	sta Temp
-; 	pla
-; 	rts
-
-
-	
-
-	
+	;--except now first row has walls at two positions (maybe!) only
+		
 	pha			;save A on stack
 	txa
 	pha			;save X on stack
@@ -2046,6 +2079,26 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	sec
 	sbc #BLOCKHEIGHT
 	bcs NotOnBottomRow
+	;--on bottom row
+	;--only two blocks on bottom row
+	;	at X positions (LastRowL) 64-72 and (LastRowR) 88-96
+	lda LastRowL
+	beq LastRowNoWallOnLeft
+	lda Temp
+	cmp #73
+	bcs LastRowCheckRightBlock
+	cmp #64
+	bcs FoundWhetherBlockExists
+LastRowNoWallOnLeft
+LastRowCheckRightBlock
+	lda LastRowR
+	beq FoundWhetherBlockExists
+	lda Temp
+	cmp #96
+	bcs LastRowNoHit
+	cmp #88
+	bcs FoundWhetherBlockExists
+LastRowNoHit
 	lda #0
 	beq FoundWhetherBlockExists
 NotOnBottomRow	
