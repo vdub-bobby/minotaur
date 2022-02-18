@@ -72,6 +72,7 @@ BULLETUP		=	3
 BULLETCLEAR		=	3
 
 TRIGGERDEBOUNCEVALUE = 20
+ENEMYDEBOUNCE = 32
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
@@ -175,7 +176,7 @@ SELECT		=	%00000010
 RESET		=	%00000001
 
 
-TANKAISWITCH	=	64
+TANKAISWITCH	=	0
 
 
 ;-------------------------End Constants-----------------------------------
@@ -208,7 +209,7 @@ GameStatus ds 1
 
 TriggerDebounce ds 1
 ConsoleDebounce ds 1
-
+EnemyDebounce ds 1
 BaseColor ds 1
 
 TankX ds 4
@@ -362,7 +363,12 @@ VSYNCWaitLoop
 	ora Temp
 	sta BaseColor
 	
-	jsr ReadControllersSubroutine
+	lda GameStatus
+	and #GAMEON
+	beq GameNotOnVBLANK	
+	
+GameNotOnVBLANK
+	
 	jsr UpdateRandomNumber
 	
 	lda TriggerDebounce
@@ -735,9 +741,11 @@ OverscanRoutine
 	and #GAMEON
 	beq GameNotOn	
 	jsr CollisionsSubroutine
+	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
-	jsr MoveEnemyTanksSubroutine
+	jsr ReadControllersSubroutine
 GameNotOn
+
 	jsr ReadConsoleSwitchesSubroutine
 
 
@@ -833,6 +841,39 @@ MoveEnemyTanksSubroutine
 	and #3
 	bne MoveAnEnemyTank
 	dec TankMovementCounter
+	;--if we ain't moving a tank, let's shoot a bullet
+	;--- only every ... 16 frames
+	lda EnemyDebounce
+	beq FireEnemyBullet
+	dec EnemyDebounce
+	jmp DoNotFireEnemyBullet
+FireEnemyBullet
+	ldx #1
+FindAvailableEnemyBallLoop
+	lda BulletX+2,X
+	cmp #BALLOFFSCREEN
+	beq FoundAvailableEnemyBall
+	dex
+	bpl FindAvailableEnemyBallLoop
+	bmi NoAvailableEnemyBalls
+FoundAvailableEnemyBall
+	inx
+	inx
+	lda #ENEMYDEBOUNCE
+	sta EnemyDebounce
+	;--find random tank 
+	lda RandomNumber
+	and #3
+	tay
+	bne ShootFromTank
+	iny
+ShootFromTank
+	
+	
+	
+	jsr FireBulletRoutine
+DoNotFireEnemyBullet	
+NoAvailableEnemyBalls
 	jmp ReturnFromTankMovementSubroutine
 MoveAnEnemyTank
 	tax
@@ -875,19 +916,12 @@ AtIntersectionY
 	;	get allowable directions
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
-	
-	
 
-	
 	and #$F0	;clear bottom nibble
 	eor #$F0
 	
 	;--if single direction, then move that direction
 	pha			;--save direction
-
-
-	
-	
 
 	lsr
 	lsr
@@ -919,14 +953,36 @@ MoreThanOneAllowedDirection
 
 PreventReverses
 	.byte 	0, J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
-
-	;J0RIGHT		=	%10000000
-	;J0LEFT		=	%01000000
-	;J0DOWN		=	%00100000
-	;J0UP		=	%00010000
-MoreThanTwoAllowedDirections	
-	;pla			;get allowed directions back off of stack
 	
+	;tank 0 = player, so two wasted bytes here
+	;tank 1 target = upper left corner
+	;tank 2 target = base (bottom center)
+	;tank 3 target = upper right corner
+SwitchMovementX
+	.byte 0, 0, 0, 255
+SwitchMovementY
+	.byte 0, 255, 80, 255
+	
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = random position
+	;tank 3 target = player position
+TankTargetX
+	.byte 0, TankX, RandomNumber, TankX
+TankTargetY
+	.byte 0, TankY, RandomNumber, TankY
+	
+	;--following is combined with target above (see routine for details)
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = itself
+	;tank 3 target = tank 1
+TankTargetAdjustX
+	.byte 0, TankX, TankX+1, TankX+1
+TankTargetAdjustY
+	.byte 0, TankY, TankY+1, TankY+1
+	
+MoreThanTwoAllowedDirections	
 	;--find current direction, clear it's opposite, and then save the remaining allowable directions
 	lda TankStatus,X
 	lsr
@@ -939,67 +995,42 @@ MoreThanTwoAllowedDirections
 	pha
 	
 	;--if TankMovementCounter < 8, then move tanks towards various corners, otherwise, follow regular pattern
-	ldy TankMovementCounter
-	cpx #2
-	bne NotTankTwo
-	cpy #TANKAISWITCH
-	bcs RegularMovementTwo
+	lda TankMovementCounter
+	cmp #TANKAISWITCH
+	bcs RegularMovement
 	; move to upper left corner
-	lda #0
+	lda SwitchMovementX,X
 	pha
-	lda #255
-	pha
-	jmp ChooseTankDirection
-RegularMovementTwo
-	;--tank #2 moves towards player:
-	lda TankX
-	pha
-	lda TankY
+	lda SwitchMovementY,X
 	pha
 	jmp ChooseTankDirection
-	
-NotTankTwo
-	
-	cpx #1
-	bne NotTankOne
-
-	cpy #TANKAISWITCH
-	bcs RegularMovementOne
-	;--move to upper right corner
-	lda #255
-	pha
-	pha
-	jmp ChooseTankDirection
-RegularMovementOne
-	;--move tank 1 towards midpoint between player and base
-	lda TankX
+RegularMovement
+	;routine: 
+	; pick two targets, then take the midpoint between them
+	ldy TankTargetX,X
+	lda $00,Y
+	ldy TankTargetAdjustX,X
 	sec
-	sbc #80
+	sbc $00,Y
 	jsr DivideByTwoSubroutine
 	clc
-	adc #80
+	adc $00,Y
 	pha
-	lda TankY
-	lsr
+	jsr UpdateRandomNumber
+	ldy TankTargetY,X
+	lda $00,Y
+	ldy TankTargetAdjustY,X
+	sec
+	sbc $00,Y
+	jsr DivideByTwoSubroutine
+	clc
+	adc $00,Y
 	pha
+
+
 	jmp ChooseTankDirection
 	
 	
-NotTankOne	
-	cpy #TANKAISWITCH
-	bcs RegularMovementThree
-	;--move towards base
-	lda #80
-	pha
-	lda #0
-	pha
-	jmp ChooseTankDirection	
-RegularMovementThree
-	;other tank moves somewhat randomly
-	jsr UpdateRandomNumber
-	pha
-	jsr UpdateRandomNumber
-	pha
 ChooseTankDirection
 	jsr ChooseTankDirectionSubroutine
 	sta TankStatus,X					;returns with new direction in accumulator
@@ -1145,6 +1176,7 @@ BallHasNotHitBlock
 
 
 	;--now check if bullet has hit an enemy tank
+	
 	ldx #3
 CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
@@ -1153,7 +1185,8 @@ CheckBulletTankCollisionOuterLoop
 	beq EnemyTankOffscreen
 	
 	;now compare ball location to tank location
-	ldy #3
+	;--only care about player bullets
+	ldy #1
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 	cmp #BALLOFFSCREEN
@@ -1510,7 +1543,7 @@ NoBulletMovement
 
 	;--check for off screen:
 	lda BulletX,X
-	cmp #12
+	cmp #16
 	bcc BulletOffscreen
 	cmp #148
 	bcs BulletOffscreen
@@ -1727,19 +1760,28 @@ FoundAvailableBall
 	sta TriggerDebounce
 	beq DoneFiring
 TriggerHit
-	ldy TriggerDebounce
+	lda TriggerDebounce
 	bne TriggerNotDebounced
 
 	;--bullet is fired!
+
+	
+	
 	;set trigger debounce
 	lda #TRIGGERDEBOUNCEVALUE
 	sta TriggerDebounce
+	
+	ldy #0		;set index into which tank 
+				;X holds index into which bullet
+FireBulletRoutine
+	
+	
 	;--set position:
-	lda TankX
+	lda TankX,Y
 	clc
 	adc #4
 	sta BulletX,X
-	lda TankY
+	lda TankY,Y
 	sec
 	sbc #3
 	sta BulletY,X
@@ -1753,7 +1795,7 @@ TriggerHit
 
 	
 	;--then set new direction:
-	lda TankStatus
+	lda TankStatus,Y
 	tay	
 	and #TANKUP
 	beq NotFiringUp
@@ -1993,6 +2035,11 @@ NoSpecialAdjustmentToPlayer0Top
 
 
 
+
+
+
+
+
 	ldx #2
 PreKernelSetupLoop2
 	lda #TANKAREAHEIGHT+1
@@ -2012,7 +2059,20 @@ PreKernelSetupLoop2
 	dex
 	bpl PreKernelSetupLoop2
 	
-
+	
+	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
+	ldx #1
+AdjustMissileYLoop
+	lda MissileYTemp,X
+	cmp #TANKHEIGHT-2
+	bcs NoAdjustMissileY
+	adc #1
+	sta MissileYTemp,X
+NoAdjustMissileY
+	dex
+	bpl AdjustMissileYLoop
+	
+	
 	;bullet flicker rotation:
 	lda FrameCounter
 	and #3
