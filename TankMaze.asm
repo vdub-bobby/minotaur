@@ -6,16 +6,7 @@
 ;
 ;
 ;	To do:
-;	Rewrite tank movement routines so that tanks (a) always move (i.e. don't
-;		get stuck in corners or dead-ends) and (b) don't reverse unless that
-;		is the only direction to move
-;			New routine:
-;				first, determine directions possible to move
-;					if only 1, go that direction
-;					if >1, eliminate the direction that you just came from
-;					choose one of 3 remaining
-;				next, choose one of those and move 
-;	Figure out good AI for tank movement/firing routines
+;	Figure out good AI for tank movement/firing routines -- ok now, but TODO
 ;	Add explosion graphics
 ;	Sound FX
 ;	Music?
@@ -224,6 +215,8 @@ TankX ds 4
 TankY ds 4
 TankStatus ds 4
 
+TankFractional ds 1
+
 BulletX ds 4
 BulletY ds 4
 BulletDirection ds 1
@@ -359,6 +352,8 @@ VSYNCWaitLoop
 	
 	dec FrameCounter
 	
+	
+	;--cycle BaseColor
 	lda FrameCounter
 	and #$0F
 	sta Temp
@@ -366,6 +361,9 @@ VSYNCWaitLoop
 	and #$F0
 	ora Temp
 	sta BaseColor
+	
+	jsr ReadControllersSubroutine
+	jsr UpdateRandomNumber
 	
 	lda TriggerDebounce
 	beq TriggerDebounceZero
@@ -737,13 +735,12 @@ OverscanRoutine
 	and #GAMEON
 	beq GameNotOn	
 	jsr CollisionsSubroutine
-	jsr ReadControllersSubroutine
 	jsr MoveBulletSubroutine
 	jsr MoveEnemyTanksSubroutine
 GameNotOn
 	jsr ReadConsoleSwitchesSubroutine
 
-	jsr UpdateRandomNumber
+
 
 WaitForOverscanEnd
 	lda INTIM
@@ -820,7 +817,7 @@ TankDirection
 
 ;****************************************************************************
 TankOnScreenTiming
-	.byte 0, 85, 170
+	.byte 0, 87, 173
 
 MoveEnemyTanksSubroutine
 
@@ -1752,8 +1749,8 @@ TriggerHit
 	lda BulletDirectionClear,X
 	eor #$FF
 	and BulletDirection
-	sta BulletDirection
-	
+	sta BulletDirection 
+
 	
 	;--then set new direction:
 	lda TankStatus
