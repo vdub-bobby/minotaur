@@ -4,18 +4,31 @@
 ;	Bob Montgomery
 ;	(c) 2012
 ;
+;	VERY loose port of Tank Battalion
+;		objective: destroy enemy tanks while protecting base in a destroyable maze
+;		arcade game - play for high score
+;			earn points by destroying tanks and advancing levels
+;		have finite # of tanks to destroy each level (same for all, or increasing?)
+;		once destroyed, level is won and advance to new level
+;		destroy walls by shooting them
+;		enemy tanks also shoot and also can destroy walls
+;		enemy tanks shoot you, when you are shot, lose one life
+;		if enemy tanks shoot base, game over (or?)
+;		open question: what about tank:tank collisions?
 ;
 ;	To do:
-;	Figure out good AI for tank movement/firing routines -- ok now, but TODO
+;	Figure out better AI for tank movement/firing routines 
 ;	Add explosion graphics
 ;	Sound FX
 ;	Music?
 ;	Title/splash screen?
 ;	Power-Ups - ???
+;		keep this simple: speed, extra life, "bomb" that destroys all tanks on screen (and all walls?)1
 ;	Maze generation routine done?  Tweaking?  Rewrite?
 ;	Collisions!
 ;	Score
-;	Level objectives moving through levels
+;	Level objectives moving through levels - i.e., # of tanks remaining to kill
+;	currently showing maze seed, show level instead.
 ;	Difficulty settings
 ;	Gameplay tweaking
 ;	Graphics/colors
@@ -209,7 +222,7 @@ MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
 
-
+TanksRemaining ds 1
 
 
 TriggerDebounce ds 1
@@ -259,7 +272,7 @@ LastRowL ds 1
 LastRowR ds 1
 
 MiscPtr ds 2
-Temp ds 1
+Temp ds 3
 
    ; Display Remaining RAM
    echo "----",($100 - *) , "bytes left (ZP RAM)"
