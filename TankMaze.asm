@@ -42,7 +42,7 @@
 
 TANKHEIGHT	=	7
 BLOCKHEIGHT = 7
-MAZEROWS	=	12
+MAZEROWS	=	11
 TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
 
@@ -53,14 +53,19 @@ TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
 
+PLAYERSTARTINGX	=	16
+ENEMY0STARTINGX	=	16
+ENEMY1STARTINGX	=	72
+ENEMY2STARTINGX	=	136
+
 TANKOFFSCREEN	=	127
 
-
+MAZEGENERATIONPASSES = MazeRowToGenerateToTableEnd - MazeRowToGenerateTo - 1
 
 ;--GameStatus bits
 
 GAMEON			=	%10000000
-
+GENERATINGMAZE	=	%01000000
 
 
 BALLOFFSCREEN	=	200
@@ -81,7 +86,7 @@ BASECOLOR		=		GREEN
 
 WALLCOLOR			=		RED+6
 
-
+MAZEPATHCUTOFF	=	100
 ;-------------------------COLOR CONSTANTS (NTSC)--------------------------
 
 GRAY		=	$00
@@ -201,7 +206,7 @@ TankMovementCounter ds 1
 RandomNumber ds 1
 
 MazeNumber ds 1
-
+MazeGenerationPass ds 1
 GameStatus ds 1
 
 
@@ -366,7 +371,12 @@ VSYNCWaitLoop
 	lda GameStatus
 	and #GAMEON
 	beq GameNotOnVBLANK	
-	
+
+
+;	jsr MoveEnemyTanksSubroutine	
+;	jsr MoveBulletSubroutine
+	jsr ReadControllersSubroutine
+
 GameNotOnVBLANK
 	
 	jsr UpdateRandomNumber
@@ -743,9 +753,14 @@ OverscanRoutine
 	jsr CollisionsSubroutine
 	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
-	jsr ReadControllersSubroutine
+	;jsr ReadControllersSubroutine
 GameNotOn
-
+	lda GameStatus
+	and #GENERATINGMAZE
+	beq NotGeneratingMaze
+	jsr GenerateMazeSubroutine
+NotGeneratingMaze
+	
 	jsr ReadConsoleSwitchesSubroutine
 
 
@@ -1259,7 +1274,7 @@ ReadConsoleSwitchesSubroutine
 	sta ConsoleDebounce
 	;--start game
 	lda GameStatus
-	ora #GAMEON
+	ora #GENERATINGMAZE
 	sta GameStatus
 	
 	ldx #3
@@ -1283,7 +1298,12 @@ SetStartingEnemyTankLocationsLoop
 	;--finally, cycle the random number
 	jsr UpdateRandomNumber
 	
-	jsr GenerateMazeSubroutine
+	;jsr GenerateMazeSubroutine
+	
+	lda #$FF
+	sta MazeGenerationPass
+
+	
 	
 	jmp DoneWithConsoleSwitches
 NoRESET
@@ -1294,30 +1314,32 @@ DoneWithConsoleSwitches
 	rts
 
 StartingEnemyTankXPosition
-	.byte 16, 16, 72, 136
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
 
 StartingEnemyTankYPosition
 	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
 	
 
 ;****************************************************************************
+MazeRowToGenerateTo
+	.byte 0, 2, 4, 6, 8, MAZEROWS-1
+MazeRowToGenerateToTableEnd
+	
 	
 GenerateMazeSubroutine
+	;this routine is way too long
 
-	;--update maze number
-UpdateMazeNumber
-	dec MazeNumber
-	beq UpdateMazeNumber
-	
-	;--use MazeNumber as seed of random number generator
-	;--save current random number so we can restore it when we are done.
+	;--first, save RandomNumber
 	lda RandomNumber
 	pha
-	lda MazeNumber
-	sta RandomNumber
-
 	
-	;--first, fill all with walls
+	;--let's try splitting it 
+	ldy MazeGenerationPass
+	bpl NotFirstPass
+	ldy #MAZEGENERATIONPASSES
+	sty MazeGenerationPass
+	;--on first pass, fill all with walls
+	
 	ldx #MAZEROWS-1
 	lda #$FF
 FillMazeLoop
@@ -1325,15 +1347,47 @@ FillMazeLoop
 	sta PF2Left,X
 	sta PF2Right,X
 	sta PF1Right,X
-	dex
+	dex 
 	bpl FillMazeLoop
 	
+	;--update maze number on first pass also
+UpdateMazeNumber
+	dec MazeNumber
+	beq UpdateMazeNumber
 	
+	;and set seed for maze
+	
+	lda MazeNumber
+	sta Temp+2	
+NotFirstPass
+	lda Temp+2
+	sta RandomNumber
+
+	lda MazeRowToGenerateTo,Y
+	sta Temp+2
+	
+
+	
+	;--use MazeNumber as seed of random number generator
+	;--save current random number so we can restore it when we are done.
+
+
+
 	lda #>PF1Left
 	sta MiscPtr+1
 
-	
-	ldy #MAZEROWS-2
+	;--now what we are doing is going through every other row
+	;	starting at a random block on the right, and carving out a random-length
+	;	horizontal path to the left.
+	;	when we finish that, we pick a random spot to carve a block out of the row below
+	;	and then we move two blocks to the left (if there is room), and repeat for another 
+	;	random-length horizontal path
+	;	once done with a row, we move two rows down and repeat the whole process
+	;	Y holds row, X holds block within the row
+	iny
+	lda MazeRowToGenerateTo,Y
+	tay
+	dey	
 MakeMazeLoopRow
 	ldx #15
 	
@@ -1351,33 +1405,49 @@ MakeMazeLoopOuter
 	pla
 	and (MiscPtr),Y
 	sta (MiscPtr),Y
+	;--what is this doing?  X holds the block number, I think?
 	stx Temp
 	stx Temp+1
 MakeMazeLoopInner
 	lda #<PF1Left
 	sta MiscPtr
+	
+	;--are we at the end of our horizontal path?  compare random number to constant
 	jsr UpdateRandomNumber
 	lda RandomNumber
-	cmp #100
+	cmp #MAZEPATHCUTOFF
 	bcs NotEndOfRun
 EndOfRun
 	;--don't carve passage downward if we're on the bottom row
 	cpy #0
 	beq EndRunBeginNextRun
 	;--otherwise, find a random passage to carve
+	;--Temp holds starting block number (X)
+	;--Temp+1 holds ending block number
 	lda Temp
 	sec
 	sbc Temp+1
-	sta Temp+1
+	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
  	beq OnlyOnePlaceToCarve
-	jsr UpdateRandomNumber
+	;--this routine tries to find a random place in our new passage to carve downwards
+	;--picks a random number, then subtracts the length of the passage
+	;	until we cross zero, then adds length back for spot to add downward passage
+ 	jsr UpdateRandomNumber
 	lda RandomNumber
-	sec
-FindRandomPassageToCarve
-	sbc Temp+1
-	bcs FindRandomPassageToCarve
-	adc Temp+1
+	;--new routine:
+	;	decrease length by 1, then remove random bits
+	dec Temp+1
+	and Temp+1
 	sta Temp+1
+;	dec Temp+1	
+	
+;	and #$0F			;maximum length is 15
+;	sec
+;FindRandomPassageToCarve
+;	sbc Temp+1
+;	bcs FindRandomPassageToCarve
+;	adc Temp+1
+;	sta Temp+1
 OnlyOnePlaceToCarve
 	lda Temp
 	sec
@@ -1405,8 +1475,8 @@ OnlyOnePlaceToCarve
 	sta (MiscPtr),Y
 AtBottomRow
 	iny	
-	iny
-	pla
+	iny		;restore Y to current row index
+	pla		;get block index back into X
 	tax
 EndRunBeginNextRun
 	stx Temp
@@ -1419,6 +1489,7 @@ EndRunBeginNextRun
 ; 	bpl MakeMazeLoopOuter
 	bmi DoneWithRow
 NotEndOfRun	
+	;--this is where we carve the horizontal path
 	lda PFMaskLookup,X
 	eor #$FF
 	pha
@@ -1440,9 +1511,14 @@ NotEndOfRun
 DoneWithRow
 	dey
 	dey
+	cpy Temp+2
 	bmi DoneMakingMaze
 	jmp MakeMazeLoopRow
 DoneMakingMaze
+	
+	dec MazeGenerationPass
+	bpl NotCompletelyDoneWithMaze
+
 
 	;--final touchup:
 	;	open up area directly above base:
@@ -1455,18 +1531,24 @@ DoneMakingMaze
 	;and #$0F
 	ora #$F0
 	sta PF2Right
-	;	leave room for enemy tanks to enter at upper right corners:
+	;	leave room for enemy tanks to enter:
+	;clear upper L corner
 	lda PF1Left+MAZEROWS-2
-	and #$03
+	and #$3F
 	sta PF1Left+MAZEROWS-2
-	lda PF1Right+MAZEROWS-2
-	and #$03
-	sta PF1Right+MAZEROWS-2
+	
+	;lda PF1Right+MAZEROWS-2
+	;and #$03
+	;sta PF1Right+MAZEROWS-2
+	
+	;clear spot direction to L of center in top row
 	lda PF2Left+MAZEROWS-2
-	and #$0F
+	and #$3F
 	sta PF2Left+MAZEROWS-2
+	
+	;clear upper R corner
 	lda PF2Right+MAZEROWS-2
-	and #$0F
+	and #$3F
 	sta PF2Right+MAZEROWS-2
 	
 	;--add walls on bottom row surrounding base
@@ -1475,7 +1557,17 @@ DoneMakingMaze
 	;lda #%00000000
 	sta LastRowR
 	
+	;--and set GAMEON flag and turn off maze generation flag
+	lda GameStatus
+	ora #GAMEON
+	and #~GENERATINGMAZE
+	sta GameStatus
+	
+	
+NotCompletelyDoneWithMaze
 	;--restore original random number
+	lda RandomNumber
+	sta Temp+2
 	pla
 	sta RandomNumber
 	
