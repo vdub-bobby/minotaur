@@ -235,6 +235,7 @@ TankY ds 4
 TankStatus ds 4
 
 TankFractional ds 1
+PlayerSpeed ds 1
 
 BulletX ds 4
 BulletY ds 4
@@ -326,6 +327,9 @@ Start
 
 	sta RandomNumber
 	
+	lda #$50
+	sta PlayerSpeed
+	
 	lda #GOLD+10
 	sta COLUP0
 	lda #BLUE2+12
@@ -338,7 +342,7 @@ Start
 	sta NUSIZ0
 	sta NUSIZ1
 	
-	lda #REFLECTEDPF|DOUBLEWIDTHBALL
+	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
 	
 	lda #BASECOLOR
@@ -365,7 +369,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #43
+	lda #44
 	sta TIM64T
 	
 	
@@ -408,10 +412,16 @@ TriggerDebounceZero
 
 WaitForVblankEnd
 	lda INTIM
+	bmi OverTimeVBLANK
 	bne WaitForVblankEnd
+	beq EndVBLANK
+OverTimeVBLANK	;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+	nop
+		
+EndVBLANK	
 
 	sta WSYNC
-
+	lda #0
 	sta VBLANK
 
 
@@ -694,57 +704,84 @@ BottomWallLoop
 	dey
 	bne BottomWallLoop
 	
+	;--done displaying maze
+	;--set up score, tanks remaining, lives remaining etc
 	sta WSYNC
 	sty PF0
 	sty PF1
 	sty PF2
+	sty COLUPF
+	sty REFP0
+	sty REFP1
+	lda #THREECOPIESCLOSE
+	sta NUSIZ0
+	lda #TWOCOPIESCLOSE
+	sta NUSIZ1
+	
+	;lda #REFLECTEDPF|PRIORITYPF
+	;sta CTRLPF 
+	
 	;--restore stack pointer
 	ldx Temp
 	txs
 
-	
-	lda #72
 	ldx #0
-	stx REFP0
-	stx REFP1
+	lda #104
 	jsr PositionASpriteSubroutine
-	lda #80
+	lda #112
 	ldx #1
 	jsr PositionASpriteSubroutine
-	lda #>DigitData
+	
+	lda #>TanksRemainingGfx
 	sta Player0Ptr+1
-	sta Player0Ptr+3
-	lda MazeNumber
-	and #$0F
-	tax
-	lda DigitDataLo,X
-	sta Player0Ptr+2
-	lda MazeNumber
-	lsr
-	lsr
-	lsr
-	lsr
-	tax
-	lda DigitDataLo,X
+	lda #<TanksRemainingGfx
 	sta Player0Ptr
 	
-	ldy #6
-BottomKernelLoop
+	lda #1
+	sta Temp
+	lda TanksRemaining
+	lsr
+	tax
+BottomKernelLoopOuter
+	ldy #4
+BottomKernelLoopInner
 	sta WSYNC
 	lda (Player0Ptr),Y
 	sta GRP0
-	lda (Player0Ptr+2),Y
 	sta GRP1
+	
+	lda TanksRemainingPF1Mask,X
+	sta PF1
+	lda TanksRemainingPF2Mask,X
+	sta PF2
+	
 	dey
-	bpl BottomKernelLoop
+	bpl BottomKernelLoopInner
 	
 	sta WSYNC
 	iny
 	sty GRP0
 	sty GRP1
+	sty PF1
+	sty PF2
+	lda TanksRemaining
+	lsr
+	adc #0
+	
+	tax	
+	dec Temp
+	bpl BottomKernelLoopOuter
+	
+
 	
 	rts
 
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$00
+	
 ;----------------------------------------------------------------------------
 ;------------------------Overscan Routine------------------------------------
 ;----------------------------------------------------------------------------
@@ -853,7 +890,7 @@ TankDirection
 
 ;****************************************************************************
 TankOnScreenTiming
-	.byte 0, 87, 173
+	.byte 255, 87, 173
 
 MoveEnemyTanksSubroutine
 
@@ -1258,6 +1295,9 @@ CheckBulletTankCollisionInnerLoop
 	sta TankX,X
 	lda #0
 	sta TankStatus,X
+	;--and decrease tanks remaining
+	dec TanksRemaining
+	
 BulletDidNotHitTank
 BulletOffScreen
 	dey
@@ -1299,12 +1339,8 @@ SetStartingEnemyTankLocationsLoop
 	dex
 	bpl SetStartingEnemyTankLocationsLoop
 	
-
-
-	
-	lda #J0DOWN
-	sta TankStatus+1
 	lda #0
+	sta TankStatus+1
 	sta TankStatus+2
 	sta TankStatus+3
 	
@@ -1330,7 +1366,7 @@ StartingEnemyTankXPosition
 	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
 
 StartingEnemyTankYPosition
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
 	
 
 ;****************************************************************************
@@ -1550,19 +1586,20 @@ DoneMakingMaze
 	and #$3F
 	sta PF1Left+MAZEROWS-2
 	
-	;lda PF1Right+MAZEROWS-2
-	;and #$03
-	;sta PF1Right+MAZEROWS-2
+	;clear upper R corner
+	lda PF1Right+MAZEROWS-2
+	and #$FC
+	sta PF1Right+MAZEROWS-2
 	
-	;clear spot direction to L of center in top row
+	;clear spot directly to L of center in top row
 	lda PF2Left+MAZEROWS-2
 	and #$3F
 	sta PF2Left+MAZEROWS-2
 	
-	;clear upper R corner
-	lda PF2Right+MAZEROWS-2
-	and #$3F
-	sta PF2Right+MAZEROWS-2
+	
+	;lda PF2Right+MAZEROWS-2
+	;and #$3F
+	;sta PF2Right+MAZEROWS-2
 	
 	;--add walls on bottom row surrounding base
 	lda #$30
@@ -1576,6 +1613,8 @@ DoneMakingMaze
 	and #~GENERATINGMAZE
 	sta GameStatus
 	
+	lda #20
+	sta TanksRemaining
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
@@ -1804,47 +1843,90 @@ ProcessDirections
 	and #J0UP
 	bne NoUp
 	bcs TurnUpward			;carry holds movement flag (carry clear=no movement)
-	inc TankY,X
+	sec
+	txa
+	bne EnemyTankGoesUp
+	lda TankFractional
+	clc
+	adc PlayerSpeed
+	sta TankFractional
+EnemyTankGoesUp
+	lda TankY,X
+	adc #0
+	sta TankY,X
+	
 TurnUpward
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
 	ora #TANKUP
 	sta TankStatus,X
+	jmp DoneMoving
 NoUp
 	tya
 	and #J0DOWN
 	bne NoDown
 	bcs TurnDownward		;carry holds movement flag (carry clear=no movement)
-	dec TankY,X
+	txa
+	bne EnemyTankGoesDown
+	lda TankFractional
+	sec
+	sbc PlayerSpeed
+	sta TankFractional
+EnemyTankGoesDown	
+	lda TankY,X
+	sbc #0
+	sta TankY,X
 TurnDownward
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
 	ora #TANKDOWN
 	sta TankStatus,X
+	jmp DoneMoving
 NoDown
 	tya
 	and #J0RIGHT
 	bne NoRight
 	bcs TurnRightward		;carry holds movement flag (carry clear=no movement)
-	inc TankX,X
+	sec
+	txa
+	bne EnemyTankGoesRight
+	lda TankFractional
+	clc
+	adc PlayerSpeed
+	sta TankFractional
+EnemyTankGoesRight
+	lda TankX,X
+	adc #0
+	sta TankX,X
 TurnRightward	
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
 	ora #TANKRIGHT
 	sta TankStatus,X
+	jmp DoneMoving
 NoRight
 	tya
 	and #J0LEFT
 	bne NoLeft
 	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
-	dec TankX,X
+	txa
+	bne EnemyTankGoesLeft
+	lda TankFractional
+	sec
+	sbc PlayerSpeed
+	sta TankFractional
+EnemyTankGoesLeft	
+	lda TankX,X
+	sbc #0
+	sta TankX,X
 TurnLeftward
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
 	ora #TANKLEFT
 	sta TankStatus,X
+	
 NoLeft
-
+DoneMoving
 	pla		;pop movement flag off of stack and discard
 
 	;are any balls available for firing
@@ -2219,7 +2301,7 @@ RegularAIRoutineColor
 
 IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
-	;--special case for first row which is always open (except for the base, but we'll deal with that later)
+	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
 	;--except now first row has walls at two positions (maybe!) only
 		
 	pha			;save A on stack
@@ -2237,7 +2319,7 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	lda PFMaskLookup,X
 	pha
 	lda Temp+1
-	;--special case: if Temp+1 < BLOCKHEIGHT then no block because bottom row is always open
+	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
 	sec
 	sbc #BLOCKHEIGHT
 	bcs NotOnBottomRow
@@ -2271,7 +2353,7 @@ DivideLoop2
 	sbc #BLOCKHEIGHT
 	bcc DoneDividing
 	inx
-	jmp DivideLoop2
+	bcs DivideLoop2	;branch always
 DoneDividing
 	;--now add X to 2nd element on stack
 	txa
@@ -2323,11 +2405,11 @@ CheckForWallSubroutine
 	cpx #0
 	bne NoWallL
 	;--this check is only for player 0
-	lda TankX,X
+	lda TankX
 	sec
 	sbc #1
 	sta Temp
-	lda TankY,X
+	lda TankY
 	sec
 	sbc #8
 	sta Temp+1
@@ -2366,11 +2448,11 @@ NotMovingLeft
 	;--this extra check is only for player 0
 	cpx #0
 	bne NoWallR
-	lda TankX,X
+	lda TankX
 	clc
 	adc #8
 	sta Temp
-	lda TankY,X
+	lda TankY
 	sec
 	sbc #8
 	sta Temp+1
@@ -2409,7 +2491,7 @@ CheckVerticalMovement
 	cpx #0
 	bne NoWallU
 	;--temp+1 is unchanged
-	lda TankX,X
+	lda TankX
 	clc
 	adc #7
 	sta Temp
@@ -2448,7 +2530,7 @@ NotMovingUp
 	cpx #0
 	bne NoWallD
 	;--temp+1 is unchanged
-	lda TankX,X
+	lda TankX
 	clc
 	adc #7
 	sta Temp
@@ -2660,6 +2742,13 @@ TankDownFrame
 	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
 TankRightFrame
 	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
+
+TanksRemainingGfx
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100	
+
 	align 256
 	
 	
