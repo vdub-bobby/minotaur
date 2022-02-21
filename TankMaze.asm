@@ -35,9 +35,12 @@
 ;	PAL60 version
 ;	2-player?  (unlikely but...)
 ;	Other...?
-
+;	
+;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
+;
 ;	BUG KILLING!
-
+;		diagnonal movement still wonky
+;		occasionally enemy tanks get hung up very briefly, seems to happen only when entering the maze
 ;	!
 
 
@@ -252,8 +255,6 @@ BallY ds 1
 
 MissileHeight ds 2
 BallHeight ds 1
-MissileHeightAdjuster ds 2
-BallHeightAdjuster ds 1
 Player0Bottom ds 1
 PlayerYTemp ds 1
 MissileYTemp ds 2
@@ -2227,17 +2228,13 @@ NoSpecialAdjustmentToPlayer0Top
 
 
 
-	ldx #2
+	ldx #1
 PreKernelSetupLoop2
 	lda #TANKAREAHEIGHT+1
 	sec
 	sbc MissileY,X
 	adc MissileHeight,X
 	sta MissileYTemp,X
-	lda MissileHeight,X
-	sec
-	sbc #2
-	sta MissileHeightAdjuster,X
 	
 	lda MissileX,X
 	clc
