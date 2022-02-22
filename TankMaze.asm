@@ -23,7 +23,11 @@
 ;	Music?
 ;	Title/splash screen?
 ;	Power-Ups - ???
-;		keep this simple: speed, extra life, "bomb" that destroys all tanks on screen (and all walls?)1
+;		keep this simple: 
+;			speed
+;			extra life
+;			"bomb" that destroys all tanks on screen (and all walls?)
+;
 ;	Maze generation routine done?  Tweaking?  Rewrite?
 ;	Collisions!
 ;	Score
@@ -39,9 +43,8 @@
 ;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 ;
 ;	BUG KILLING!
-;		diagnonal movement still wonky
 ;		occasionally enemy tanks get hung up very briefly, seems to happen only when entering the maze
-;	!
+
 
 
 
@@ -61,6 +64,7 @@ BLOCKHEIGHT = 7
 MAZEROWS	=	11
 TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
+DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 
 ;--TankStatus bits:
 TANKRIGHT		=	J0RIGHT
@@ -103,6 +107,22 @@ BASECOLOR		=		GREEN
 WALLCOLOR			=		RED+6
 
 MAZEPATHCUTOFF	=	100
+
+TANKSPEED1	=	1
+TANKSPEED2	=	2
+TANKSPEED3	=	3
+TANKSPEED4	=	4
+TANKSPEED5	=	5
+TANKSPEED6	=	6
+TANKSPEED7	=	7
+TANKSPEED8	=	8
+TANKSPEED9	=	9
+TANKSPEED10	=	10
+TANKSPEED11	=	11
+TANKSPEED12	=	12
+TANKSPEED13	=	13
+TANKSPEED14	=	14
+TANKSPEED15	=	15
 ;-------------------------COLOR CONSTANTS (NTSC)--------------------------
 
 GRAY		=	$00
@@ -237,8 +257,8 @@ TankX ds 4
 TankY ds 4
 TankStatus ds 4
 
-TankFractional ds 1
-PlayerSpeed ds 1
+TankFractional ds 4
+;PlayerSpeed ds 1
 
 BulletX ds 4
 BulletY ds 4
@@ -315,22 +335,12 @@ Start
 	sta TankY+3
 	
 	
-	lda #TANKUP
-	sta TankStatus
-	sta TankStatus+1
-	sta TankStatus+2
-	sta TankStatus+3
-
-	
 	lda #$FF
 	sta VDELP0
 	sta VDELBL
 
 	sta RandomNumber
-	
-	lda #$50
-	sta PlayerSpeed
-	
+		
 	lda #GOLD+10
 	sta COLUP0
 	lda #BLUE2+12
@@ -945,14 +955,17 @@ MoveAnEnemyTank
 	tax
 
 	lda TankStatus,X
+	and #$F0
 	bne TankOnscreenMoveIt
 	;tank offscreen
 	lda TankMovementCounter
-	cmp TankOnScreenTiming-1,X
+	and #7
 	bne DoNotBringTankOnscreenYet
+	dec TankStatus,X
+	bpl DoNotBringTankOnscreenYet
 	lda #MAZEAREAHEIGHT+TANKHEIGHT
 	sta TankY,X
-	lda #J0DOWN
+	lda #J0DOWN|TANKSPEED15
 	sta TankStatus,X
 DoNotBringTankOnscreenYet
 	rts
@@ -999,6 +1012,10 @@ AtIntersectionY
 	cmp #1
 	bne MoreThanOneAllowedDirection
 	pla			;get direction back off stack
+	sta Temp
+	lda TankStatus,X
+	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	ora Temp
 	sta TankStatus,X
 	jmp DirectionChosen
 MoreThanOneAllowedDirection
@@ -1014,6 +1031,10 @@ MoreThanOneAllowedDirection
 	tay
 	pla
 	eor PreventReverses,Y
+	sta Temp
+	lda TankStatus,X
+	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	ora Temp
 	sta TankStatus,X
 	jmp DirectionChosen
 
@@ -1098,8 +1119,12 @@ RegularMovement
 	
 	
 ChooseTankDirection
-	jsr ChooseTankDirectionSubroutine
-	sta TankStatus,X					;returns with new direction in accumulator
+	jsr ChooseTankDirectionSubroutine	;returns with new direction in accumulator
+	sta Temp
+	lda TankStatus,X
+	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	ora Temp
+	sta TankStatus,X					
 	pla
 	pla									;pull target for tank off stack and discard
 
@@ -1123,6 +1148,10 @@ TryAnotherDirection
 	ldy #3					;loop around
 	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction, that the tank can never be stuck and unable to move
 FoundGoodDirection
+	sta Temp
+	lda TankStatus,X
+	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	ora Temp
 	sta TankStatus,X
 		
 DirectionIsFine
@@ -1348,8 +1377,6 @@ SetStartingEnemyTankLocationsLoop
 	;--finally, cycle the random number
 	jsr UpdateRandomNumber
 	
-	;jsr GenerateMazeSubroutine
-	
 	lda #$FF
 	sta MazeGenerationPass
 
@@ -1399,6 +1426,22 @@ FillMazeLoop
 	sta PF1Right,X
 	dex 
 	bpl FillMazeLoop
+	
+	;	leave room for enemy tanks to enter:
+	;clear upper L corner
+	lda PF1Left+MAZEROWS-2
+	and #$3F
+	sta PF1Left+MAZEROWS-2
+	
+	;clear upper R corner
+	lda PF1Right+MAZEROWS-2
+	and #$FC
+	sta PF1Right+MAZEROWS-2
+	
+	;clear spot directly to L of center in top row
+	lda PF2Left+MAZEROWS-2
+	and #$3F
+	sta PF2Left+MAZEROWS-2
 	
 	;--update maze number on first pass also
 UpdateMazeNumber
@@ -1489,15 +1532,6 @@ EndOfRun
 	dec Temp+1
 	and Temp+1
 	sta Temp+1
-;	dec Temp+1	
-	
-;	and #$0F			;maximum length is 15
-;	sec
-;FindRandomPassageToCarve
-;	sbc Temp+1
-;	bcs FindRandomPassageToCarve
-;	adc Temp+1
-;	sta Temp+1
 OnlyOnePlaceToCarve
 	lda Temp
 	sec
@@ -1574,38 +1608,18 @@ DoneMakingMaze
 	;	open up area directly above base:
 	;--- change to CLOSE up area directly above base, not sure about this.
 	lda PF2Left
-	;and #$0F
 	ora #$F0
 	sta PF2Left
 	lda PF2Right
-	;and #$0F
 	ora #$F0
 	sta PF2Right
-	;	leave room for enemy tanks to enter:
-	;clear upper L corner
-	lda PF1Left+MAZEROWS-2
-	and #$3F
-	sta PF1Left+MAZEROWS-2
-	
-	;clear upper R corner
-	lda PF1Right+MAZEROWS-2
-	and #$FC
-	sta PF1Right+MAZEROWS-2
-	
-	;clear spot directly to L of center in top row
-	lda PF2Left+MAZEROWS-2
-	and #$3F
-	sta PF2Left+MAZEROWS-2
+
 	
 	
-	;lda PF2Right+MAZEROWS-2
-	;and #$3F
-	;sta PF2Right+MAZEROWS-2
 	
 	;--add walls on bottom row surrounding base
 	lda #$30
 	sta LastRowL
-	;lda #%00000000
 	sta LastRowR
 	
 	;--and set GAMEON flag and turn off maze generation flag
@@ -1616,6 +1630,19 @@ DoneMakingMaze
 	
 	lda #20
 	sta TanksRemaining
+	
+	;--starting timers for when tanks enter the maze
+	lda #15
+	sta TankStatus+1
+	lda #7
+	sta TankStatus+2
+	lda #1
+	sta TankStatus+3
+	
+	;--set speed for player tank
+	lda #TANKSPEED4
+	sta TankStatus
+
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
@@ -1753,20 +1780,27 @@ DoneCountingBits
 	; for Player Tank=do previous routine which allowed tank to slide along
 	txa
 	bne EnemyTankEliminateDiagonal
+EliminatePlayerDiagonal
 	;--otherwise, back to the drawing board:
 	;-- assumption for player tank is if holding at a diagonal and we come to 
 	;	an intersection, player always wants to turn
 	;--so if moving up/down, start by eliminating those directions
+
+	
+	
+	
+	
 	lda TankStatus
 	and #J0LEFT|J0RIGHT
-	beq EliminateLeftRight
+	beq EliminateUpDown
+	;--else eliminate left and right
 	pla
-	ora #~(J0UP|J0DOWN)
+	ora #J0LEFT|J0RIGHT
 	bne DirectionsFine
 	
-EliminateLeftRight
+EliminateUpDown
 	pla						;restore directions 
-	ora #~(J0LEFT|J0RIGHT)		;eliminate left & right
+	ora #J0UP|J0DOWN		;eliminate up and down
 	bne DirectionsFine		;branch always
 
 EnemyTankEliminateDiagonal
@@ -1831,6 +1865,18 @@ ProcessDirections
 
 	tay	;--save direction in Y
 	
+	;--if tank is turning, set fractional variable so tank moves immediately
+	and #$F0
+	eor #$F0
+	sta Temp
+	lda TankStatus,X
+	and #$F0
+	cmp Temp
+	beq TankNotTurning
+	;tank turning
+	lda #$FF
+	sta TankFractional,X
+TankNotTurning
 	txa
 	pha	;save tank index
 	
@@ -1840,18 +1886,19 @@ ProcessDirections
 	pla
 	tax	;restore tank index
 	
-	tya	;get saved directions back in A	
+	tya						;get saved directions back in A	
 	and #J0UP
 	bne NoUp
 	bcs TurnUpward			;carry holds movement flag (carry clear=no movement)
-	sec
-	txa
-	bne EnemyTankGoesUp
-	lda TankFractional
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
 	clc
-	adc PlayerSpeed
-	sta TankFractional
-EnemyTankGoesUp
+	adc TankFractional,X
+	sta TankFractional,X
 	lda TankY,X
 	adc #0
 	sta TankY,X
@@ -1867,13 +1914,22 @@ NoUp
 	and #J0DOWN
 	bne NoDown
 	bcs TurnDownward		;carry holds movement flag (carry clear=no movement)
-	txa
-	bne EnemyTankGoesDown
-	lda TankFractional
-	sec
-	sbc PlayerSpeed
-	sta TankFractional
-EnemyTankGoesDown	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
+	sta Temp
+	lda TankFractional,X
+	clc
+	adc Temp
+	sta TankFractional,X
+	;flip carry flag
+	php
+	pla
+	eor #1
+	lsr	
 	lda TankY,X
 	sbc #0
 	sta TankY,X
@@ -1888,14 +1944,15 @@ NoDown
 	and #J0RIGHT
 	bne NoRight
 	bcs TurnRightward		;carry holds movement flag (carry clear=no movement)
-	sec
-	txa
-	bne EnemyTankGoesRight
-	lda TankFractional
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
 	clc
-	adc PlayerSpeed
-	sta TankFractional
-EnemyTankGoesRight
+	adc TankFractional,X
+	sta TankFractional,X
 	lda TankX,X
 	adc #0
 	sta TankX,X
@@ -1910,13 +1967,24 @@ NoRight
 	and #J0LEFT
 	bne NoLeft
 	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
-	txa
-	bne EnemyTankGoesLeft
-	lda TankFractional
-	sec
-	sbc PlayerSpeed
-	sta TankFractional
-EnemyTankGoesLeft	
+;	txa
+;	bne EnemyTankGoesLeft
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
+	sta Temp
+	lda TankFractional,X
+	clc
+	adc Temp
+	sta TankFractional,X
+	;flip carry flag
+	php
+	pla
+	eor #1
+	lsr		
 	lda TankX,X
 	sbc #0
 	sta TankX,X
@@ -2711,7 +2779,7 @@ DigitF
         .byte #%00100000;--
         .byte #%00111110;--
 	
-	align 256
+;	align 256
 	ds BLOCKHEIGHT+1
 BlockRowTable
 	ds BLOCKHEIGHT, 0
@@ -2733,23 +2801,12 @@ BlockRowTable
 	ds BLOCKHEIGHT, 16
 	ds BLOCKHEIGHT, 17
 	
-TankUpFrame
-	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
-TankDownFrame
-	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
-TankRightFrame
-	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
-TanksRemainingGfx
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100	
 
 	align 256
 	
 	
-	ds 80
+	ds DATASPACEBEFOREGFX
 	
 TankGfxVertical
    
@@ -2893,10 +2950,22 @@ TankDownAnimated4b
 		.byte #%00100111;--
 		.byte 0
 		
+TankUpFrame
+	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
+TankDownFrame
+	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
+TankRightFrame
+	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
+
+TanksRemainingGfx
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
 		
 		align 256
 		
-		ds 80
+		ds DATASPACEBEFOREGFX
 		
 TankGfxHorizontal
 TankRightAnimated1
