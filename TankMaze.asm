@@ -43,9 +43,7 @@
 ;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 ;
 ;	BUG KILLING!
-;		occasionally enemy tanks get hung up very briefly, seems to happen only when entering the maze
-
-
+;		diagonal movement (player) needs to be fixed
 
 
 
@@ -80,7 +78,7 @@ ENEMY2STARTINGX	=	136
 
 TANKOFFSCREEN	=	127
 
-MAZEGENERATIONPASSES = MazeRowToGenerateToTableEnd - MazeRowToGenerateTo - 1
+MAZEGENERATIONPASSES = MAZEROWS/2
 
 ;--GameStatus bits
 
@@ -438,6 +436,55 @@ EndVBLANK
 
 	rts
 
+	
+	
+;----------------------------------------------------------------------------
+;------------------------Overscan Routine------------------------------------
+;----------------------------------------------------------------------------
+OverscanRoutine
+
+
+
+
+	ldy #2
+	sty WSYNC
+	sty VBLANK
+	lda  #42
+	sta  TIM64T
+	
+	
+	lda GameStatus
+	and #GAMEON
+	beq GameNotOn	
+	jsr CollisionsSubroutine
+	jsr MoveEnemyTanksSubroutine	
+	jsr MoveBulletSubroutine
+	;jsr ReadControllersSubroutine
+GameNotOn
+	lda GameStatus
+	and #GENERATINGMAZE
+	beq NotGeneratingMaze
+	jsr GenerateMazeSubroutine
+NotGeneratingMaze
+	
+	jsr ReadConsoleSwitchesSubroutine
+
+
+
+WaitForOverscanEnd
+	lda INTIM
+	bne WaitForOverscanEnd
+	sta WSYNC		;last line...I think?
+
+	rts
+	
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$00
+
+	
 ;----------------------------------------------------------------------------
 ;----------------------Kernel Routine----------------------------------------
 ;----------------------------------------------------------------------------
@@ -787,51 +834,7 @@ BottomKernelLoopInner
 	
 	rts
 
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
 
-TanksRemainingPF2Mask		
-	.byte $03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$00
-	
-;----------------------------------------------------------------------------
-;------------------------Overscan Routine------------------------------------
-;----------------------------------------------------------------------------
-OverscanRoutine
-
-
-
-
-	ldy #2
-	sty WSYNC
-	sty VBLANK
-	lda  #42
-	sta  TIM64T
-	
-	
-	lda GameStatus
-	and #GAMEON
-	beq GameNotOn	
-	jsr CollisionsSubroutine
-	jsr MoveEnemyTanksSubroutine	
-	jsr MoveBulletSubroutine
-	;jsr ReadControllersSubroutine
-GameNotOn
-	lda GameStatus
-	and #GENERATINGMAZE
-	beq NotGeneratingMaze
-	jsr GenerateMazeSubroutine
-NotGeneratingMaze
-	
-	jsr ReadConsoleSwitchesSubroutine
-
-
-
-WaitForOverscanEnd
-	lda INTIM
-	bne WaitForOverscanEnd
-	sta WSYNC		;last line...I think?
-
-	rts
 
 ;----------------------------------------------------------------------------
 ;----------------------------End Main Routines-------------------------------
@@ -965,7 +968,8 @@ MoveAnEnemyTank
 	bpl DoNotBringTankOnscreenYet
 	lda #MAZEAREAHEIGHT+TANKHEIGHT
 	sta TankY,X
-	lda #J0DOWN|TANKSPEED15
+	lda #J0DOWN
+	ora NewTankSpeed,X
 	sta TankStatus,X
 DoNotBringTankOnscreenYet
 	rts
@@ -992,6 +996,11 @@ AtIntersectionY
 	;--here is where we choose which way each tank will go
 	;
 	;--new routine: 
+	;--first set TankFractional so that they move immediately
+	lda #255
+	sta TankFractional,X
+	
+	
 	;	get allowable directions
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
@@ -1038,36 +1047,41 @@ MoreThanOneAllowedDirection
 	sta TankStatus,X
 	jmp DirectionChosen
 
-PreventReverses
-	.byte 	0, J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
+			
+NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
+	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
+	
+	
+PreventReverses = *-1	;--the ZEROES are wasted bytes
+	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
 	
 	;tank 0 = player, so two wasted bytes here
 	;tank 1 target = upper left corner
 	;tank 2 target = base (bottom center)
 	;tank 3 target = upper right corner
-SwitchMovementX
-	.byte 0, 0, 0, 255
-SwitchMovementY
-	.byte 0, 255, 80, 255
+SwitchMovementX = *-1
+	.byte 0, 0, 255
+SwitchMovementY = *-1
+	.byte 255, 80, 255
 	
 	;tank 0 = player, so two more wasted bytes here
 	;tank 1 target = player position
 	;tank 2 target = random position
 	;tank 3 target = player position
-TankTargetX
-	.byte 0, TankX, RandomNumber, TankX
-TankTargetY
-	.byte 0, TankY, RandomNumber, TankY
+TankTargetX = *-1
+	.byte TankX, RandomNumber, TankX
+TankTargetY = *-1
+	.byte TankY, RandomNumber, TankY
 	
 	;--following is combined with target above (see routine for details)
 	;tank 0 = player, so two more wasted bytes here
 	;tank 1 target = player position
 	;tank 2 target = itself
 	;tank 3 target = tank 1
-TankTargetAdjustX
-	.byte 0, TankX, TankX+1, TankX+1
-TankTargetAdjustY
-	.byte 0, TankY, TankY+1, TankY+1
+TankTargetAdjustX = *-1
+	.byte TankX, TankX+1, TankX+1
+TankTargetAdjustY = *-1
+	.byte TankY, TankY+1, TankY+1
 	
 MoreThanTwoAllowedDirections	
 	;--find current direction, clear it's opposite, and then save the remaining allowable directions
@@ -1323,7 +1337,7 @@ CheckBulletTankCollisionInnerLoop
 	sta TankY,X
 	lda StartingEnemyTankXPosition,X
 	sta TankX,X
-	lda #0
+	lda #7
 	sta TankStatus,X
 	;--and decrease tanks remaining
 	dec TanksRemaining
@@ -1398,10 +1412,6 @@ StartingEnemyTankYPosition
 	
 
 ;****************************************************************************
-MazeRowToGenerateTo
-	.byte 0, 2, 4, 6, 8, MAZEROWS-1
-MazeRowToGenerateToTableEnd
-	
 	
 GenerateMazeSubroutine
 	;this routine is way too long
@@ -1445,7 +1455,7 @@ FillMazeLoop
 	
 	;--update maze number on first pass also
 UpdateMazeNumber
-	dec MazeNumber
+	inc MazeNumber
 	beq UpdateMazeNumber
 	
 	;and set seed for maze
@@ -1456,9 +1466,6 @@ NotFirstPass
 	lda Temp+2
 	sta RandomNumber
 
-	lda MazeRowToGenerateTo,Y
-	sta Temp+2
-	
 
 	
 	;--use MazeNumber as seed of random number generator
@@ -1477,13 +1484,14 @@ NotFirstPass
 	;	random-length horizontal path
 	;	once done with a row, we move two rows down and repeat the whole process
 	;	Y holds row, X holds block within the row
-	iny
-	lda MazeRowToGenerateTo,Y
-	tay
-	dey	
-MakeMazeLoopRow
-	ldx #15
 	
+	
+	tya
+	asl
+	clc
+	adc #1
+	tay
+	ldx #15
 MakeMazeLoopOuter	
 	lda #<PF1Left
 	sta MiscPtr
@@ -1593,11 +1601,6 @@ NotEndOfRun
 	
 	
 DoneWithRow
-	dey
-	dey
-	cpy Temp+2
-	bmi DoneMakingMaze
-	jmp MakeMazeLoopRow
 DoneMakingMaze
 	
 	dec MazeGenerationPass
@@ -1787,9 +1790,28 @@ EliminatePlayerDiagonal
 	;--so if moving up/down, start by eliminating those directions
 
 	
+	;--if no blocks next to tank AND diagonal includes current direction then keep going current direction
+	lda TankStatus
+	and #$F0
+	tsx
+	and ($00,X)
+	beq CompleteChangeOfDirection
+	
+	ldx #0
+	txa
+;	jsr CheckForWallSubroutine
+;	tax
+;	bne RegularDiagonalHandling
+;	lda TankStatus
+;	and #$F0
+;	eor #$F0
+;	ldx #0
+;	jmp DirectionsFine
 	
 	
-	
+RegularDiagonalHandling
+CompleteChangeOfDirection
+	ldx #0
 	lda TankStatus
 	and #J0LEFT|J0RIGHT
 	beq EliminateUpDown
@@ -1926,13 +1948,8 @@ NoUp
 	adc Temp
 	sta TankFractional,X
 	;flip carry flag
-	php
-	pla
-	eor #1
-	lsr	
-	lda TankY,X
-	sbc #0
-	sta TankY,X
+	bcc TurnDownward	;but don't move down
+	dec TankY,X
 TurnDownward
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
@@ -1980,14 +1997,8 @@ NoRight
 	clc
 	adc Temp
 	sta TankFractional,X
-	;flip carry flag
-	php
-	pla
-	eor #1
-	lsr		
-	lda TankX,X
-	sbc #0
-	sta TankX,X
+	bcc TurnLeftward	;but don't move
+	dec TankX,X
 TurnLeftward
 	lda TankStatus,X
 	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
