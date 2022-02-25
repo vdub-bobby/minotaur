@@ -45,8 +45,6 @@
 ;	BUG KILLING!
 ;		diagonal movement (player) needs to be fixed
 
-;	blah blah blah testing
-
 
 
 
@@ -482,7 +480,7 @@ TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
 
 TanksRemainingPF2Mask		
-	.byte $03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$00
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 
 	
 ;----------------------------------------------------------------------------
@@ -768,7 +766,7 @@ BottomWallLoop
 	sty PF0
 	sty PF1
 	sty PF2
-	sty COLUPF
+	;sty COLUPF
 	sty REFP0
 	sty REFP1
 	lda #THREECOPIESCLOSE
@@ -790,48 +788,102 @@ BottomWallLoop
 	ldx #1
 	jsr PositionASpriteSubroutine
 	
+	lda #60
+	ldx #2
+	jsr PositionASpriteSubroutine
+	lda #65
+	ldx #3
+	jsr PositionASpriteSubroutine
+	
 	lda #>TanksRemainingGfx
 	sta Player0Ptr+1
 	lda #<TanksRemainingGfx
 	sta Player0Ptr
 	
-	lda #1
-	sta Temp
+
+	lda #>DigitDataMissile
+	sta Player0Ptr+3
+	sta Player1Ptr+1
+	lda MazeNumber
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda DigitDataMissileLo,Y
+	sta Player0Ptr+2
+	lda MazeNumber
+	and #$0F
+	tay
+	lda DigitDataMissileLo,Y
+	sta Player1Ptr
+
+	lda #$FF
+	sta PF1
+	
+	
 	lda TanksRemaining
 	lsr
 	tax
-BottomKernelLoopOuter
-	ldy #4
-BottomKernelLoopInner
-	sta WSYNC
-	lda (Player0Ptr),Y
-	sta GRP0
-	sta GRP1
-	
+
 	lda TanksRemainingPF1Mask,X
 	sta PF1
 	lda TanksRemainingPF2Mask,X
-	sta PF2
+	sta PF2				
 	
-	dey
-	bpl BottomKernelLoopInner
+	lda #2
+	sta ENAM0
+	sta ENAM1
+	ldy #9
+BottomKernelLoopInner		;		37/48
+	lda (Player0Ptr+2),Y	;+5
+	sta HMM0				;+3
+	asl						;+2
+	asl						;+2
+	ora #3					;+2
+	sta NUSIZ0				;+3		54/65
+
+	lda (Player1Ptr),Y		;+5
+	sta HMM1				;+3
+	asl
+	asl
+	ora #3
+	sta NUSIZ1				;+17	71/82
+
+	sta WSYNC			;+3		74
+	sta HMOVE			;+3		 3
 	
-	sta WSYNC
-	iny
-	sty GRP0
-	sty GRP1
-	sty PF1
-	sty PF2
-	lda TanksRemaining
-	lsr
-	adc #0
-	
-	tax	
-	dec Temp
-	bpl BottomKernelLoopOuter
 	
 
+	lda (Player0Ptr),Y	;+5	
+	sta GRP0			
+	sta GRP1			;+6		14
 	
+	
+	dey
+	bmi BottomKernelLoopDone	;+4
+	cpy #5						
+	bne BottomKernelLoopInner	;+5		23
+								;		22
+
+	lda TanksRemaining
+	lsr
+	adc #0						;+7		29
+	
+	tax							;+2		31
+	lda TanksRemainingPF1Mask,X
+	sta PF1
+	lda TanksRemainingPF2Mask,X
+	sta PF2						;14		45
+
+	jmp BottomKernelLoopInner	;+3		48
+	
+BottomKernelLoopDone
+	sta WSYNC
+	iny
+	sty ENAM0
+	sty ENAM1
+
 	rts
 
 
@@ -1455,7 +1507,13 @@ FillMazeLoop
 	
 	;--update maze number on first pass also
 UpdateMazeNumber
-	inc MazeNumber
+	lda MazeNumber
+	sed
+	clc
+	adc #1
+	sta MazeNumber
+	cld
+	
 	beq UpdateMazeNumber
 	
 	;and set seed for maze
@@ -1790,7 +1848,8 @@ EliminatePlayerDiagonal
 	;--so if moving up/down, start by eliminating those directions
 
 	
-	;--if no blocks next to tank AND diagonal includes current direction then keep going current direction
+	;--moving at a diagonal.
+	;.....not sure what to do.
 	lda TankStatus
 	and #$F0
 	tsx
@@ -2650,9 +2709,11 @@ SkipEOR
 ;----------------------------------------------------------------------------
 DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
-
+DigitDataMissileLo
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour,
+	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
 	align 256
 
 
@@ -2741,54 +2802,111 @@ Four
         .byte #%01000010;--
         .byte #%01000010;--
         .byte #%01000010;--
-DigitA
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01111111;--
-        .byte #%01000010;--
-        .byte #%01000010;--
-        .byte #%01111110;--
-DigitB
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01111111;--
-        .byte #%01000010;--
-        .byte #%01000010;--
-        .byte #%01111110;--
-DigitC
-        .byte #%01111111;--
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%00100000;--
-        .byte #%00100000;--
-        .byte #%00111100;--
-DigitD
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01000010;--
-        .byte #%01000010;--
-        .byte #%01111110;--
-DigitE
-        .byte #%01111111;--
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%01111100;--
-        .byte #%01100000;--
-        .byte #%00100000;--
-        .byte #%00111110;--
-DigitF
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%01111100;--
-        .byte #%01100000;--
-        .byte #%00100000;--
-        .byte #%00111110;--
+    
+    
+DigitDataMissile
+MissileZero
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+MissileOne
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
+
+
+
+
+MissileTwo
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
+
+MissileThree
+MissileFour
+MissileFive
+MissileSix
+MissileSeven
+MissileEight
+MissileNine    
+        
+;DigitA
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitB
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitC
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00100000;--
+;       .byte #%00111100;--
+;DigitD
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitE
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
+;DigitF
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
 	
 ;	align 256
 	ds BLOCKHEIGHT+1
@@ -2969,11 +3087,16 @@ TankRightFrame
 	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
 TanksRemainingGfx
+	.byte 0
 	.byte %11101110
 	.byte %11101110
 	.byte %11101110
 	.byte %01000100		
-		
+	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100			
 		align 256
 		
 		ds DATASPACEBEFOREGFX
