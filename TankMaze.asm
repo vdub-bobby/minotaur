@@ -337,10 +337,6 @@ Start
 
 	sta RandomNumber
 		
-	lda #GOLD+10
-	sta COLUP0
-	lda #BLUE2+12
-	sta COLUP1
 	
 	lda #WALLCOLOR
 	sta COLUPF
@@ -476,11 +472,6 @@ WaitForOverscanEnd
 
 	rts
 	
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
-
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 
 	
 ;----------------------------------------------------------------------------
@@ -691,11 +682,6 @@ DoDraw10b
 	lda LastRowL
 	sta PF2					;+6		34
 	
-
-	
-	
-	
-	
 	SLEEP 6					;		40
 	
 	lda LastRowR
@@ -707,9 +693,7 @@ DoDraw10b
 	txs						;+10	56
 	
 	
-	;SLEEP 5					;		56
 	
-		
 	cpy Player0Top				
 	beq Switch1b
 	bpl Wait1b
@@ -741,59 +725,58 @@ DoDraw11b
 	bne KernelLastRowLoop		;+5		36
 	
 	sty PF2		;AKSHUALLY don't display base on last row
-	
-	
-	ldy #BLOCKHEIGHT
-BottomWallLoop
-	lda #$80
-	ldx #0
-	stx ENABL
-	stx GRP0
+	ldx Temp
+	txs			;+8		44
+
+	sty ENABL	;+3		47
+	sty GRP0	;+3		50
+	ldy #$FF	;+2		52
+	ldx #0		;+2		54
 	sta WSYNC
-	stx GRP1
+	sty PF2		;+3		57
+	sty PF1		;+3		60
+	stx GRP1	
 	stx ENAM0
 	stx ENAM1
-	sta PF0
-	lda #$FF
-	sta PF1
-	sta PF2
-	dey
-	bne BottomWallLoop
+;	sta PF0
+	
+	lda #104
+	jsr PositionASpriteSubroutine
+	
+	lda #112
+	inx
+	jsr PositionASpriteSubroutine
+
+	lda #60
+	inx
+	jsr PositionASpriteSubroutine
+
+	lda #65
+	inx
+	jsr PositionASpriteSubroutine
+	
 	
 	;--done displaying maze
 	;--set up score, tanks remaining, lives remaining etc
+
 	sta WSYNC
+	ldy #0
 	sty PF0
 	sty PF1
 	sty PF2
-	;sty COLUPF
+	sty COLUPF
 	sty REFP0
 	sty REFP1
+	sty VDELP0
+	sty VDELBL
 	lda #THREECOPIESCLOSE
 	sta NUSIZ0
 	lda #TWOCOPIESCLOSE
 	sta NUSIZ1
 	
-	;lda #REFLECTEDPF|PRIORITYPF
-	;sta CTRLPF 
-	
-	;--restore stack pointer
-	ldx Temp
-	txs
-
-	ldx #0
-	lda #104
-	jsr PositionASpriteSubroutine
-	lda #112
-	ldx #1
-	jsr PositionASpriteSubroutine
-	
-	lda #60
-	ldx #2
-	jsr PositionASpriteSubroutine
-	lda #65
-	ldx #3
-	jsr PositionASpriteSubroutine
+	lda #RED
+	sta COLUP0
+	sta COLUP1
 	
 	lda #>TanksRemainingGfx
 	sta Player0Ptr+1
@@ -819,8 +802,9 @@ BottomWallLoop
 	sta Player1Ptr
 
 	lda #$FF
-	sta PF1
-	
+	sta PF0
+	sta PF2		;this masks the missiles before we want them to show
+				;we will use the actual mask inside the loop below
 	
 	lda TanksRemaining
 	lsr
@@ -828,61 +812,92 @@ BottomWallLoop
 
 	lda TanksRemainingPF1Mask,X
 	sta PF1
-	lda TanksRemainingPF2Mask,X
-	sta PF2				
 	
 	lda #2
 	sta ENAM0
 	sta ENAM1
-	ldy #9
-BottomKernelLoopInner		;		37/48
-	lda (Player0Ptr+2),Y	;+5
-	sta HMM0				;+3
-	asl						;+2
-	asl						;+2
-	ora #3					;+2
-	sta NUSIZ0				;+3		54/65
-
-	lda (Player1Ptr),Y		;+5
-	sta HMM1				;+3
-	asl
-	asl
-	ora #3
-	sta NUSIZ1				;+17	71/82
-
-	sta WSYNC			;+3		74
-	sta HMOVE			;+3		 3
+	ldy #8
+	bne BottomKernelLoopInner	;	branch always
 	
+BottomKernelLoopMiddle			;		19
+	dey							;+2		21
 	
-
-	lda (Player0Ptr),Y	;+5	
-	sta GRP0			
-	sta GRP1			;+6		14
-	
-	
-	dey
-	bmi BottomKernelLoopDone	;+4
-	cpy #5						
-	bne BottomKernelLoopInner	;+5		23
-								;		22
-
 	lda TanksRemaining
 	lsr
-	adc #0						;+7		29
+	adc #0						;+7		28
 	
-	tax							;+2		31
+	tax							;+2		30
 	lda TanksRemainingPF1Mask,X
 	sta PF1
 	lda TanksRemainingPF2Mask,X
-	sta PF2						;14		45
+	sta PF2						;14		44
+	
+	lda (Player0Ptr+2),Y		;+5
+	sta HMM0					;+3
+	asl							;+2
+	asl							;+2
+	ora #3						;+2
+	sta NUSIZ0					;+3		61
 
-	jmp BottomKernelLoopInner	;+3		48
+	lda (Player1Ptr),Y			;+5		66
+	sta HMM1					;+3		69	
+	asl							;+2		71
+	asl							;+2		73
+	ora #3						;+2		75
+	sta NUSIZ1					;+3		 2
+
+	sta HMOVE					;+3		 5
+
+	
+	jmp BottomKernelLoopInnerMiddle	;	 8
+	
+BottomKernelLoopInner			;		38
+	lda (Player0Ptr+2),Y		;+5
+	sta HMM0					;+3
+	asl							;+2
+	asl							;+2
+	ora #3						;+2
+	sta NUSIZ0					;+3		55
+
+	lda (Player1Ptr),Y			;+5		
+	sta HMM1					;+3			
+	asl							;+2
+	asl							;+2		
+	ora #3						;+2
+	sta NUSIZ1					;+3		72
+
+	sta WSYNC
+	
+	sta HMOVE					;+3		 3
+BottomKernelLoopInnerMiddle		;		 8
+	
+
+	lda (Player0Ptr),Y			;+5	
+	sta GRP0			
+	sta GRP1					;+6		14
+	
+	cpy #4						
+	beq BottomKernelLoopMiddle	;+5		19
+								;		18
+	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
+	;	which is necessary to mask the missiles before we are ready to display them
+	lda TanksRemainingPF2Mask,X
+	sta PF2
+	SLEEP 3						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<=8)
+	dey
+	bpl BottomKernelLoopInner	;+5		33
+
 	
 BottomKernelLoopDone
 	sta WSYNC
 	iny
 	sty ENAM0
 	sty ENAM1
+	sty GRP0
+	sty GRP1
+	sty PF0
+	sty PF1
+	sty PF2
 
 	rts
 
@@ -951,12 +966,8 @@ NoVerticalTankMovement
 	
 	rts
 
-TankDirection
-	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
 
 ;****************************************************************************
-TankOnScreenTiming
-	.byte 255, 87, 173
 
 MoveEnemyTanksSubroutine
 
@@ -1100,40 +1111,6 @@ MoreThanOneAllowedDirection
 	jmp DirectionChosen
 
 			
-NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
-	
-	
-PreventReverses = *-1	;--the ZEROES are wasted bytes
-	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
-	
-	;tank 0 = player, so two wasted bytes here
-	;tank 1 target = upper left corner
-	;tank 2 target = base (bottom center)
-	;tank 3 target = upper right corner
-SwitchMovementX = *-1
-	.byte 0, 0, 255
-SwitchMovementY = *-1
-	.byte 255, 80, 255
-	
-	;tank 0 = player, so two more wasted bytes here
-	;tank 1 target = player position
-	;tank 2 target = random position
-	;tank 3 target = player position
-TankTargetX = *-1
-	.byte TankX, RandomNumber, TankX
-TankTargetY = *-1
-	.byte TankY, RandomNumber, TankY
-	
-	;--following is combined with target above (see routine for details)
-	;tank 0 = player, so two more wasted bytes here
-	;tank 1 target = player position
-	;tank 2 target = itself
-	;tank 3 target = tank 1
-TankTargetAdjustX = *-1
-	.byte TankX, TankX+1, TankX+1
-TankTargetAdjustY = *-1
-	.byte TankY, TankY+1, TankY+1
 	
 MoreThanTwoAllowedDirections	
 	;--find current direction, clear it's opposite, and then save the remaining allowable directions
@@ -1245,10 +1222,6 @@ ReturnFromTankMovementSubroutine
 
 ;****************************************************************************
 
-NumberOfBitsSet
-	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
-MovementMask
-	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 
 ;****************************************************************************
 
@@ -1456,11 +1429,6 @@ RESETNotReleased
 DoneWithConsoleSwitches
 	rts
 
-StartingEnemyTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
-
-StartingEnemyTankYPosition
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
 	
 
 ;****************************************************************************
@@ -1714,17 +1682,7 @@ NotCompletelyDoneWithMaze
 	
 	rts
 	
-PFRegisterLookup
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-PFMaskLookup
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
+	
 	
 ;****************************************************************************
 BulletDirectionMask
@@ -2161,52 +2119,11 @@ TriggerNotDebounced
 	
 	rts
 	
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
 	
-;****************************************************************************
-
-	align 256
-
-PositionASpriteSubroutine
-	sec
-	sta HMCLR
-	sta WSYNC
-DivideLoop			;				this loop can't cross a page boundary!!!
-	sbc #15
-	bcs DivideLoop	;+4		 4
-	eor #7
-	asl
-	asl
-	asl
-	asl				;+10	14
-	sta.wx HMP0,X	;+5		19
-	sta RESP0,X		;+4		23
-	sta WSYNC
-	sta HMOVE
-Return					;label for cycle-burning code
-	rts
-
-
-
 
 ;****************************************************************************
 
-RotationOdd
-	.byte 0, 2, 1, 3
-RotationEven
-	.byte 2, 1, 3, 0
-
-RotationTables
-	.word RotationEven, RotationOdd	
 
 KernelSetupSubroutine
 
@@ -2426,8 +2343,16 @@ RegularAIRoutineColor
 	;--clear collision registers
 	sta CXCLR
 
+	lda #$FF
+	sta VDELP0
+	sta VDELBL
 	
 	
+	lda #GOLD+10
+	sta COLUP0
+	lda #BLUE2+12
+	sta COLUP1
+
 	
 	rts
 	
@@ -2677,7 +2602,7 @@ CannotMoveDown
 	tya
 	ora #J0DOWN
 	tay
-	jmp DoneWithMovementChecks
+	;jmp DoneWithMovementChecks
 NotAtBottomEdge	
 NoWallD	
 NotMovingDown
@@ -2712,8 +2637,100 @@ DigitDataLo
 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
 DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour,
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
 	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
+	
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+	
+	
+	
+TankDirection
+	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
+
+	
+NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
+	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
+	
+	
+PreventReverses = *-1	;--the ZEROES are wasted bytes
+	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
+	
+	;tank 0 = player, so two wasted bytes here
+	;tank 1 target = upper left corner
+	;tank 2 target = base (bottom center)
+	;tank 3 target = upper right corner
+SwitchMovementX = *-1
+	.byte 0, 0, 255
+SwitchMovementY = *-1
+	.byte 255, 80, 255
+	
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = random position
+	;tank 3 target = player position
+TankTargetX = *-1
+	.byte TankX, RandomNumber, TankX
+TankTargetY = *-1
+	.byte TankY, RandomNumber, TankY
+	
+	;--following is combined with target above (see routine for details)
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = itself
+	;tank 3 target = tank 1
+TankTargetAdjustX = *-1
+	.byte TankX, TankX+1, TankX+1
+TankTargetAdjustY = *-1
+	.byte TankY, TankY+1, TankY+1
+
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
+NumberOfBitsSet
+	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+MovementMask
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+
+	
+PFRegisterLookup
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+PFMaskLookup
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+
+	
+	
+StartingEnemyTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+
+StartingEnemyTankYPosition
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+
+RotationOdd
+	.byte 0, 2, 1, 3
+RotationEven
+	.byte 2, 1, 3, 0
+
+RotationTables
+	.word RotationEven, RotationOdd	
+	
 	align 256
 
 
@@ -2814,12 +2831,10 @@ MissileZero
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 MissileOne
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -2841,7 +2856,6 @@ MissileTwo
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -2849,11 +2863,42 @@ MissileTwo
 	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
-
-
 MissileThree
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
 MissileFour
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
 MissileFive
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
 MissileSix
 MissileSeven
 MissileEight
@@ -2934,8 +2979,29 @@ BlockRowTable
 
 	align 256
 	
+
+PositionASpriteSubroutine
+	sec
+	sta HMCLR
+	sta WSYNC
+DivideLoop			;				this loop can't cross a page boundary!!!
+	sbc #15
+	bcs DivideLoop	;+4		 4
+	eor #7
+	asl
+	asl
+	asl
+	asl				;+10	14
+	sta.wx HMP0,X	;+5		19
+	sta RESP0,X		;+4		23
+	sta WSYNC
+	sta HMOVE
+Return					;label for cycle-burning code
+	rts
+
 	
-	ds DATASPACEBEFOREGFX
+	
+	ds DATASPACEBEFOREGFX - $18 	;$18 is length of subroutine immediately above
 	
 TankGfxVertical
    
@@ -3087,7 +3153,7 @@ TankRightFrame
 	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
 TanksRemainingGfx
-	.byte 0
+;	.byte 0
 	.byte %11101110
 	.byte %11101110
 	.byte %11101110
