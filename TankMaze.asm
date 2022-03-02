@@ -76,7 +76,7 @@ ENEMY2STARTINGX	=	136
 
 TANKOFFSCREEN	=	127
 
-MAZEGENERATIONPASSES = MAZEROWS/2
+MAZEGENERATIONPASSES = MAZEROWS/2-1
 
 ;--GameStatus bits
 
@@ -247,7 +247,7 @@ TanksRemaining ds 1
 TriggerDebounce ds 1
 ConsoleDebounce ds 1
 EnemyDebounce ds 1
-BaseColor ds 1
+;BaseColor ds 1
 
 TankX ds 4
 TankY ds 4
@@ -307,7 +307,6 @@ Start
 
 	dec TankMovementCounter	;start this at $FF (for debugging purposes, for now...)
 
-; 	jsr GenerateMazeSubroutine	
 	
 	lda #BALLOFFSCREEN
 	sta BulletX
@@ -348,8 +347,8 @@ Start
 	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
 	
-	lda #BASECOLOR
-	sta BaseColor
+;	lda #BASECOLOR
+;	sta BaseColor
 
 ;----------------------------------------------------------------------------
 ;--------------------GAME MAIN LOOP------------------------------------------
@@ -379,14 +378,6 @@ VSYNCWaitLoop
 	dec FrameCounter
 	
 	
-	;--cycle BaseColor
-	lda FrameCounter
-	and #$0F
-	sta Temp
-	lda BaseColor
-	and #$F0
-	ora Temp
-	sta BaseColor
 	
 	lda GameStatus
 	and #GAMEON
@@ -500,6 +491,10 @@ Wait1
 	bpl BackFromSwitch1
 	
 KernelRoutineGame
+
+
+	;--room for score up here?
+
 
 
 	;--use stack pointer to hit ENABL
@@ -640,7 +635,7 @@ KernelLastRow				;		31		branch here crosses page boundary
 	SLEEP 5
 	;line 1 of last row, this row has BASE (not wall)
 KernelLastRowLoop			;		36
-	lda BaseColor
+	lda Temp+1
 	sta COLUPF				;+6		42
 	;draw player 0
 	cpy Player0Top				
@@ -751,7 +746,7 @@ DoDraw11b
 	inx
 	jsr PositionASpriteSubroutine
 
-	lda #65
+	lda #66
 	inx
 	jsr PositionASpriteSubroutine
 	
@@ -778,10 +773,6 @@ DoDraw11b
 	sta COLUP0
 	sta COLUP1
 	
-	lda #>TanksRemainingGfx
-	sta Player0Ptr+1
-	lda #<TanksRemainingGfx
-	sta Player0Ptr
 	
 
 	lda #>DigitDataMissile
@@ -872,18 +863,18 @@ BottomKernelLoopInner			;		38
 BottomKernelLoopInnerMiddle		;		 8
 	
 
-	lda (Player0Ptr),Y			;+5	
+	lda TanksRemainingGfx,Y		;+4	
 	sta GRP0			
-	sta GRP1					;+6		14
+	sta GRP1					;+6		13
 	
 	cpy #4						
-	beq BottomKernelLoopMiddle	;+5		19
-								;		18
+	beq BottomKernelLoopMiddle	;+5		18
+								;		17
 	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
 	;	which is necessary to mask the missiles before we are ready to display them
 	lda TanksRemainingPF2Mask,X
 	sta PF2
-	SLEEP 3						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<=8)
+	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
 	dey
 	bpl BottomKernelLoopInner	;+5		33
 
@@ -1434,7 +1425,6 @@ DoneWithConsoleSwitches
 ;****************************************************************************
 	
 GenerateMazeSubroutine
-	;this routine is way too long
 
 	;--first, save RandomNumber
 	lda RandomNumber
@@ -1511,13 +1501,22 @@ NotFirstPass
 	;	once done with a row, we move two rows down and repeat the whole process
 	;	Y holds row, X holds block within the row
 	
-	
 	tya
 	asl
 	clc
 	adc #1
 	tay
-	ldx #15
+
+	;ldx #15			;<-- this always starts on the right-most column, need to adjust this so random
+	lda RandomNumber
+	and #3
+	ldx #12
+	sec
+StartingColumnLoop
+	inx
+	sbc #1
+	bcs StartingColumnLoop
+	
 MakeMazeLoopOuter	
 	lda #<PF1Left
 	sta MiscPtr
@@ -1597,6 +1596,7 @@ AtBottomRow
 	pla		;get block index back into X
 	tax
 EndRunBeginNextRun
+	;dex
 	stx Temp
 	stx Temp+1
 	dec Temp
@@ -2354,6 +2354,17 @@ RegularAIRoutineColor
 	sta COLUP1
 
 	
+	;--cycle BaseColor
+	lda FrameCounter
+	and #$0F
+	sta Temp
+	lda #BASECOLOR
+	and #$F0
+	ora Temp
+	sta Temp+1
+
+	
+	
 	rts
 	
 ;****************************************************************************
@@ -2687,49 +2698,8 @@ TankTargetAdjustX = *-1
 TankTargetAdjustY = *-1
 	.byte TankY, TankY+1, TankY+1
 
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
-NumberOfBitsSet
-	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
-MovementMask
-	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 
-	
-PFRegisterLookup
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-PFMaskLookup
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-
-	
-	
-StartingEnemyTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
-
-StartingEnemyTankYPosition
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
-
-RotationOdd
-	.byte 0, 2, 1, 3
-RotationEven
-	.byte 2, 1, 3, 0
-
-RotationTables
-	.word RotationEven, RotationOdd	
 	
 	align 256
 
@@ -2831,7 +2801,7 @@ MissileZero
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 MissileOne
@@ -2843,7 +2813,7 @@ MissileOne
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 
@@ -2860,7 +2830,7 @@ MissileTwo
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 MissileThree
@@ -2872,7 +2842,7 @@ MissileThree
 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 MissileFour
@@ -2884,7 +2854,7 @@ MissileFour
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 MissileFive
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -2895,15 +2865,57 @@ MissileFive
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 
 MissileSix
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
 MissileSeven
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
 MissileEight
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
 MissileNine    
-        
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+    .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+   	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
 ;DigitA
 ;       .byte #%01000011;--
 ;       .byte #%01000011;--
@@ -2953,28 +2965,6 @@ MissileNine
 ;       .byte #%00100000;--
 ;       .byte #%00111110;--
 	
-;	align 256
-	ds BLOCKHEIGHT+1
-BlockRowTable
-	ds BLOCKHEIGHT, 0
-	ds BLOCKHEIGHT, 1
-	ds BLOCKHEIGHT, 2
-	ds BLOCKHEIGHT, 3
-	ds BLOCKHEIGHT, 4
-	ds BLOCKHEIGHT, 5
-	ds BLOCKHEIGHT, 6
-	ds BLOCKHEIGHT, 7
-	ds BLOCKHEIGHT, 8
-	ds BLOCKHEIGHT, 9
-	ds BLOCKHEIGHT, 10
-	ds BLOCKHEIGHT, 11
-	ds BLOCKHEIGHT, 12
-	ds BLOCKHEIGHT, 13
-	ds BLOCKHEIGHT, 14
-	ds BLOCKHEIGHT, 15
-	ds BLOCKHEIGHT, 16
-	ds BLOCKHEIGHT, 17
-	
 
 
 	align 256
@@ -3000,8 +2990,30 @@ Return					;label for cycle-burning code
 	rts
 
 	
+NumberOfBitsSet
+	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+MovementMask
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+
 	
-	ds DATASPACEBEFOREGFX - $18 	;$18 is length of subroutine immediately above
+PFRegisterLookup
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+PFMaskLookup
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+
+	
+	
+
+	
+	
+	ds DATASPACEBEFOREGFX - (* & $FF)
 	
 TankGfxVertical
    
@@ -3164,8 +3176,21 @@ TanksRemainingGfx
 	.byte %11101110
 	.byte %01000100			
 		align 256
+
 		
-		ds DATASPACEBEFOREGFX
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
+		
+				
+		ds DATASPACEBEFOREGFX - (* & $FF)
 		
 TankGfxHorizontal
 TankRightAnimated1
@@ -3243,10 +3268,45 @@ TankRightAnimated4b
 		
 		
 		
+StartingEnemyTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+
+StartingEnemyTankYPosition
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+
+RotationOdd
+	.byte 0, 2, 1, 3
+RotationEven
+	.byte 2, 1, 3, 0
+
+RotationTables
+	.word RotationEven, RotationOdd	
 		
 		
-		
-		
+	align 256
+	ds BLOCKHEIGHT+1
+BlockRowTable
+DigitBlank
+	ds BLOCKHEIGHT, 0
+	ds BLOCKHEIGHT, 1
+	ds BLOCKHEIGHT, 2
+	ds BLOCKHEIGHT, 3
+	ds BLOCKHEIGHT, 4
+	ds BLOCKHEIGHT, 5
+	ds BLOCKHEIGHT, 6
+	ds BLOCKHEIGHT, 7
+	ds BLOCKHEIGHT, 8
+	ds BLOCKHEIGHT, 9
+	ds BLOCKHEIGHT, 10
+	ds BLOCKHEIGHT, 11
+	ds BLOCKHEIGHT, 12
+	ds BLOCKHEIGHT, 13
+	ds BLOCKHEIGHT, 14
+	ds BLOCKHEIGHT, 15
+	ds BLOCKHEIGHT, 16
+	ds BLOCKHEIGHT, 17
+	
+
 		
 		
 		
