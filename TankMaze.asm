@@ -347,6 +347,27 @@ Start
 	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
 	
+	
+	ldx #TitleGraphicsEnd-TitleGraphics-1
+	ldy #MAZEROWS-2
+PutTitleGraphicsInPlayfieldLoop
+	lda TitleGraphics,X
+	sta PF1Right,Y
+	dex
+	lda TitleGraphics,X
+	sta PF2Right,Y
+	dex
+	lda TitleGraphics,X
+	sta PF2Left,Y
+	dex
+	lda TitleGraphics,X
+	sta PF1Left,Y
+	dex 
+	dey
+	bpl PutTitleGraphicsInPlayfieldLoop
+	
+		
+	
 ;	lda #BASECOLOR
 ;	sta BaseColor
 
@@ -3188,8 +3209,19 @@ BulletLeft
 BulletRight
 	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
-		
-				
+	
+TitleGraphics
+	.byte %00001100, %11001100, %00111111, %11001100	
+	.byte %00001100, %11111100, %00110011, %00111100
+	.byte %00001100, %11001100, %00110011, %11001100
+	.byte %11111111, %11111100, %00110011, %11111100
+	.byte %11000000, %00000000, %00000000, %00000000
+	.byte %11000000, %00110011, %11001100, %00111111
+	.byte %11000000, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11111100, %00111111
+	.byte %11111111, %00000011, %00000000, %00000000
+TitleGraphicsEnd				
 		ds DATASPACEBEFOREGFX - (* & $FF)
 		
 TankGfxHorizontal
