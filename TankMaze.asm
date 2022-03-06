@@ -21,12 +21,14 @@
 ;	Add explosion graphics
 ;	Sound FX
 ;	Music?
-;	Title/splash screen?
+;	Title/splash screen?  STARTED... still needs work.
 ;	Power-Ups - ???
 ;		keep this simple: 
 ;			speed
 ;			extra life
 ;			"bomb" that destroys all tanks on screen (and all walls?)
+;			something that slows all enemies down?
+;			
 ;
 ;	Maze generation routine done?  Tweaking?  Rewrite?
 ;	Collisions!
@@ -348,9 +350,14 @@ Start
 	sta CTRLPF
 	
 	
+	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
 	ldx #TitleGraphicsEnd-TitleGraphics-1
 	ldy #MAZEROWS-2
 PutTitleGraphicsInPlayfieldLoop
+	txa
+	lsr
+	lsr
+	tay
 	lda TitleGraphics,X
 	sta PF1Right,Y
 	dex
@@ -362,8 +369,7 @@ PutTitleGraphicsInPlayfieldLoop
 	dex
 	lda TitleGraphics,X
 	sta PF1Left,Y
-	dex 
-	dey
+	dex
 	bpl PutTitleGraphicsInPlayfieldLoop
 	
 		
@@ -405,8 +411,6 @@ VSYNCWaitLoop
 	beq GameNotOnVBLANK	
 
 
-;	jsr MoveEnemyTanksSubroutine	
-;	jsr MoveBulletSubroutine
 	jsr ReadControllersSubroutine
 
 GameNotOnVBLANK
@@ -465,7 +469,6 @@ OverscanRoutine
 	jsr CollisionsSubroutine
 	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
-	;jsr ReadControllersSubroutine
 GameNotOn
 	lda GameStatus
 	and #GENERATINGMAZE
@@ -1476,7 +1479,7 @@ FillMazeLoop
 	
 	;clear upper R corner
 	lda PF1Right+MAZEROWS-2
-	and #$FC
+	and #$3F
 	sta PF1Right+MAZEROWS-2
 	
 	;clear spot directly to L of center in top row
@@ -1529,14 +1532,15 @@ NotFirstPass
 	tay
 
 	;ldx #15			;<-- this always starts on the right-most column, need to adjust this so random
+	jsr UpdateRandomNumber
 	lda RandomNumber
-	and #3
-	ldx #12
-	sec
-StartingColumnLoop
-	inx
-	sbc #1
-	bcs StartingColumnLoop
+	and #1
+	eor #15
+	tax
+;StartingColumnLoop
+;	inx
+;	sbc #1
+;	bcs StartingColumnLoop
 	
 MakeMazeLoopOuter	
 	lda #<PF1Left
@@ -1616,6 +1620,16 @@ AtBottomRow
 	iny		;restore Y to current row index
 	pla		;get block index back into X
 	tax
+	stx Temp
+	stx Temp+1
+	dec Temp
+	dec Temp+1
+	lda #<PF1Left
+	sta MiscPtr
+	dex
+	dex
+	bpl MakeMazeLoopOuter
+	bmi DoneWithRow
 EndRunBeginNextRun
 	;dex
 	stx Temp
@@ -1625,6 +1639,7 @@ EndRunBeginNextRun
 	lda #<PF1Left
 	sta MiscPtr
 	dex
+	
 ; 	bpl MakeMazeLoopOuter
 	bmi DoneWithRow
 NotEndOfRun	
@@ -1641,10 +1656,9 @@ NotEndOfRun
 	sta (MiscPtr),Y
 	dec Temp+1
 	dex
-	bpl MakeMazeLoopInner
-	;--need to carve a passage downward if we reach this spot:
 	bmi EndOfRun
-	
+	jmp MakeMazeLoopInner
+	;--need to carve a passage downward if we reach this spot:
 	
 	
 DoneWithRow
@@ -1664,9 +1678,6 @@ DoneMakingMaze
 	ora #$F0
 	sta PF2Right
 
-	
-	
-	
 	;--add walls on bottom row surrounding base
 	lda #$30
 	sta LastRowL
@@ -1706,8 +1717,6 @@ NotCompletelyDoneWithMaze
 	
 	
 ;****************************************************************************
-BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
 
 
 	
@@ -2664,13 +2673,6 @@ SkipEOR
 ;----------------------------------------------------------------------------
 ;-------------------------Data Below-----------------------------------------
 ;----------------------------------------------------------------------------
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
-
-DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
-	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
 	
 TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
@@ -2720,7 +2722,8 @@ TankTargetAdjustY = *-1
 	.byte TankY, TankY+1, TankY+1
 
 
-
+BulletDirectionMask
+	.byte %11, %11<<2, %11<<4, %11<<6
 	
 	align 256
 
@@ -3339,6 +3342,13 @@ DigitBlank
 	ds BLOCKHEIGHT, 17
 	
 
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
+DigitDataMissileLo
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
+	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
 		
 		
 		
