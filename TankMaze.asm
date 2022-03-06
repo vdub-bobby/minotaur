@@ -1533,19 +1533,19 @@ NotFirstPass
 
 	;ldx #15			;<-- this always starts on the right-most column, need to adjust this so random
 	jsr UpdateRandomNumber
-	lda RandomNumber
+	;lda RandomNumber
 	and #1
 	eor #15
 	tax
-;StartingColumnLoop
-;	inx
-;	sbc #1
-;	bcs StartingColumnLoop
 	
 MakeMazeLoopOuter	
+	stx Temp
+	stx Temp+1
+MakeMazeLoopInner
 	lda #<PF1Left
 	sta MiscPtr
-
+	
+	;--clear block
 	lda PFMaskLookup,X
 	eor #$FF
 	pha
@@ -1554,20 +1554,23 @@ MakeMazeLoopOuter
 	adc MiscPtr
 	sta MiscPtr
 	pla
-	and (MiscPtr),Y
+	and (MiscPtr),Y	
 	sta (MiscPtr),Y
-	;--what is this doing?  X holds the block number, I think?
-	stx Temp
-	stx Temp+1
-MakeMazeLoopInner
+	
 	lda #<PF1Left
 	sta MiscPtr
-	
+
 	;--are we at the end of our horizontal path?  compare random number to constant
 	jsr UpdateRandomNumber
-	lda RandomNumber
+	;lda RandomNumber
 	cmp #MAZEPATHCUTOFF
-	bcs NotEndOfRun
+	bcc EndOfRun
+	;--not at the end of the run, so loop around
+	dec Temp+1
+	dex
+	bpl MakeMazeLoopInner
+
+	;--need to carve a passage downward if we reach this spot:
 EndOfRun
 	;--don't carve passage downward if we're on the bottom row
 	cpy #0
@@ -1584,7 +1587,7 @@ EndOfRun
 	;--picks a random number, then subtracts the length of the passage
 	;	until we cross zero, then adds length back for spot to add downward passage
  	jsr UpdateRandomNumber
-	lda RandomNumber
+	;lda RandomNumber
 	;--new routine:
 	;	decrease length by 1, then remove random bits
 	dec Temp+1
@@ -1628,8 +1631,8 @@ AtBottomRow
 	sta MiscPtr
 	dex
 	dex
-	bpl MakeMazeLoopOuter
 	bmi DoneWithRow
+	bpl MakeMazeLoopOuter
 EndRunBeginNextRun
 	;dex
 	stx Temp
@@ -1639,30 +1642,11 @@ EndRunBeginNextRun
 	lda #<PF1Left
 	sta MiscPtr
 	dex
-	
-; 	bpl MakeMazeLoopOuter
 	bmi DoneWithRow
 NotEndOfRun	
-	;--this is where we carve the horizontal path
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	and (MiscPtr),Y
-	sta (MiscPtr),Y
-	dec Temp+1
-	dex
-	bmi EndOfRun
-	jmp MakeMazeLoopInner
-	;--need to carve a passage downward if we reach this spot:
 	
 	
 DoneWithRow
-DoneMakingMaze
 	
 	dec MazeGenerationPass
 	bpl NotCompletelyDoneWithMaze
