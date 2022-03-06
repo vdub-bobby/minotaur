@@ -59,7 +59,7 @@
 ;-------------------------Constants Below---------------------------------
 
 TANKHEIGHT	=	7
-BLOCKHEIGHT = 7
+BLOCKHEIGHT = 	7
 MAZEROWS	=	11
 TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
@@ -1785,21 +1785,17 @@ EliminateDiagonalSubroutine
 	inx
 	inx
 	lda $00,X				;get allowed directions off of stack
-	and #$F0				;clear lower nibble
-	eor #$F0				;flip upper nibble
-	beq DoneCountingBits	;zero bits set
-CountSetBitsLoop
-	iny
-	pha
-	sec
-	sbc #1
-	tsx
-	inx
-	and $00,X
-	sta $00,X
-	pla
-	bne CountSetBitsLoop
-DoneCountingBits	
+	
+	lsr
+	lsr
+	lsr
+	lsr
+	eor #$0F
+	tay
+	lda NumberOfBitsSet,Y
+	tay
+	
+
 	pla
 	tax						;restore X
 	pla						;restore directions
@@ -1808,7 +1804,7 @@ DoneCountingBits
 	bcc DirectionsFine
 	;--too many directions - must narrow down to 1
 	;  assumption is that an actual diagnonal is here -
-	;	  i.e., L+U, or R+U, but NOT L+R or U+D nor three or four directions
+	;	  i.e., L+U, or R+D, but NOT L+R or U+D nor three or four directions
 
 	pha	;save desired directions on the stack
 	; for Enemy Tanks=randomly eliminate either horizontal or vertical movement
@@ -1980,7 +1976,6 @@ NoUp
 	clc
 	adc Temp
 	sta TankFractional,X
-	;flip carry flag
 	bcc TurnDownward	;but don't move down
 	dec TankY,X
 TurnDownward
@@ -2418,7 +2413,6 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
 	;--except now first row has walls at two positions (maybe!) only
 		
-	pha			;save A on stack
 	txa
 	pha			;save X on stack
 	lda Temp
@@ -2461,14 +2455,43 @@ LastRowNoHit
 	beq FoundWhetherBlockExists
 NotOnBottomRow	
 	;--divide by blockheight
-	ldx #0
-	sec
-DivideLoop2
-	sbc #BLOCKHEIGHT
-	bcc DoneDividing
-	inx
-	bcs DivideLoop2	;branch always
-DoneDividing
+	;maximum Y value is 77 (TANKAREAHEIGHT=77)
+	;	we subtract BLOCKHEIGHT above to see if we are on the bottom row
+	;	so maximum once we are here is 70
+	;	BLOCKHEIGHT = 7
+	; 	so maximum loops is 10
+
+
+;	ldx #0
+;	sec
+;DivideLoop2
+;	sbc #BLOCKHEIGHT		;--this is division by 7
+;	bcc DoneDividing
+;	inx
+;	bcs DivideLoop2	;branch always		
+	;		each loop is 8 cycles, last is 9
+	;			so max cycles is 65
+	;			don't think this can be improved much
+;DoneDividing
+
+	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
+	;	post gives credit to December '84 Apple Assembly Line
+	;--constant cycle count divide by 7 !!!!
+	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
+	sta Temp
+	lsr
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	tax
+
 	;--now add X to 2nd element on stack
 	txa
 	tsx
@@ -2486,7 +2509,6 @@ FoundWhetherBlockExists
 	pla		;get intermediate results off of stack
 	pla
 	tax		;restore X from stack
-	pla		;restore Accumulator from stack
 	rts
 
 	
@@ -3373,7 +3395,11 @@ TanksRemainingPF1Mask
 
 TanksRemainingPF2Mask		
 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
-		
+
+
+
+	
+			
     echo "----", ($10000-*), " bytes left (ROM)"
 
 
