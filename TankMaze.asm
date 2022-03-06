@@ -46,6 +46,7 @@
 ;
 ;	BUG KILLING!
 ;		diagonal movement (player) needs to be fixed
+;		scanline count is wonky, need to tighten up various subroutines that take too long
 
 
 
@@ -1335,7 +1336,7 @@ CheckBulletTankCollisionOuterLoop
 	
 	;now compare ball location to tank location
 	;--only care about player bullets
-	ldy #1
+	ldy #3
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 	cmp #BALLOFFSCREEN
@@ -1373,14 +1374,15 @@ CheckBulletTankCollisionInnerLoop
 	lda #BALLOFFSCREEN
 	sta BulletX,Y
 	sta BulletY,Y
-	lda #MAZEAREAHEIGHT+TANKHEIGHT+4
+	lda StartingTankYPosition,X
 	sta TankY,X
-	lda StartingEnemyTankXPosition,X
+	lda StartingTankXPosition,X
 	sta TankX,X
-	lda #7
+	lda StartingTankStatus,X
 	sta TankStatus,X
-	;--and decrease tanks remaining
+	;--and decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
+	
 	
 BulletDidNotHitTank
 BulletOffScreen
@@ -1389,7 +1391,7 @@ BulletOffScreen
 	
 EnemyTankOffscreen
 	dex
-	bne CheckBulletTankCollisionOuterLoop
+	bpl CheckBulletTankCollisionOuterLoop
 	
 	
 	rts
@@ -1416,9 +1418,9 @@ ReadConsoleSwitchesSubroutine
 	
 	ldx #3
 SetStartingEnemyTankLocationsLoop
-	lda StartingEnemyTankXPosition,X
+	lda StartingTankXPosition,X
 	sta TankX,X
-	lda StartingEnemyTankYPosition,X
+	lda StartingTankYPosition,X
 	sta TankY,X
 	dex
 	bpl SetStartingEnemyTankLocationsLoop
@@ -2048,7 +2050,7 @@ FindAvailableBallLoop
 	beq FoundAvailableBall
 	dex
 	bpl FindAvailableBallLoop
-	bmi NoAvailableBalls
+	jmp NoAvailableBalls
 FoundAvailableBall	
 	;--now read joystick trigger if debounce is zero:
 	lda INPT4
@@ -2056,7 +2058,7 @@ FoundAvailableBall
 	;--if trigger not hit, set debounce to zero
 	lda #0
 	sta TriggerDebounce
-	beq DoneFiring
+	jmp NotFiring
 TriggerHit
 	lda TriggerDebounce
 	bne TriggerNotDebounced
@@ -2078,12 +2080,13 @@ FireBulletRoutine
 	lda TankX,Y
 	clc
 	adc #4
-	sta BulletX,X
+	;sta BulletX,X
+	sta Temp
 	lda TankY,Y
 	sec
 	sbc #3
-	sta BulletY,X
-	
+	;sta BulletY,X
+	sta Temp+1
 	
 	;--clear old direction
 	lda BulletDirectionClear,X
@@ -2097,35 +2100,61 @@ FireBulletRoutine
 	tay	
 	and #TANKUP
 	beq NotFiringUp
+	;--shooting up
 	lda BulletDirection
 	ora BulletUp,X
 	sta BulletDirection
+	lda Temp+1
+	clc
+	adc #4
+	sta Temp+1
 	jmp DoneFiring
 NotFiringUp
 	tya
 	and #TANKDOWN
 	beq NotFiringDown
+	;--shooting down
 	lda BulletDirection
 	ora BulletDown,X
 	sta BulletDirection
+	lda Temp+1
+	sec
+	sbc #4
+	sta Temp+1
 	jmp DoneFiring
 NotFiringDown	
 	tya
 	and #TANKLEFT
 	beq NotFiringLeft
+	;--shooting left
 	lda BulletDirection
 	ora BulletLeft,X
 	sta BulletDirection
+	lda Temp
+	sec
+	sbc #6
+	sta Temp
 	jmp DoneFiring
 NotFiringLeft
 	tya
 	and #TANKRIGHT
 	beq NotFiring
+	;--shooting right
 	lda BulletDirection
 	ora BulletRight,X
 	sta BulletDirection
-NotFiring
+	lda Temp
+	clc
+	adc #5
+	sta Temp
 DoneFiring
+	lda Temp
+	sta BulletX,X
+	lda Temp+1
+	sta BulletY,X
+
+
+NotFiring
 NoAvailableBalls	
 
 TriggerNotDebounced
@@ -2658,12 +2687,7 @@ SkipEOR
 ;-------------------------Data Below-----------------------------------------
 ;----------------------------------------------------------------------------
 	
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
 
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
-	
 	
 	
 TankDirection
@@ -3209,6 +3233,11 @@ TitleGraphics
 	.byte %11001100, %00110011, %11111100, %00111111
 	.byte %11111111, %00000011, %00000000, %00000000
 TitleGraphicsEnd				
+
+
+	
+
+
 		ds DATASPACEBEFOREGFX - (* & $FF)
 		
 TankGfxHorizontal
@@ -3287,12 +3316,17 @@ TankRightAnimated4b
 		
 		
 		
-StartingEnemyTankXPosition
+StartingTankXPosition
 	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
 
-StartingEnemyTankYPosition
+StartingTankYPosition 
 	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
 
+	
+StartingTankStatus
+	.byte  TANKSPEED4, 7, 7, 7
+
+	
 RotationOdd
 	.byte 0, 2, 1, 3
 RotationEven
@@ -3334,7 +3368,11 @@ DigitDataMissileLo
 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
 	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
 		
-		
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 		
     echo "----", ($10000-*), " bytes left (ROM)"
 
