@@ -2,7 +2,7 @@
 ;---------Tank Battalion Atari 2600 port----------------------------------
 ;-------------------------------------------------------------------------
 ;	Bob Montgomery
-;	(c) 2012
+;	(c) 2012-2022
 ;
 ;	VERY loose port of Tank Battalion
 ;		objective: destroy enemy tanks while protecting base in a destroyable maze
@@ -34,7 +34,6 @@
 ;	Collisions!
 ;	Score
 ;	Level objectives moving through levels - i.e., # of tanks remaining to kill
-;	currently showing maze seed, show level instead.
 ;	Difficulty settings
 ;	Gameplay tweaking
 ;	Graphics/colors
@@ -95,7 +94,8 @@ BULLETDOWN		=	2
 BULLETUP		=	3
 BULLETCLEAR		=	3
 
-TRIGGERDEBOUNCEVALUE = 20
+TRIGGERDEBOUNCEVALUE = 15
+CONSOLEDEBOUNCEFLAG	=	%00010000
 ENEMYDEBOUNCE = 32
 
 BULLETSPEEDHOR		=		1
@@ -243,12 +243,12 @@ RandomNumber ds 1
 MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
-
+Score ds 3
 TanksRemaining ds 1
 
 
-TriggerDebounce ds 1
-ConsoleDebounce ds 1
+Debounce ds 1
+
 EnemyDebounce ds 1
 ;BaseColor ds 1
 
@@ -418,9 +418,10 @@ GameNotOnVBLANK
 	
 	jsr UpdateRandomNumber
 	
-	lda TriggerDebounce
+	lda Debounce
+	and #$0F
 	beq TriggerDebounceZero
-	dec TriggerDebounce
+	dec Debounce
 TriggerDebounceZero	
 
 
@@ -493,7 +494,51 @@ WaitForOverscanEnd
 ;----------------------------------------------------------------------------
 ;----------------------Kernel Routine----------------------------------------
 ;----------------------------------------------------------------------------
-	align 256
+	
+KernelRoutineGame
+
+
+	;--room for score up here?
+
+	lda #THREECOPIESCLOSE
+	sta NUSIZ0
+	sta NUSIZ1
+
+	
+
+	
+	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
+	sta NUSIZ0
+	sta NUSIZ1
+	
+		
+;	ldy #BLOCKHEIGHT
+	ldx #$80
+	lda #$FF
+	sta WSYNC
+	stx PF0
+	sta PF1
+	sta PF2
+
+
+	ldx #1
+PositioningLoop	;--just players
+	lda PlayerX,X
+	jsr PositionASpriteSubroutine
+	dex
+	bpl PositioningLoop
+
+	;--use stack pointer to hit ENABL
+	tsx
+	stx Temp
+	ldx #<ENABL
+	txs
+	
+	
+
+	jmp BeginMainMazeKernel
+	
+;	align 256
 
 Switch0
 	lda Player0Bottom
@@ -515,33 +560,7 @@ Wait1
 	nop
 	bpl BackFromSwitch1
 	
-KernelRoutineGame
-
-
-	;--room for score up here?
-
-
-
-	;--use stack pointer to hit ENABL
-	tsx
-	stx Temp
-	ldx #<ENABL
-	txs
-	
-	
-	ldy #BLOCKHEIGHT
-	ldx #$80
-	lda #$FF
-TopWallLoop
-	sta WSYNC
-	stx PF0
-	sta PF1
-	sta PF2
-	dey
-	bne TopWallLoop			;+13	13
-	
-	
-	
+BeginMainMazeKernel
 	sta WSYNC
 	lda #0
 	sta PF1
@@ -632,7 +651,7 @@ DoDraw11
 	SLEEP 3
 	bne KernelLoop		;+6		35
 
-	align 256
+;	align 256
 	
 Switch0b
 	lda Player0Bottom
@@ -1407,10 +1426,13 @@ ReadConsoleSwitchesSubroutine
 	lda SWCHB
 	lsr				;get RESET into carry
 	bcs NoRESET
-	lda ConsoleDebounce
+	lda Debounce
+	and #CONSOLEDEBOUNCEFLAG
+	
 	bne RESETNotReleased
-	lda #1
-	sta ConsoleDebounce
+	lda Debounce
+	ora #CONSOLEDEBOUNCEFLAG
+	sta Debounce
 	;--start game
 	lda GameStatus
 	ora #GENERATINGMAZE
@@ -1440,8 +1462,9 @@ SetStartingEnemyTankLocationsLoop
 	
 	jmp DoneWithConsoleSwitches
 NoRESET
-	lda #0
-	sta ConsoleDebounce
+	lda Debounce
+	and #~CONSOLEDEBOUNCEFLAG
+	sta Debounce
 RESETNotReleased
 DoneWithConsoleSwitches
 	rts
@@ -2051,20 +2074,25 @@ FoundAvailableBall
 	lda INPT4
 	bpl TriggerHit
 	;--if trigger not hit, set debounce to zero
-	lda #0
-	sta TriggerDebounce
+	lda Debounce
+	and #$F0
+	sta Debounce
 	jmp NotFiring
 TriggerHit
-	lda TriggerDebounce
-	bne TriggerNotDebounced
-
+	lda Debounce
+	and #$0F
+	beq TriggerDebounced
+	jmp TriggerNotDebounced
+	
+TriggerDebounced
 	;--bullet is fired!
 
 	
 	
 	;set trigger debounce
-	lda #TRIGGERDEBOUNCEVALUE
-	sta TriggerDebounce
+	lda Debounce
+	ora #TRIGGERDEBOUNCEVALUE
+	sta Debounce
 	
 	ldy #0		;set index into which tank 
 				;X holds index into which bullet
@@ -2360,12 +2388,6 @@ NoAdjustMissileY
 	sta BallY
 	
 		
-	ldx #4
-PositioningLoop
-	lda PlayerX,X
-	jsr PositionASpriteSubroutine
-	dex
-	bpl PositioningLoop
 	
 	
 	;--set PF color based on which tank AI routine we are on
@@ -2401,6 +2423,13 @@ RegularAIRoutineColor
 	ora Temp
 	sta Temp+1
 
+	ldx #4
+PositioningLoopVBLANK	;--excluding players
+	lda PlayerX,X
+	jsr PositionASpriteSubroutine
+	dex
+	cpx #1
+	bne PositioningLoopVBLANK
 	
 	
 	rts
