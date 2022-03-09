@@ -86,7 +86,7 @@ GAMEON			=	%10000000
 GENERATINGMAZE	=	%01000000
 
 
-BALLOFFSCREEN	=	200
+BALLOFFSCREEN	=	154
 
 BULLETRIGHT		=	0
 BULLETLEFT		=	1
@@ -291,9 +291,9 @@ PF2Right ds MAZEROWS-1
 PF1Right ds MAZEROWS-1
 LastRowL ds 1
 LastRowR ds 1
-
-MiscPtr ds 2
 Temp ds 3
+ScorePtr
+MiscPtr ds 2
 
    ; Display Remaining RAM
    echo "----",($100 - *) , "bytes left (ZP RAM)"
@@ -308,71 +308,10 @@ Start
 
 ;--Some Initial Setup
 
-	dec TankMovementCounter	;start this at $FF (for debugging purposes, for now...)
 
-	
-	lda #BALLOFFSCREEN
-	sta BulletX
-	sta BulletX+1
-	sta BulletX+2
-	sta BulletX+3
-	sta BulletY
-	sta BulletY+1
-	sta BulletY+2
-	sta BulletY+3
-	
-	lda #TANKOFFSCREEN
-; 	lda #60
-	sta TankX
-	sta TankX+1
-	sta TankX+2
-	sta TankX+3
-	sta TankY
-	sta TankY+1
-	sta TankY+2
-	sta TankY+3
-	
-	
-	lda #$FF
-	sta VDELP0
-	sta VDELBL
+	jsr InitialSetupSubroutine
 
-	sta RandomNumber
-		
-	
-	lda #WALLCOLOR
-	sta COLUPF
-	
-	lda #QUADWIDTHBALL
-	sta NUSIZ0
-	sta NUSIZ1
-	
-	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
-	sta CTRLPF
-	
-	
-	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
-	ldx #TitleGraphicsEnd-TitleGraphics-1
-	ldy #MAZEROWS-2
-PutTitleGraphicsInPlayfieldLoop
-	txa
-	lsr
-	lsr
-	tay
-	lda TitleGraphics,X
-	sta PF1Right,Y
-	dex
-	lda TitleGraphics,X
-	sta PF2Right,Y
-	dex
-	lda TitleGraphics,X
-	sta PF2Left,Y
-	dex
-	lda TitleGraphics,X
-	sta PF1Left,Y
-	dex
-	bpl PutTitleGraphicsInPlayfieldLoop
-	
+
 		
 	
 ;	lda #BASECOLOR
@@ -388,107 +327,7 @@ MainGameLoop
 	jsr OverscanRoutine
 	jmp MainGameLoop
 
-;----------------------------------------------------------------------------
-;-------------------VBLANK Routine-------------------------------------------
-;----------------------------------------------------------------------------
-VBLANKRoutine
-	lda #%00000111
-VSYNCWaitLoop
-	sta WSYNC
-	sta VSYNC
-	lsr
-	bcs VSYNCWaitLoop
 
-	lda #44
-	sta TIM64T
-	
-	
-	dec FrameCounter
-	
-	
-	
-	lda GameStatus
-	and #GAMEON
-	beq GameNotOnVBLANK	
-
-
-	jsr ReadControllersSubroutine
-
-GameNotOnVBLANK
-	
-	jsr UpdateRandomNumber
-	
-	lda Debounce
-	and #$0F
-	beq TriggerDebounceZero
-	dec Debounce
-TriggerDebounceZero	
-
-
-
-	jsr KernelSetupSubroutine
-
-	
-	
-
-WaitForVblankEnd
-	lda INTIM
-	bmi OverTimeVBLANK
-	bne WaitForVblankEnd
-	beq EndVBLANK
-OverTimeVBLANK	;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
-	nop
-		
-EndVBLANK	
-
-	sta WSYNC
-	lda #0
-	sta VBLANK
-
-
-	rts
-
-	
-	
-;----------------------------------------------------------------------------
-;------------------------Overscan Routine------------------------------------
-;----------------------------------------------------------------------------
-OverscanRoutine
-
-
-
-
-	ldy #2
-	sty WSYNC
-	sty VBLANK
-	lda  #42
-	sta  TIM64T
-	
-	
-	lda GameStatus
-	and #GAMEON
-	beq GameNotOn	
-	jsr CollisionsSubroutine
-	jsr MoveEnemyTanksSubroutine	
-	jsr MoveBulletSubroutine
-GameNotOn
-	lda GameStatus
-	and #GENERATINGMAZE
-	beq NotGeneratingMaze
-	jsr GenerateMazeSubroutine
-NotGeneratingMaze
-	
-	jsr ReadConsoleSwitchesSubroutine
-
-
-
-WaitForOverscanEnd
-	lda INTIM
-	bne WaitForOverscanEnd
-	sta WSYNC		;last line...I think?
-
-	rts
-	
 
 	
 ;----------------------------------------------------------------------------
@@ -500,46 +339,163 @@ KernelRoutineGame
 
 	;--room for score up here?
 
-	lda #THREECOPIESCLOSE
-	sta NUSIZ0
-	sta NUSIZ1
-
+	ldy #0
+	sta WSYNC
+	lda #$FF
+	sta COLUP0
+	sta COLUP1
+	pha
+	pla	;wait 7 cycles
 	
+	;--display score
+	lda #THREECOPIESCLOSE|LEFTONE
+	sta VDELP0
+	sta VDELP1						;+8		23		turn on VDELPx (bit0==1)
 
+	sta NUSIZ0
+	sta NUSIZ1						;+6		29
+
+	sta HMP0						  ;					 LEFTONE
+	asl
+	sta HMP1						  ;+8		37		LEFTTWO
+
+	sta RESP0						 ;+8		40		positioned at 57 (move left 1)
+	sta RESP1						 ;+3		43		positioned at 66 (move left 2)
+
+	sty GRP1
+	sty GRP0
+	sty ENAM0						 ;+7		50
+
+
+	sta WSYNC
+	sta HMOVE	
+	sta WSYNC
+	;--waste time efficiently:
+	ldy #11		; 2
+.wait
+	dey			 ; 2
+	bne .wait	 ; 3
+
+	SLEEP 2
+
+	ldy #6+1
+ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
+									 ;				(or - if it does, adjust the timing!)
+	SLEEP 3
+	dey							 ;+5		64
+	sty Temp					;+3		67
+	lda (ScorePtr),Y
+	sta GRP0					  ;+8		75
+	lda (ScorePtr+2),Y
+	sta GRP1					  ;+8		 7
+	lda (ScorePtr+4),Y
+	sta GRP0					  ;+8		15
+	lda (ScorePtr+6),Y
+	tax							 ;+7		22
+	lda (ScorePtr+8),Y
+	pha							 ;+8		30
+	lda (ScorePtr+10),Y
+	tay							 ;+7		37
+	pla							 ;+4		41
+	stx GRP1					  ;+3		44
+	sta GRP0
+	sty GRP1
+	sty GRP0					  ;+9		53
+	ldy Temp					;+3		56
+	bne ScoreKernelLoop		;+3		59
+									 ;		  58
+	sty GRP0
+	sty GRP1
+	sty GRP0					  ;+9		67	
+	
 	
 	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
 	sta NUSIZ0
 	sta NUSIZ1
 	
-		
-;	ldy #BLOCKHEIGHT
+	;--tank colors
+	lda #GOLD+10
+	sta COLUP0
+	lda #BLUE2+12
+	sta COLUP1
+	sta WSYNC 
+	
+	
+	
+	ldx #4
+PositioningLoopVBLANK	;--excluding players
+	lda PlayerX,X
+	jsr PositionASpriteSubroutine
+	dex
+	cpx #2
+	bne PositioningLoopVBLANK
+
+	lda #WALLCOLOR
+	sta COLUPF
 	ldx #$80
 	lda #$FF
 	sta WSYNC
 	stx PF0
 	sta PF1
 	sta PF2
+	
+	
+	;--flip 
+	lda FrameCounter
+	and #1
+	asl
+	tax
+	lda RotationTables,X
+	sta MiscPtr
+	lda RotationTables+1,X
+	sta MiscPtr+1
+
+	
+	;--this loop is garbage, need to rewrite so it is faster
+	ldy #3
+SetREFPLoop
+	lda TankStatus,Y
+	and #TANKLEFT|TANKRIGHT
+	beq EndREFPLoop
+	lax (MiscPtr),Y		;get original X index back
+	cpx #2
+	bcs EndREFPLoop
+	lda TankStatus,Y
+	and #TANKLEFT
+	bne .TankFacingRight
+	lda #$00
+	.byte $2C
+.TankFacingRight
+	lda #$FF
+	sta REFP0,X	
+EndREFPLoop
+	dey
+	bpl SetREFPLoop
+	
 
 
-	ldx #1
+	;--clear collision registers
+	sta CXCLR
+
+
+	ldx #2
 PositioningLoop	;--just players
 	lda PlayerX,X
 	jsr PositionASpriteSubroutine
 	dex
 	bpl PositioningLoop
 
-	;--use stack pointer to hit ENABL
-	tsx
-	stx Temp
-	ldx #<ENABL
-	txs
-	
-	
 
+
+	
+	
 	jmp BeginMainMazeKernel
 	
-;	align 256
 
+
+
+	align 256
+	
 Switch0
 	lda Player0Bottom
 	sta Player0Top
@@ -560,13 +516,31 @@ Wait1
 	nop
 	bpl BackFromSwitch1
 	
+	
+	
 BeginMainMazeKernel
+
 	sta WSYNC
 	lda #0
 	sta PF1
 	sta PF2					;+8		 8
-	SLEEP 25
-	ldy #TANKAREAHEIGHT	;+2		35
+	
+	sta VDELP1
+	
+	lda #$FF
+	sta VDELP0
+	sta VDELBL
+
+	SLEEP 5
+
+	;--use stack pointer to hit ENABL
+	tsx
+	stx Temp
+	ldx #<ENABL
+	txs						;+9		31
+
+	
+	ldy #TANKAREAHEIGHT		;+2		35
 KernelLoop
 	;draw player 0
 	cpy Player0Top				
@@ -930,6 +904,7 @@ BottomKernelLoopDone
 	sty ENAM1
 	sty GRP0
 	sty GRP1
+	sty GRP0
 	sty PF0
 	sty PF1
 	sty PF2
@@ -937,7 +912,108 @@ BottomKernelLoopDone
 	rts
 
 
+;----------------------------------------------------------------------------
+;-------------------VBLANK Routine-------------------------------------------
+;----------------------------------------------------------------------------
+VBLANKRoutine
+	lda #%00000111
+VSYNCWaitLoop
+	sta WSYNC
+	sta VSYNC
+	lsr
+	bcs VSYNCWaitLoop
 
+	lda #44
+	sta TIM64T
+	
+	
+	dec FrameCounter
+	
+	
+	
+	lda GameStatus
+	and #GAMEON
+	beq GameNotOnVBLANK	
+
+
+	jsr ReadControllersSubroutine
+
+GameNotOnVBLANK
+	
+	jsr UpdateRandomNumber
+	
+	lda Debounce
+	and #$0F
+	beq TriggerDebounceZero
+	dec Debounce
+TriggerDebounceZero	
+
+
+
+	jsr KernelSetupSubroutine
+
+	
+	
+
+WaitForVblankEnd
+	lda INTIM
+	bmi OverTimeVBLANK
+	bne WaitForVblankEnd
+	beq EndVBLANK
+OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+	nop
+		
+EndVBLANK	
+
+	sta WSYNC
+	lda #0
+	sta VBLANK
+
+
+	rts
+
+	
+	
+;----------------------------------------------------------------------------
+;------------------------Overscan Routine------------------------------------
+;----------------------------------------------------------------------------
+OverscanRoutine
+
+
+
+
+	ldy #2
+	sty WSYNC
+	sty VBLANK
+	lda  #42
+	sta  TIM64T
+	
+	
+	lda GameStatus
+	and #GAMEON
+	beq GameNotOn	
+	jsr CollisionsSubroutine
+	jsr MoveEnemyTanksSubroutine	
+	jsr MoveBulletSubroutine
+GameNotOn
+	lda GameStatus
+	and #GENERATINGMAZE
+	beq NotGeneratingMaze
+	jsr GenerateMazeSubroutine
+NotGeneratingMaze
+	
+	jsr ReadConsoleSwitchesSubroutine
+
+
+
+WaitForOverscanEnd
+	lda INTIM
+	bne WaitForOverscanEnd
+	sta WSYNC		;last line...I think?
+
+	rts
+	
+	
 ;----------------------------------------------------------------------------
 ;----------------------------End Main Routines-------------------------------
 ;----------------------------------------------------------------------------
@@ -948,17 +1024,69 @@ BottomKernelLoopDone
 ;----------------------Begin Functions---------------------------------------
 ;----------------------------------------------------------------------------
 
-;****************************************************************************
 
-DivideByTwoSubroutine		;come in with number in accumlator
-	and #$FF		;set flags
-	clc
-	bpl DivideByTwoPositive
-	;--else negative
-	sec
-DivideByTwoPositive
-	ror
+
+
+InitialSetupSubroutine
+
+	
+	ldx #3
+SetUpTankInitialValues
+	lda #BALLOFFSCREEN
+	sta BulletX,X
+	sta BulletY,X
+	lda #TANKOFFSCREEN
+	sta TankX,X
+	sta TankY,X
+	dex
+	bpl SetUpTankInitialValues
+	
+	sta TankMovementCounter	;start this at $FF (for debugging purposes, for now...)
+	sta RandomNumber
+	
+	
+; 	lda #$65
+; 	sta Score
+; 	lda #$43
+; 	sta Score+1
+; 	lda #$21
+; 	sta Score+2
+	
+	lda #WALLCOLOR
+	sta COLUPF
+	
+; 	lda #QUADWIDTHBALL
+; 	sta NUSIZ0
+; 	sta NUSIZ1
+; 	
+	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
+	sta CTRLPF
+	
+	
+	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
+	ldx #TitleGraphicsEnd-TitleGraphics-1
+	ldy #MAZEROWS-2
+PutTitleGraphicsInPlayfieldLoop
+	txa
+	lsr
+	lsr
+	tay
+	lda TitleGraphics,X
+	sta PF1Right,Y
+	dex
+	lda TitleGraphics,X
+	sta PF2Right,Y
+	dex
+	lda TitleGraphics,X
+	sta PF2Left,Y
+	dex
+	lda TitleGraphics,X
+	sta PF1Left,Y
+	dex
+	bpl PutTitleGraphicsInPlayfieldLoop
+	
 	rts
+
 
 ;****************************************************************************
 
@@ -1257,6 +1385,72 @@ ReturnFromTankMovementSubroutine
 
 ;****************************************************************************
 
+;****************************************************************************
+
+
+
+PositionASpriteSubroutine
+	sec
+	sta HMCLR
+	sta WSYNC
+DivideLoop			;				this loop can't cross a page boundary!!!
+	sbc #15
+	bcs DivideLoop	;+4		 4
+	eor #7
+	asl
+	asl
+	asl
+	asl				;+10	14
+	sta.wx HMP0,X	;+5		19
+	sta RESP0,X		;+4		23
+	sta WSYNC
+	sta HMOVE
+Return					;label for cycle-burning code
+	rts
+
+;****************************************************************************
+
+DivideByTwoSubroutine		;come in with number in accumlator
+	and #$FF		;set flags
+	clc
+	bpl DivideByTwoPositive
+	;--else negative
+	sec
+DivideByTwoPositive
+	ror
+	rts
+	
+	
+;****************************************************************************
+
+
+
+UpdateRandomNumber
+
+    lda RandomNumber
+    lsr
+    bcc SkipEOR
+    eor #$B2
+SkipEOR
+    sta RandomNumber
+
+    rts
+;****************************************************************************
+
+	;come in with amount to increase in A
+IncreaseScoreSubroutine
+	clc
+	sed
+	adc Score+2
+	sta Score+2
+	lda Score+1
+	adc #0
+	sta Score+1
+	lda Score
+	adc #0
+	sta Score
+	cld
+	rts
 
 ;****************************************************************************
 
@@ -1279,6 +1473,11 @@ CheckBallCollisionsLoop
 	lda Temp
 	beq BallHasNotHitBlock
 	;--remove block from screen!
+	
+	;--first, add 1 to score
+	lda #1
+	jsr IncreaseScoreSubroutine
+	
 	;--get row of block into Y and column into Temp+1
 
 	lda BulletY,X
@@ -1448,9 +1647,15 @@ SetStartingEnemyTankLocationsLoop
 	bpl SetStartingEnemyTankLocationsLoop
 	
 	lda #0
-	sta TankStatus+1
-	sta TankStatus+2
-	sta TankStatus+3
+	ldx #2
+GameStartLoop
+	sta TankStatus,X
+	sta Score,X
+	dex
+	bpl GameStartLoop
+
+	
+	
 	
 	;--finally, cycle the random number
 	jsr UpdateRandomNumber
@@ -2285,19 +2490,6 @@ SetTankGfxPtr
 	clc
 	adc #TANKHEIGHT
 	sta Player0Ptr+2,X
-	;--now set REFPx to correct value, if necessary
-	lda TankStatus,Y
-	and #TANKLEFT|TANKRIGHT
-	beq EndRotationLoop
-	lax (MiscPtr),Y		;get original X index back
-	lda TankStatus,Y
-	and #TANKLEFT
-	bne TankFacingRight
-	lda #$00
-	.byte $2C
-TankFacingRight
-	lda #$FF
-	sta REFP0,X	
 	jmp EndRotationLoop
 MissileNotPlayer	
 	;--adjust missile width and position
@@ -2386,34 +2578,8 @@ NoAdjustMissileY
 	sta BallX
 	lda BulletY,X
 	sta BallY
-	
-		
-	
-	
-	;--set PF color based on which tank AI routine we are on
-	lda #WALLCOLOR
-	ldy TankMovementCounter
-	cpy #TANKAISWITCH
-	bcs RegularAIRoutineColor
-	and #$F0
-RegularAIRoutineColor
-	sta COLUPF
-	
-	
-	;--clear collision registers
-	sta CXCLR
 
-	lda #$FF
-	sta VDELP0
-	sta VDELBL
-	
-	
-	lda #GOLD+10
-	sta COLUP0
-	lda #BLUE2+12
-	sta COLUP1
 
-	
 	;--cycle BaseColor
 	lda FrameCounter
 	and #$0F
@@ -2422,14 +2588,38 @@ RegularAIRoutineColor
 	and #$F0
 	ora Temp
 	sta Temp+1
-
-	ldx #4
-PositioningLoopVBLANK	;--excluding players
-	lda PlayerX,X
-	jsr PositionASpriteSubroutine
+	
+	;--set up score pointers
+	
+	ldx #10
+SetupScorePtrsLoop
+	txa
+	lsr
+	lsr
+	tay
+	lda Score,Y
+	pha
+	and #$0F
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr,X
+	pla
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr-2,X
+	lda #>DigitData
+	sta ScorePtr+1,X
+	sta ScorePtr-1,X
 	dex
-	cpx #1
-	bne PositioningLoopVBLANK
+	dex
+	dex
+	dex
+	bpl SetupScorePtrsLoop
+	
 	
 	
 	rts
@@ -2720,19 +2910,6 @@ DoneWithMovementChecks
 
 
 
-;****************************************************************************
-
-
-UpdateRandomNumber
-
-    lda RandomNumber
-    lsr
-    bcc SkipEOR
-    eor #$B2
-SkipEOR
-    sta RandomNumber
-
-    rts
 
 ;----------------------------------------------------------------------------
 ;-------------------------Data Below-----------------------------------------
@@ -2741,50 +2918,8 @@ SkipEOR
 
 	
 	
-TankDirection
-	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
-
 	
-NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
-	
-	
-PreventReverses = *-1	;--the ZEROES are wasted bytes
-	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
-	
-	;tank 0 = player, so two wasted bytes here
-	;tank 1 target = upper left corner
-	;tank 2 target = base (bottom center)
-	;tank 3 target = upper right corner
-SwitchMovementX = *-1
-	.byte 0, 0, 255
-SwitchMovementY = *-1
-	.byte 255, 80, 255
-	
-	;tank 0 = player, so two more wasted bytes here
-	;tank 1 target = player position
-	;tank 2 target = random position
-	;tank 3 target = player position
-TankTargetX = *-1
-	.byte TankX, RandomNumber, TankX
-TankTargetY = *-1
-	.byte TankY, RandomNumber, TankY
-	
-	;--following is combined with target above (see routine for details)
-	;tank 0 = player, so two more wasted bytes here
-	;tank 1 target = player position
-	;tank 2 target = itself
-	;tank 3 target = tank 1
-TankTargetAdjustX = *-1
-	.byte TankX, TankX+1, TankX+1
-TankTargetAdjustY = *-1
-	.byte TankY, TankY+1, TankY+1
-
-
-BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
-	
-	align 256
+;	align 256
 
 
 DigitData
@@ -3053,24 +3188,6 @@ MissileNine
 	align 256
 	
 
-PositionASpriteSubroutine
-	sec
-	sta HMCLR
-	sta WSYNC
-DivideLoop			;				this loop can't cross a page boundary!!!
-	sbc #15
-	bcs DivideLoop	;+4		 4
-	eor #7
-	asl
-	asl
-	asl
-	asl				;+10	14
-	sta.wx HMP0,X	;+5		19
-	sta RESP0,X		;+4		23
-	sta WSYNC
-	sta HMOVE
-Return					;label for cycle-burning code
-	rts
 
 	
 NumberOfBitsSet
@@ -3286,6 +3403,9 @@ TitleGraphics
 TitleGraphicsEnd				
 
 
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 	
 
 
@@ -3386,8 +3506,31 @@ RotationEven
 RotationTables
 	.word RotationEven, RotationOdd	
 		
-		
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = random position
+	;tank 3 target = player position
+TankTargetX = *-1
+	.byte TankX, RandomNumber, TankX
+TankTargetY = *-1
+	.byte TankY, RandomNumber, TankY
+	
+	;--following is combined with target above (see routine for details)
+	;tank 0 = player, so two more wasted bytes here
+	;tank 1 target = player position
+	;tank 2 target = itself
+	;tank 3 target = tank 1
+TankTargetAdjustX = *-1
+	.byte TankX, TankX+1, TankX+1
+TankTargetAdjustY = *-1
+	.byte TankY, TankY+1, TankY+1
+
+
+BulletDirectionMask
+	.byte %11, %11<<2, %11<<4, %11<<6
+
 	align 256
+
 	ds BLOCKHEIGHT+1
 BlockRowTable
 DigitBlank
@@ -3411,9 +3554,6 @@ DigitBlank
 	ds BLOCKHEIGHT, 17
 	
 
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
 DigitDataMissileLo
 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
@@ -3426,7 +3566,26 @@ TanksRemainingPF2Mask
 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 
 
+TankDirection
+	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
 
+	
+NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
+	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
+	
+	
+PreventReverses = *-1	;--the ZEROES are wasted bytes
+	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
+	
+	;tank 0 = player, so two wasted bytes here
+	;tank 1 target = upper left corner
+	;tank 2 target = base (bottom center)
+	;tank 3 target = upper right corner
+SwitchMovementX = *-1
+	.byte 0, 0, 255
+SwitchMovementY = *-1
+	.byte 255, 80, 255
+	
 	
 			
     echo "----", ($10000-*), " bytes left (ROM)"
