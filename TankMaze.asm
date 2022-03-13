@@ -369,9 +369,8 @@ KernelRoutineGame
 
 	sta WSYNC
 	sta HMOVE	
-	sta WSYNC
 	;--waste time efficiently:
-	ldy #11		; 2
+	ldy #10		; 2
 .wait
 	dey			 ; 2
 	bne .wait	 ; 3
@@ -418,9 +417,6 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sta COLUP0
 	lda #BLUE2+12
 	sta COLUP1
-	sta WSYNC 
-	
-	
 	
 	ldx #4
 PositioningLoopVBLANK	;--excluding players
@@ -430,6 +426,17 @@ PositioningLoopVBLANK	;--excluding players
 	cpx #2
 	bne PositioningLoopVBLANK
 
+	
+	;--reflect P0 or P1 as necessary.   prep for flip loop below
+	lda FrameCounter
+	and #1
+	asl
+	tax
+	lda RotationTables,X
+	sta MiscPtr
+	lda RotationTables+1,X
+	sta MiscPtr+1
+	
 	lda #WALLCOLOR
 	sta COLUPF
 	ldx #$80
@@ -439,41 +446,22 @@ PositioningLoopVBLANK	;--excluding players
 	sta PF1
 	sta PF2
 	
-	
-	;--flip 
-	lda FrameCounter
-	and #1
-	asl
-	tax
-	lda RotationTables,X
-	sta MiscPtr
-	lda RotationTables+1,X
-	sta MiscPtr+1
-
-	
+	;---reflect P0/P1
 	;--this loop is garbage, need to rewrite so it is faster
 	ldy #3
 SetREFPLoop
 	lda TankStatus,Y
-	and #TANKLEFT|TANKRIGHT
+	and #TANKLEFT
 	beq EndREFPLoop
 	lax (MiscPtr),Y		;get original X index back
 	cpx #2
 	bcs EndREFPLoop
-	lda TankStatus,Y
-	and #TANKLEFT
-	bne .TankFacingRight
-	lda #$00
-	.byte $2C
-.TankFacingRight
 	lda #$FF
 	sta REFP0,X	
 EndREFPLoop
 	dey
 	bpl SetREFPLoop
 	
-
-
 	;--clear collision registers
 	sta CXCLR
 
@@ -485,16 +473,12 @@ PositioningLoop	;--just players
 	dex
 	bpl PositioningLoop
 
-
-
-	
 	
 	jmp BeginMainMazeKernel
-	
-
 
 
 	align 256
+	
 	
 Switch0
 	lda Player0Bottom
@@ -858,7 +842,7 @@ BottomKernelLoopMiddle			;		19
 	sta HMOVE					;+3		 5
 
 	
-	jmp BottomKernelLoopInnerMiddle	;	 8
+	bne BottomKernelLoopInnerMiddle	;	 8		branch always
 	
 BottomKernelLoopInner			;		38
 	lda (Player0Ptr+2),Y		;+5
@@ -934,10 +918,8 @@ VSYNCWaitLoop
 	lda GameStatus
 	and #GAMEON
 	beq GameNotOnVBLANK	
-
-
+	jsr CollisionsSubroutine
 	jsr ReadControllersSubroutine
-
 GameNotOnVBLANK
 	
 	jsr UpdateRandomNumber
@@ -948,11 +930,12 @@ GameNotOnVBLANK
 	dec Debounce
 TriggerDebounceZero	
 
+	jsr ReadConsoleSwitchesSubroutine
+
 
 
 	jsr KernelSetupSubroutine
 
-	
 	
 
 WaitForVblankEnd
@@ -985,14 +968,13 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #42
+	lda  #34
 	sta  TIM64T
 	
 	
 	lda GameStatus
 	and #GAMEON
 	beq GameNotOn	
-	jsr CollisionsSubroutine
 	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
 GameNotOn
@@ -1002,13 +984,18 @@ GameNotOn
 	jsr GenerateMazeSubroutine
 NotGeneratingMaze
 	
-	jsr ReadConsoleSwitchesSubroutine
 
 
 
 WaitForOverscanEnd
 	lda INTIM
+	bmi OverTimeOverscan
 	bne WaitForOverscanEnd
+	beq EndOverscan
+OverTimeOverscan
+	nop
+EndOverscan	
+	
 	sta WSYNC		;last line...I think?
 
 	rts
@@ -1637,23 +1624,18 @@ ReadConsoleSwitchesSubroutine
 	ora #GENERATINGMAZE
 	sta GameStatus
 	
+	;--move tanks off screen, immobilize and set score to zeroes
 	ldx #3
-SetStartingEnemyTankLocationsLoop
-	lda StartingTankXPosition,X
+	ldy #0
+MoveTanksOffscreenLoop
+	lda #TANKOFFSCREEN
 	sta TankX,X
-	lda StartingTankYPosition,X
 	sta TankY,X
-	dex
-	bpl SetStartingEnemyTankLocationsLoop
-	
 	lda #0
-	ldx #2
-GameStartLoop
-	sta TankStatus,X
+ 	sta TankStatus,X
 	sta Score,X
 	dex
-	bpl GameStartLoop
-
+	bpl MoveTanksOffscreenLoop
 	
 	
 	
@@ -1687,11 +1669,11 @@ GenerateMazeSubroutine
 	;--let's try splitting it 
 	ldy MazeGenerationPass
 	bpl NotFirstPass
-	ldy #MAZEGENERATIONPASSES
+	ldy #MAZEGENERATIONPASSES+1
 	sty MazeGenerationPass
 	;--on first pass, fill all with walls
 	
-	ldx #MAZEROWS-1
+	ldx #MAZEROWS-2
 	lda #$FF
 FillMazeLoop
 	sta PF1Left,X
@@ -1732,6 +1714,11 @@ UpdateMazeNumber
 	
 	lda MazeNumber
 	sta Temp+2	
+	
+	;--and that's it for the first pass
+	jmp DoneWithFirstPass
+	
+	
 NotFirstPass
 	lda Temp+2
 	sta RandomNumber
@@ -1877,8 +1864,9 @@ NotEndOfRun
 	
 	
 DoneWithRow
-	
+DoneWithFirstPass
 	dec MazeGenerationPass
+
 	bpl NotCompletelyDoneWithMaze
 
 
@@ -1902,6 +1890,31 @@ DoneWithRow
 	ora #GAMEON
 	and #~GENERATINGMAZE
 	sta GameStatus
+	
+
+	;--set starting tank position
+	
+	;--move tanks off screen
+	ldx #3
+SetStartingEnemyTankLocationsLoop
+	lda StartingTankXPosition,X
+	sta TankX,X
+	lda StartingTankYPosition,X
+	sta TankY,X
+	dex
+	bpl SetStartingEnemyTankLocationsLoop
+	
+; 	;--set score to zero and make tanks immobile
+; 	lda #0
+; 	ldx #3
+; GameStartLoop
+;  	sta TankStatus,X
+; 	sta Score,X
+; 	dex
+; 	bpl GameStartLoop
+	
+	
+	
 	
 	lda #20
 	sta TanksRemaining
