@@ -80,13 +80,34 @@ TANKOFFSCREEN	=	127
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
+
+PLAYERTANKVOLUME	=	8
+BULLETTONE		=	3
+BULLETFREQ		=	15
+
+BRICKSOUND	=	0
+BULLETSOUND = 1
+ENEMYTANKSOUND	=	2
+
+BRICKSOUNDTONE		=	8
+BRICKSOUNDFREQ		=	20
+BRICKSOUNDLENGTH	=	31
+BULLETSOUNDTONE		=	3
+BULLETSOUNDFREQ		=	15
+BULLETSOUNDLENGTH	=	15
+ENEMYTANKSOUNDTONE	=	8
+ENEMTYTANKSOUNDFREQ	=	30
+ENEMYTANKSOUNDLENGTH	=	64
+
+
+
 ;--GameStatus bits
 
 GAMEON			=	%10000000
 GENERATINGMAZE	=	%01000000
 
 
-BALLOFFSCREEN	=	154
+BALLOFFSCREEN	=	0;154
 
 BULLETRIGHT		=	0
 BULLETLEFT		=	1
@@ -246,6 +267,7 @@ GameStatus ds 1
 Score ds 3
 TanksRemaining ds 1
 
+Channel1Decay ds 1
 
 Debounce ds 1
 
@@ -473,7 +495,28 @@ PositioningLoop	;--just players
 	dex
 	bpl PositioningLoop
 
+	sta WSYNC
+	lda #0
+	sta PF1
+	sta PF2					;+8		 8
 	
+	sta VDELP1
+	
+	lda #$FF
+	sta VDELP0
+	sta VDELBL
+
+	nop
+
+	;--use stack pointer to hit ENABL
+	tsx
+	stx Temp
+	ldx #<ENABL
+	txs						;+9		31
+
+	ldy #TANKAREAHEIGHT		;+2		35
+
+		
 	jmp BeginMainMazeKernel
 
 
@@ -504,27 +547,10 @@ Wait1
 	
 BeginMainMazeKernel
 
-	sta WSYNC
-	lda #0
-	sta PF1
-	sta PF2					;+8		 8
-	
-	sta VDELP1
-	
-	lda #$FF
-	sta VDELP0
-	sta VDELBL
-
-	SLEEP 5
-
-	;--use stack pointer to hit ENABL
-	tsx
-	stx Temp
-	ldx #<ENABL
-	txs						;+9		31
 
 	
-	ldy #TANKAREAHEIGHT		;+2		35
+
+	
 KernelLoop
 	;draw player 0
 	cpy Player0Top				
@@ -920,6 +946,7 @@ VSYNCWaitLoop
 	beq GameNotOnVBLANK	
 	jsr CollisionsSubroutine
 	jsr ReadControllersSubroutine
+	jsr SoundSubroutine
 GameNotOnVBLANK
 	
 	jsr UpdateRandomNumber
@@ -931,8 +958,6 @@ GameNotOnVBLANK
 TriggerDebounceZero	
 
 	jsr ReadConsoleSwitchesSubroutine
-
-
 
 	jsr KernelSetupSubroutine
 
@@ -1019,9 +1044,9 @@ InitialSetupSubroutine
 	
 	ldx #3
 SetUpTankInitialValues
-	lda #BALLOFFSCREEN
-	sta BulletX,X
-	sta BulletY,X
+; 	lda #BALLOFFSCREEN
+; 	sta BulletX,X
+; 	sta BulletY,X
 	lda #TANKOFFSCREEN
 	sta TankX,X
 	sta TankY,X
@@ -1032,20 +1057,16 @@ SetUpTankInitialValues
 	sta RandomNumber
 	
 	
-; 	lda #$65
-; 	sta Score
-; 	lda #$43
-; 	sta Score+1
-; 	lda #$21
-; 	sta Score+2
+
+	lda #ENGINESOUND
+	sta AUDC0
+	
+	lda #31
+	sta AUDF0
 	
 	lda #WALLCOLOR
 	sta COLUPF
 	
-; 	lda #QUADWIDTHBALL
-; 	sta NUSIZ0
-; 	sta NUSIZ1
-; 	
 	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
 	
@@ -1120,9 +1141,6 @@ NoVerticalTankMovement
 ;****************************************************************************
 
 MoveEnemyTanksSubroutine
-
-; 	ldx #3
-; MoveEnemiesLoop
 
 	;--hack:
 	;	can't move all 3 enemies every frame, takes too long.
@@ -1372,6 +1390,26 @@ ReturnFromTankMovementSubroutine
 
 ;****************************************************************************
 
+
+SoundSubroutine
+	;--no sound for enemy tanks; too annoying
+	
+	;  tentative:
+	;	channel 0 = player tank movement
+	;	channel 1 = all shots and explosions (no shot sound when an explosion is happening)
+	
+	lda Channel1Decay
+ 	cmp #$0F
+ 	bcc SetChannel1Volume
+ 	lda #$0F
+SetChannel1Volume
+	sta AUDV1
+	lda Channel1Decay
+	beq DoNotUpdateChannel1Decay
+	dec Channel1Decay
+DoNotUpdateChannel1Decay	
+	rts
+
 ;****************************************************************************
 
 
@@ -1525,6 +1563,16 @@ RemovedWallBlock
 	lda #BALLOFFSCREEN
 	sta BulletX,X
 	sta BulletY,X
+	
+	;--play brick explosion sound
+	;--only start if longer explosion not happening
+	lda #BRICKSOUND
+	jsr StartSoundSubroutine
+	
+	
+NoSoundForBrickExplosion
+	
+	
 BallHasNotHitBlock
 	dex
 	bpl CheckBallCollisionsLoop
@@ -1585,6 +1633,10 @@ CheckBulletTankCollisionInnerLoop
 	sta TankX,X
 	lda StartingTankStatus,X
 	sta TankStatus,X
+	
+	lda #ENEMYTANKSOUND
+	jsr StartSoundSubroutine
+	
 	;--and decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
 	
@@ -1602,6 +1654,27 @@ EnemyTankOffscreen
 	rts
 
 ;****************************************************************************
+
+StartSoundSubroutine
+	tay
+	lda Channel1Decay
+	and #$F0
+	bne DoNotStartSound
+	lda Tone,Y
+	sta AUDC1
+	lda Frequency,Y
+	sta AUDF1
+	lda SoundLength,Y
+	sta Channel1Decay
+	
+DoNotStartSound
+	rts
+
+	
+	
+;****************************************************************************
+
+
 
 ReadConsoleSwitchesSubroutine
 
@@ -2119,8 +2192,19 @@ ReadControllersSubroutine
 	pha			;movement flag
 
 	lda SWCHA	;A holds joystick
-	ldx #0		;index into which tank
 	
+	;--play engine sound if tank is moving
+	ldx #0		;index into which tank
+	and #$F0	;clear bottom nibble
+	cmp #$F0
+	beq NotTryingToMove
+	ldx #4
+NotTryingToMove
+	stx AUDV0	
+
+	ldx #0		;index into which tank	
+
+
 TankMovementSubroutine				;jump here when moving enemy tanks
 	pha			;--save desired direction of tank
 	
@@ -2131,7 +2215,6 @@ TankMovementSubroutine				;jump here when moving enemy tanks
 	and #$F0	;clear bottom nibble
 	cmp #$F0	;no movement = $F0
 	bne MovementAllowed
-	;--if movement is not allowed, flag that and then restore directions:
 	txa
 	pha		;save index into which tank
 	tsx
@@ -2142,6 +2225,8 @@ TankMovementSubroutine				;jump here when moving enemy tanks
 	jmp ProcessDirections
 MovementAllowed
 	pha		;save allowed directions
+	
+	
 	txa
 	pha		;save index into which tank
 	
@@ -2253,8 +2338,6 @@ NoRight
 	and #J0LEFT
 	bne NoLeft
 	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
-;	txa
-;	bne EnemyTankGoesLeft
 	lda TankStatus,X
 	asl
 	asl
@@ -2282,7 +2365,7 @@ DoneMoving
 	ldx #1
 FindAvailableBallLoop
 	lda BulletX,X
-	cmp #BALLOFFSCREEN
+	;cmp #BALLOFFSCREEN
 	beq FoundAvailableBall
 	dex
 	bpl FindAvailableBallLoop
@@ -2305,7 +2388,15 @@ TriggerHit
 TriggerDebounced
 	;--bullet is fired!
 
+	;--bullet sound
+	;--if explosion sound in early stages, do not make bullet sound
+	lda Channel1Decay
+	and #$F8
+	bne NoBulletSound
+	lda #BULLETSOUND
+	jsr StartSoundSubroutine
 	
+NoBulletSound
 	
 	;set trigger debounce
 	lda Debounce
@@ -3023,16 +3114,8 @@ Four
     
     
 DigitDataMissile
-MissileZero
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
 
 
 MissileOne
@@ -3051,17 +3134,6 @@ MissileOne
 
 
 
-
-MissileTwo
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 
 MissileThree
@@ -3100,16 +3172,7 @@ MissileFive
 
 
 
-MissileSix
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
 
 
 
@@ -3123,6 +3186,26 @@ MissileSeven
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileSix
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileNine    
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+    .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;  	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 MissileEight
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -3131,21 +3214,30 @@ MissileEight
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
-MissileNine    
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-    .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-   	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileZero
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileTwo
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 ;DigitA
 ;       .byte #%01000011;--
@@ -3198,7 +3290,7 @@ MissileNine
 	
 
 
-	align 256
+;	align 256
 	
 
 
@@ -3599,8 +3691,15 @@ SwitchMovementX = *-1
 SwitchMovementY = *-1
 	.byte 255, 80, 255
 	
-	
-			
+Tone
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
+
+Frequency
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMTYTANKSOUNDFREQ
+
+SoundLength
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
+		
     echo "----", ($10000-*), " bytes left (ROM)"
 
 
