@@ -89,15 +89,21 @@ BRICKSOUND	=	0
 BULLETSOUND = 1
 ENEMYTANKSOUND	=	2
 
+
+
+PLAYERTANKENGINEFREQ	=	8;31
+PLAYERTANKENGINETONE	=	2;ENGINESOUND
+PLAYERTANKENGINEVOLUME	=	3
+
+BULLETSOUNDTONE		=	3
+BULLETSOUNDFREQ		=	13
+BULLETSOUNDLENGTH	=	12
 BRICKSOUNDTONE		=	8
 BRICKSOUNDFREQ		=	20
-BRICKSOUNDLENGTH	=	31
-BULLETSOUNDTONE		=	3
-BULLETSOUNDFREQ		=	15
-BULLETSOUNDLENGTH	=	15
+BRICKSOUNDLENGTH	=	25
 ENEMYTANKSOUNDTONE	=	8
 ENEMTYTANKSOUNDFREQ	=	30
-ENEMYTANKSOUNDLENGTH	=	64
+ENEMYTANKSOUNDLENGTH	=	50
 
 
 
@@ -105,9 +111,13 @@ ENEMYTANKSOUNDLENGTH	=	64
 
 GAMEON			=	%10000000
 GENERATINGMAZE	=	%01000000
+LEVELCOMPLETE	=	%00100000
 
 
-BALLOFFSCREEN	=	0;154
+LEVELCOMPLETETIMER	=	$0F
+
+BALLOFFSCREEN	=	0
+
 
 BULLETRIGHT		=	0
 BULLETLEFT		=	1
@@ -272,14 +282,12 @@ Channel1Decay ds 1
 Debounce ds 1
 
 EnemyDebounce ds 1
-;BaseColor ds 1
 
 TankX ds 4
 TankY ds 4
 TankStatus ds 4
 
 TankFractional ds 4
-;PlayerSpeed ds 1
 
 BulletX ds 4
 BulletY ds 4
@@ -361,22 +369,28 @@ KernelRoutineGame
 
 	;--room for score up here?
 
+	lda #RIGHTEIGHT
+	sta HMM1
+	
 	ldy #0
 	sta WSYNC
 	lda #$FF
 	sta COLUP0
-	sta COLUP1
-	pha
-	pla	;wait 7 cycles
+	sta COLUP1						;+8		 8
+		
 	
 	;--display score
 	lda #THREECOPIESCLOSE|LEFTONE
 	sta VDELP0
-	sta VDELP1						;+8		23		turn on VDELPx (bit0==1)
+	sta VDELP1						;+8		16		turn on VDELPx (bit0==1)
 
 	sta NUSIZ0
 	sta NUSIZ1						;+6		29
 
+	
+	
+	SLEEP 7
+	
 	sta HMP0						  ;					 LEFTONE
 	asl
 	sta HMP1						  ;+8		37		LEFTTWO
@@ -397,8 +411,8 @@ KernelRoutineGame
 	dey			 ; 2
 	bne .wait	 ; 3
 
-	SLEEP 2
-
+	SLEEP 3
+	
 	ldy #6+1
 ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 									 ;				(or - if it does, adjust the timing!)
@@ -942,7 +956,7 @@ VSYNCWaitLoop
 	
 	
 	lda GameStatus
-	and #GAMEON
+	and #GAMEON|LEVELCOMPLETE
 	beq GameNotOnVBLANK	
 	jsr CollisionsSubroutine
 	jsr ReadControllersSubroutine
@@ -965,11 +979,12 @@ TriggerDebounceZero
 
 WaitForVblankEnd
 	lda INTIM
-	bmi OverTimeVBLANK
-	bne WaitForVblankEnd
-	beq EndVBLANK
-OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
-	nop
+	bpl WaitForVblankEnd
+; 	bmi OverTimeVBLANK
+; 	bne WaitForVblankEnd
+; 	beq EndVBLANK
+; OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+; 	nop
 		
 EndVBLANK	
 
@@ -998,11 +1013,38 @@ OverscanRoutine
 	
 	
 	lda GameStatus
-	and #GAMEON
+	and #GAMEON|LEVELCOMPLETE
 	beq GameNotOn	
 	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
 GameNotOn
+	lda GameStatus
+	and #LEVELCOMPLETE
+	beq .LevelNotComplete
+	;--level complete
+	lda FrameCounter
+	and #7
+	bne .LevelNotComplete
+	lda GameStatus
+	and #LEVELCOMPLETETIMER
+	tax
+	dex
+	bmi LevelCompleteNow
+	lda GameStatus
+	and #~LEVELCOMPLETETIMER
+	sta GameStatus
+	txa
+	ora GameStatus
+	sta GameStatus
+	bne .LevelNotComplete
+	
+LevelCompleteNow
+	lda GameStatus
+	and #~(LEVELCOMPLETE|LEVELCOMPLETETIMER)
+	sta GameStatus
+	jsr StartNewLevel
+.LevelNotComplete
+
 	lda GameStatus
 	and #GENERATINGMAZE
 	beq NotGeneratingMaze
@@ -1014,12 +1056,13 @@ NotGeneratingMaze
 
 WaitForOverscanEnd
 	lda INTIM
-	bmi OverTimeOverscan
-	bne WaitForOverscanEnd
-	beq EndOverscan
-OverTimeOverscan
-	nop
-EndOverscan	
+	bpl WaitForOverscanEnd
+;	bmi OverTimeOverscan
+;	bne WaitForOverscanEnd
+;	beq EndOverscan
+;OverTimeOverscan
+;	nop
+;EndOverscan	
 	
 	sta WSYNC		;last line...I think?
 
@@ -1058,10 +1101,10 @@ SetUpTankInitialValues
 	
 	
 
-	lda #ENGINESOUND
+	lda #PLAYERTANKENGINETONE
 	sta AUDC0
 	
-	lda #31
+	lda #PLAYERTANKENGINEFREQ
 	sta AUDF0
 	
 	lda #WALLCOLOR
@@ -1399,9 +1442,9 @@ SoundSubroutine
 	;	channel 1 = all shots and explosions (no shot sound when an explosion is happening)
 	
 	lda Channel1Decay
- 	cmp #$0F
+ 	cmp #$07
  	bcc SetChannel1Volume
- 	lda #$0F
+ 	lda #$07
 SetChannel1Volume
 	sta AUDV1
 	lda Channel1Decay
@@ -1448,28 +1491,25 @@ DivideByTwoPositive
 	
 ;****************************************************************************
 
-
-
 UpdateRandomNumber
-
     lda RandomNumber
     lsr
     bcc SkipEOR
     eor #$B2
 SkipEOR
     sta RandomNumber
-
     rts
+    
 ;****************************************************************************
 
-	;come in with amount to increase in A
+	;come in with amount to increase in A (units and tens) and Temp (100s and 1000s)
 IncreaseScoreSubroutine
 	clc
 	sed
 	adc Score+2
 	sta Score+2
 	lda Score+1
-	adc #0
+	adc Temp
 	sta Score+1
 	lda Score
 	adc #0
@@ -1499,8 +1539,10 @@ CheckBallCollisionsLoop
 	beq BallHasNotHitBlock
 	;--remove block from screen!
 	
-	;--first, add 1 to score
-	lda #1
+	;--first, add to score
+	lda #0
+	sta Temp
+	lda #5
 	jsr IncreaseScoreSubroutine
 	
 	;--get row of block into Y and column into Temp+1
@@ -1566,9 +1608,8 @@ RemovedWallBlock
 	
 	;--play brick explosion sound
 	;--only start if longer explosion not happening
-	lda #BRICKSOUND
+	ldy #BRICKSOUND
 	jsr StartSoundSubroutine
-	
 	
 NoSoundForBrickExplosion
 	
@@ -1634,11 +1675,32 @@ CheckBulletTankCollisionInnerLoop
 	lda StartingTankStatus,X
 	sta TankStatus,X
 	
-	lda #ENEMYTANKSOUND
+	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutine
+	
+	;--first, add 100 to score
+	lda #1
+	sta Temp
+	lda #0
+	jsr IncreaseScoreSubroutine
 	
 	;--and decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
+	bne LevelNotComplete
+	;--set levelcomplete flag
+	lda GameStatus
+	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
+	sta GameStatus
+	;--increase score by some amount ...
+	;---what I'd like to do is give like 10 points or something for every brick remaining
+	;	but that could be complicated
+	;	for now, just add level * 100
+	lda MazeNumber
+	sta Temp
+	lda #0
+	jsr IncreaseScoreSubroutine
+	
+LevelNotComplete
 	
 	
 BulletDidNotHitTank
@@ -1656,7 +1718,7 @@ EnemyTankOffscreen
 ;****************************************************************************
 
 StartSoundSubroutine
-	tay
+	
 	lda Channel1Decay
 	and #$F0
 	bne DoNotStartSound
@@ -1678,50 +1740,10 @@ DoNotStartSound
 
 ReadConsoleSwitchesSubroutine
 
-
-	
-
-
 	lda SWCHB
 	lsr				;get RESET into carry
-	bcs NoRESET
-	lda Debounce
-	and #CONSOLEDEBOUNCEFLAG
-	
-	bne RESETNotReleased
-	lda Debounce
-	ora #CONSOLEDEBOUNCEFLAG
-	sta Debounce
-	;--start game
-	lda GameStatus
-	ora #GENERATINGMAZE
-	sta GameStatus
-	
-	;--move tanks off screen, immobilize and set score to zeroes
-	ldx #3
-	ldy #0
-MoveTanksOffscreenLoop
-	lda #TANKOFFSCREEN
-	sta TankX,X
-	sta TankY,X
-	lda #0
- 	sta TankStatus,X
-	sta Score,X
-	dex
-	bpl MoveTanksOffscreenLoop
-	
-	
-	
-	;--finally, cycle the random number
-	jsr UpdateRandomNumber
-	
-	lda #$FF
-	sta MazeGenerationPass
-
-	
-	
-	jmp DoneWithConsoleSwitches
-NoRESET
+	bcc RESETPressed
+	;--reset not pressed, so reset debounce flag
 	lda Debounce
 	and #~CONSOLEDEBOUNCEFLAG
 	sta Debounce
@@ -1729,6 +1751,36 @@ RESETNotReleased
 DoneWithConsoleSwitches
 	rts
 
+RESETPressed
+	lda Debounce
+	and #CONSOLEDEBOUNCEFLAG
+	
+	bne RESETNotReleased
+	lda Debounce
+	ora #CONSOLEDEBOUNCEFLAG
+	sta Debounce
+StartNewLevel
+	;--start game
+	lda GameStatus
+	ora #GENERATINGMAZE
+	sta GameStatus
+	
+	;--move tanks off screen, immobilize and set score to zeroes
+	ldx #3
+	lda #TANKOFFSCREEN
+	ldy #0
+MoveTanksOffscreenLoop
+	sta TankX,X
+	sta TankY,X
+ 	sty TankStatus,X
+	sty Score,X
+	dex
+	bpl MoveTanksOffscreenLoop
+	
+	stx MazeGenerationPass
+	
+	;--finally, cycle the random number
+	jmp UpdateRandomNumber				;--return from subroutine there
 	
 
 ;****************************************************************************
@@ -1757,51 +1809,44 @@ FillMazeLoop
 	bpl FillMazeLoop
 	
 	;	leave room for enemy tanks to enter:
+	ldx #$3F
 	;clear upper L corner
-	lda PF1Left+MAZEROWS-2
-	and #$3F
+	txa
+	and PF1Left+MAZEROWS-2
 	sta PF1Left+MAZEROWS-2
 	
 	;clear upper R corner
-	lda PF1Right+MAZEROWS-2
-	and #$3F
+	txa
+	and PF1Right+MAZEROWS-2
 	sta PF1Right+MAZEROWS-2
 	
 	;clear spot directly to L of center in top row
-	lda PF2Left+MAZEROWS-2
-	and #$3F
+	txa
+	and PF2Left+MAZEROWS-2
 	sta PF2Left+MAZEROWS-2
 	
 	;--update maze number on first pass also
-UpdateMazeNumber
-	lda MazeNumber
 	sed
+	lda MazeNumber
+UpdateMazeNumber
 	clc
 	adc #1
 	sta MazeNumber
-	cld
-	
 	beq UpdateMazeNumber
-	
+	cld
+
 	;and set seed for maze
-	
-	lda MazeNumber
 	sta Temp+2	
 	
 	;--and that's it for the first pass
 	jmp DoneWithFirstPass
 	
-	
 NotFirstPass
 	lda Temp+2
 	sta RandomNumber
 
-
-	
 	;--use MazeNumber as seed of random number generator
 	;--save current random number so we can restore it when we are done.
-
-
 
 	lda #>PF1Left
 	sta MiscPtr+1
@@ -1821,9 +1866,7 @@ NotFirstPass
 	adc #1
 	tay
 
-	;ldx #15			;<-- this always starts on the right-most column, need to adjust this so random
 	jsr UpdateRandomNumber
-	;lda RandomNumber
 	and #1
 	eor #15
 	tax
@@ -1877,7 +1920,6 @@ EndOfRun
 	;--picks a random number, then subtracts the length of the passage
 	;	until we cross zero, then adds length back for spot to add downward passage
  	jsr UpdateRandomNumber
-	;lda RandomNumber
 	;--new routine:
 	;	decrease length by 1, then remove random bits
 	dec Temp+1
@@ -1913,28 +1955,21 @@ AtBottomRow
 	iny		;restore Y to current row index
 	pla		;get block index back into X
 	tax
+	dex
 	stx Temp
 	stx Temp+1
-	dec Temp
-	dec Temp+1
 	lda #<PF1Left
 	sta MiscPtr
-	dex
 	dex
 	bmi DoneWithRow
 	bpl MakeMazeLoopOuter
 EndRunBeginNextRun
-	;dex
+	dex
 	stx Temp
 	stx Temp+1
-	dec Temp
-	dec Temp+1
 	lda #<PF1Left
 	sta MiscPtr
-	dex
-	bmi DoneWithRow
-NotEndOfRun	
-	
+
 	
 DoneWithRow
 DoneWithFirstPass
@@ -1977,25 +2012,14 @@ SetStartingEnemyTankLocationsLoop
 	dex
 	bpl SetStartingEnemyTankLocationsLoop
 	
-; 	;--set score to zero and make tanks immobile
-; 	lda #0
-; 	ldx #3
-; GameStartLoop
-;  	sta TankStatus,X
-; 	sta Score,X
-; 	dex
-; 	bpl GameStartLoop
-	
-	
-	
-	
-	lda #20
+
+	lda #1
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
 	lda #15
 	sta TankStatus+1
-	lda #7
+	lsr
 	sta TankStatus+2
 	lda #1
 	sta TankStatus+3
@@ -2003,7 +2027,6 @@ SetStartingEnemyTankLocationsLoop
 	;--set speed for player tank
 	lda #TANKSPEED4
 	sta TankStatus
-
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
@@ -2079,9 +2102,7 @@ BulletOnScreen
 	dex
 	bpl MoveBulletsLoop
 
-
 	rts
-
 
 ;****************************************************************************
 EliminateDiagonalSubroutine
@@ -2142,14 +2163,6 @@ EliminatePlayerDiagonal
 	
 	ldx #0
 	txa
-;	jsr CheckForWallSubroutine
-;	tax
-;	bne RegularDiagonalHandling
-;	lda TankStatus
-;	and #$F0
-;	eor #$F0
-;	ldx #0
-;	jmp DirectionsFine
 	
 	
 RegularDiagonalHandling
@@ -2198,7 +2211,7 @@ ReadControllersSubroutine
 	and #$F0	;clear bottom nibble
 	cmp #$F0
 	beq NotTryingToMove
-	ldx #4
+	ldx #PLAYERTANKENGINEVOLUME
 NotTryingToMove
 	stx AUDV0	
 
@@ -2393,7 +2406,7 @@ TriggerDebounced
 	lda Channel1Decay
 	and #$F8
 	bne NoBulletSound
-	lda #BULLETSOUND
+	ldy #BULLETSOUND
 	jsr StartSoundSubroutine
 	
 NoBulletSound
@@ -3026,91 +3039,7 @@ DoneWithMovementChecks
 ;	align 256
 
 
-DigitData
-Zero
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01000001;--
-        .byte #%01000001;--
-;        .byte #%01111111;--
-Two
-        .byte #%01111111;--
-        .byte #%01100000;--
-        .byte #%01100000;--
-        .byte #%01111111;--
-        .byte #%00000001;--
-        .byte #%01000001;--
-;        .byte #%01111111;--
-Three
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%00000011;--
-        .byte #%00111111;--
-        .byte #%00000010;--
-        .byte #%01000010;--
-        .byte #%01111110;--
-Seven
-        .byte #%00000011;--
-        .byte #%00000011;--
-        .byte #%00000011;--
-        .byte #%00000011;--
-        .byte #%00000001;--
-        .byte #%00000001;--
-;        .byte #%01111111;--
 
-Five
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%00000011;--
-        .byte #%01111111;--
-        .byte #%01000000;--
-        .byte #%01000001;--
-;        .byte #%01111111;--
-Six
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01111111;--
-        .byte #%01000000;--
-        .byte #%01000001;--
-        .byte #%01111111;--
-
-Nine
-        .byte #%00000011;--
-        .byte #%00000011;--
-        .byte #%00000011;--
-        .byte #%01111111;--
-        .byte #%01000001;--
-        .byte #%01000001;--
-;        .byte #%01111111;--
-Eight
-        .byte #%01111111;--
-        .byte #%01000011;--
-        .byte #%01000011;--
-        .byte #%01111111;--
-        .byte #%00100010;--
-        .byte #%00100010;--
-        .byte #%00111110;--
-
-One
-        .byte #%00001100;--
-        .byte #%00001100;--
-        .byte #%00001100;--
-        .byte #%00001100;--
-        .byte #%00000100;--
-        .byte #%00000100;--
-        .byte #%00000100;--
-
-Four
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%01111111;--
-        .byte #%01000010;--
-        .byte #%01000010;--
-        .byte #%01000010;--
     
     
 DigitDataMissile
@@ -3239,6 +3168,37 @@ MissileTwo
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
+	
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
+	
+TitleGraphics
+	.byte %00001100, %11001100, %00111111, %11001100	
+	.byte %00001100, %11111100, %00110011, %00111100
+	.byte %00001100, %11001100, %00110011, %11001100
+	.byte %11111111, %11111100, %00110011, %11111100
+	.byte %11000000, %00000000, %00000000, %00000000
+	.byte %11000000, %00110011, %11001100, %00111111
+	.byte %11000000, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11111100, %00111111
+	.byte %11111111, %00000011, %00000000, %00000000
+TitleGraphicsEnd				
+
+
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+	
+	
 ;DigitA
 ;       .byte #%01000011;--
 ;       .byte #%01000011;--
@@ -3295,10 +3255,7 @@ MissileTwo
 
 
 	
-NumberOfBitsSet
-	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
-MovementMask
-	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+
 
 	
 PFRegisterLookup
@@ -3479,38 +3436,97 @@ TanksRemainingGfx
 	.byte %11101110
 	.byte %11101110
 	.byte %11101110
-	.byte %01000100			
+	.byte %01000100		
+	
+		
 		align 256
 
-		
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+DigitData
+Zero
+        .byte #%01111111;--
+        .byte #%01000011;--
+        .byte #%01000011;--
+        .byte #%01000011;--
+        .byte #%01000001;--
+        .byte #%01000001;--
+;        .byte #%01111111;--
+Two
+        .byte #%01111111;--
+        .byte #%01100000;--
+        .byte #%01100000;--
+        .byte #%01111111;--
+        .byte #%00000001;--
+        .byte #%01000001;--
+;        .byte #%01111111;--
+Three
+        .byte #%01111111;--
+        .byte #%01000011;--
+        .byte #%00000011;--
+        .byte #%00111111;--
+        .byte #%00000010;--
+        .byte #%01000010;--
+        .byte #%01111110;--
+Seven
+        .byte #%00000011;--
+        .byte #%00000011;--
+        .byte #%00000011;--
+        .byte #%00000011;--
+        .byte #%00000001;--
+        .byte #%00000001;--
+;        .byte #%01111111;--
 
-	
-TitleGraphics
-	.byte %00001100, %11001100, %00111111, %11001100	
-	.byte %00001100, %11111100, %00110011, %00111100
-	.byte %00001100, %11001100, %00110011, %11001100
-	.byte %11111111, %11111100, %00110011, %11111100
-	.byte %11000000, %00000000, %00000000, %00000000
-	.byte %11000000, %00110011, %11001100, %00111111
-	.byte %11000000, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11111100, %00111111
-	.byte %11111111, %00000011, %00000000, %00000000
-TitleGraphicsEnd				
+Five
+        .byte #%01111111;--
+        .byte #%01000011;--
+        .byte #%00000011;--
+        .byte #%01111111;--
+        .byte #%01000000;--
+        .byte #%01000001;--
+;        .byte #%01111111;--
+Six
+        .byte #%01111111;--
+        .byte #%01000011;--
+        .byte #%01000011;--
+        .byte #%01111111;--
+        .byte #%01000000;--
+        .byte #%01000001;--
+        .byte #%01111111;--
 
+Nine
+        .byte #%00000011;--
+        .byte #%00000011;--
+        .byte #%00000011;--
+        .byte #%01111111;--
+        .byte #%01000001;--
+        .byte #%01000001;--
+;        .byte #%01111111;--
+Eight
+        .byte #%01111111;--
+        .byte #%01000011;--
+        .byte #%01000011;--
+        .byte #%01111111;--
+        .byte #%00100010;--
+        .byte #%00100010;--
+        .byte #%00111110;--
 
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+One
+        .byte #%00001100;--
+        .byte #%00001100;--
+        .byte #%00001100;--
+        .byte #%00001100;--
+        .byte #%00000100;--
+        .byte #%00000100;--
+        .byte #%00000100;--
+
+Four
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%01111111;--
+        .byte #%01000010;--
+        .byte #%01000010;--
+        .byte #%01000010;--	
+
 	
 
 
@@ -3611,7 +3627,7 @@ RotationEven
 RotationTables
 	.word RotationEven, RotationOdd	
 		
-	;tank 0 = player, so two more wasted bytes here
+	;tank 0 = player, so don't need entry for that
 	;tank 1 target = player position
 	;tank 2 target = random position
 	;tank 3 target = player position
@@ -3621,7 +3637,7 @@ TankTargetY = *-1
 	.byte TankY, RandomNumber, TankY
 	
 	;--following is combined with target above (see routine for details)
-	;tank 0 = player, so two more wasted bytes here
+	;tank 0 = player, so don't need entry for that
 	;tank 1 target = player position
 	;tank 2 target = itself
 	;tank 3 target = tank 1
@@ -3699,6 +3715,11 @@ Frequency
 
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
+	
+NumberOfBitsSet
+	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+MovementMask
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 		
     echo "----", ($10000-*), " bytes left (ROM)"
 
