@@ -109,7 +109,7 @@ ENEMYTANKSOUNDLENGTH	=	50
 
 ;--GameStatus bits
 
-GAMEON			=	%10000000
+GAMEOFF			=	%10000000
 GENERATINGMAZE	=	%01000000
 LEVELCOMPLETE	=	%00100000
 
@@ -956,12 +956,13 @@ VSYNCWaitLoop
 	
 	
 	lda GameStatus
-	and #GAMEON|LEVELCOMPLETE
-	beq GameNotOnVBLANK	
+	and #GAMEOFF|LEVELCOMPLETE
+	bne GameNotOnVBLANK	
 	jsr CollisionsSubroutine
 	jsr ReadControllersSubroutine
-	jsr SoundSubroutine
 GameNotOnVBLANK
+	;--keep playing sound even when game not on
+	jsr SoundSubroutine
 	
 	jsr UpdateRandomNumber
 	
@@ -1013,8 +1014,8 @@ OverscanRoutine
 	
 	
 	lda GameStatus
-	and #GAMEON|LEVELCOMPLETE
-	beq GameNotOn	
+	and #GAMEOFF|LEVELCOMPLETE
+	bne GameNotOn	
 	jsr MoveEnemyTanksSubroutine	
 	jsr MoveBulletSubroutine
 GameNotOn
@@ -1084,22 +1085,18 @@ WaitForOverscanEnd
 
 InitialSetupSubroutine
 
-	
+	lda #TANKOFFSCREEN
 	ldx #3
 SetUpTankInitialValues
-; 	lda #BALLOFFSCREEN
-; 	sta BulletX,X
-; 	sta BulletY,X
-	lda #TANKOFFSCREEN
 	sta TankX,X
 	sta TankY,X
 	dex
 	bpl SetUpTankInitialValues
 	
-	sta TankMovementCounter	;start this at $FF (for debugging purposes, for now...)
 	sta RandomNumber
 	
-	
+	lda #GAMEOFF
+	sta GameStatus
 
 	lda #PLAYERTANKENGINETONE
 	sta AUDC0
@@ -1112,6 +1109,8 @@ SetUpTankInitialValues
 	
 	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
+	
+
 	
 	
 	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
@@ -1185,7 +1184,6 @@ NoVerticalTankMovement
 
 MoveEnemyTanksSubroutine
 
-	;--hack:
 	;	can't move all 3 enemies every frame, takes too long.
 	;	So instead move one per frame (moving none every 4th frame)
 	;	Works well enough for now, work on optimizing this routine later
@@ -1215,6 +1213,7 @@ FoundAvailableEnemyBall
 	lda #ENEMYDEBOUNCE
 	sta EnemyDebounce
 	;--find random tank 
+FindAnotherRandomTank
 	lda RandomNumber
 	and #3
 	tay
@@ -1222,12 +1221,12 @@ FoundAvailableEnemyBall
 	iny
 ShootFromTank
 	
-	
-	
 	jsr FireBulletRoutine
 DoNotFireEnemyBullet	
 NoAvailableEnemyBalls
-	jmp ReturnFromTankMovementSubroutine
+	;--then we're done
+	rts
+	
 MoveAnEnemyTank
 	tax
 
@@ -1679,9 +1678,9 @@ CheckBulletTankCollisionInnerLoop
 	jsr StartSoundSubroutine
 	
 	;--first, add 100 to score
-	lda #1
+	lda #$01
 	sta Temp
-	lda #0
+	lda #$00
 	jsr IncreaseScoreSubroutine
 	
 	;--and decrease tanks remaining ONLY if enemy tank hit
@@ -1691,14 +1690,18 @@ CheckBulletTankCollisionInnerLoop
 	lda GameStatus
 	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
 	sta GameStatus
+	;--remove remaining enemy tanks from screen
+	lda #0		;--X will return with this number in it
+	jsr MoveEnemyTanksOffScreen
+		
 	;--increase score by some amount ...
 	;---what I'd like to do is give like 10 points or something for every brick remaining
 	;	but that could be complicated
 	;	for now, just add level * 100
 	lda MazeNumber
 	sta Temp
-	lda #0
-	jsr IncreaseScoreSubroutine
+	txa		;--X = 0 following loop above
+	jmp IncreaseScoreSubroutine	;JMP here because if level complete we don't need the rest of this subroutine
 	
 LevelNotComplete
 	
@@ -1830,13 +1833,13 @@ FillMazeLoop
 	lda MazeNumber
 UpdateMazeNumber
 	clc
-	adc #1
+	adc #$01
 	sta MazeNumber
 	beq UpdateMazeNumber
 	cld
 
 	;and set seed for maze
-	sta Temp+2	
+	sta RandomNumber	
 	
 	;--and that's it for the first pass
 	jmp DoneWithFirstPass
@@ -1993,27 +1996,19 @@ DoneWithFirstPass
 	sta LastRowL
 	sta LastRowR
 	
-	;--and set GAMEON flag and turn off maze generation flag
+	;--and clear GAMEOFF flag and turn off maze generation flag
 	lda GameStatus
-	ora #GAMEON
-	and #~GENERATINGMAZE
+	and #~(GENERATINGMAZE|GAMEOFF)
 	sta GameStatus
 	
 
 	;--set starting tank position
 	
 	;--move tanks off screen
-	ldx #3
-SetStartingEnemyTankLocationsLoop
-	lda StartingTankXPosition,X
-	sta TankX,X
-	lda StartingTankYPosition,X
-	sta TankY,X
-	dex
-	bpl SetStartingEnemyTankLocationsLoop
+	lda #255		;--loop until X = 255 (-1)
+	jsr MoveEnemyTanksOffScreen	
 	
-
-	lda #1
+	lda #20
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
@@ -2021,11 +2016,11 @@ SetStartingEnemyTankLocationsLoop
 	sta TankStatus+1
 	lsr
 	sta TankStatus+2
-	lda #1
+	lsr
 	sta TankStatus+3
 	
 	;--set speed for player tank
-	lda #TANKSPEED4
+	lda #TANKRIGHT|TANKSPEED4
 	sta TankStatus
 	
 NotCompletelyDoneWithMaze
@@ -2036,8 +2031,24 @@ NotCompletelyDoneWithMaze
 	sta RandomNumber
 	
 	rts
+
+	
+;****************************************************************************
 	
 	
+MoveEnemyTanksOffScreen
+	sta Temp
+	ldx #3
+SetStartingEnemyTankLocationsLoop
+	lda StartingTankXPosition,X
+	sta TankX,X
+	lda StartingTankYPosition,X
+	sta TankY,X
+	dex
+	cpx Temp
+	bne SetStartingEnemyTankLocationsLoop
+
+	rts	
 	
 ;****************************************************************************
 
@@ -3169,15 +3180,6 @@ MissileTwo
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
 	
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
 	
 TitleGraphics
@@ -3616,7 +3618,7 @@ StartingTankYPosition
 
 	
 StartingTankStatus
-	.byte  TANKSPEED4, 7, 7, 7
+	.byte  TANKRIGHT|TANKSPEED4, 7, 7, 7
 
 	
 RotationOdd
@@ -3652,7 +3654,7 @@ BulletDirectionMask
 
 	align 256
 
-	ds BLOCKHEIGHT+1
+	ds BLOCKHEIGHT+1 - (* & $FF)
 BlockRowTable
 DigitBlank
 	ds BLOCKHEIGHT, 0
@@ -3698,7 +3700,7 @@ NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
 PreventReverses = *-1	;--the ZEROES are wasted bytes
 	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
 	
-	;tank 0 = player, so two wasted bytes here
+	;tank 0 = player, so don't need initial byte
 	;tank 1 target = upper left corner
 	;tank 2 target = base (bottom center)
 	;tank 3 target = upper right corner
@@ -3720,6 +3722,18 @@ NumberOfBitsSet
 	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
 MovementMask
 	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+	
+	
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
 		
     echo "----", ($10000-*), " bytes left (ROM)"
 
