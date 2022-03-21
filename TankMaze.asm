@@ -1049,9 +1049,11 @@ LevelCompleteNow
 	lda GameStatus
 	and #GENERATINGMAZE
 	beq NotGeneratingMaze
+	lda FrameCounter
+	and #7
+	bne NotGeneratingMaze
 	jsr GenerateMazeSubroutine
 NotGeneratingMaze
-	
 
 
 
@@ -3182,23 +3184,9 @@ MissileTwo
 	
 
 	
-TitleGraphics
-	.byte %00001100, %11001100, %00111111, %11001100	
-	.byte %00001100, %11111100, %00110011, %00111100
-	.byte %00001100, %11001100, %00110011, %11001100
-	.byte %11111111, %11111100, %00110011, %11111100
-	.byte %11000000, %00000000, %00000000, %00000000
-	.byte %11000000, %00110011, %11001100, %00111111
-	.byte %11000000, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11111100, %00111111
-	.byte %11111111, %00000011, %00000000, %00000000
-TitleGraphicsEnd				
 
 
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
 	
 	
 ;DigitA
@@ -3421,28 +3409,24 @@ TankDownAnimated4b
 		.byte #%00100111;--
 		.byte 0
 		
-TankUpFrame
-	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
-TankDownFrame
-	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
-TankRightFrame
-	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
-
-TanksRemainingGfx
-;	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-	
+TitleGraphics
+	.byte %00001100, %11001100, %00111111, %11001100	
+	.byte %00001100, %11111100, %00110011, %00111100
+	.byte %00001100, %11001100, %00110011, %11001100
+	.byte %11111111, %11111100, %00110011, %11111100
+	.byte %11000000, %00000000, %00000000, %00000000
+	.byte %11000000, %00110011, %11001100, %00111111
+	.byte %11000000, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11001100, %00110011
+	.byte %11001100, %00110011, %11111100, %00111111
+	.byte %11111111, %00000011, %00000000, %00000000
+TitleGraphicsEnd				
 		
 		align 256
-
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+	
 DigitData
 Zero
         .byte #%01111111;--
@@ -3608,23 +3592,34 @@ TankRightAnimated4b
 		
 		
 		
-		
-		
-StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+TankUpFrame
+	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
+TankDownFrame
+	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
+TankRightFrame
+	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
-StartingTankYPosition 
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+TanksRemainingGfx
+;	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+			
 
 	
 StartingTankStatus
 	.byte  TANKRIGHT|TANKSPEED4, 7, 7, 7
-
 	
-RotationOdd
-	.byte 0, 2, 1, 3
 RotationEven
 	.byte 2, 1, 3, 0
+RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
+	.byte 2, 1, 3	
 
 RotationTables
 	.word RotationEven, RotationOdd	
@@ -3647,13 +3642,23 @@ TankTargetAdjustX = *-1
 	.byte TankX, TankX+1, TankX+1
 TankTargetAdjustY = *-1
 	.byte TankY, TankY+1, TankY+1
-
-
+	
 BulletDirectionMask
 	.byte %11, %11<<2, %11<<4, %11<<6
 
+	
+	
 	align 256
 
+
+StartingTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+
+StartingTankYPosition 
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+
+
+	
 	ds BLOCKHEIGHT+1 - (* & $FF)
 BlockRowTable
 DigitBlank
