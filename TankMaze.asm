@@ -45,6 +45,8 @@
 ;
 ;	BUG KILLING!
 ;		diagonal movement (player) needs to be fixed
+;			thinking about making player tank only able to change directions at intersections - did this and like it.  
+;			saves ROM and time also.  or at least it should... maybe?
 ;		scanline count is wonky, need to tighten up various subroutines that take too long
 
 
@@ -70,6 +72,9 @@ TANKLEFT		=	J0LEFT
 TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
+ENEMYTANK1DELAY	=	7
+ENEMYTANK2DELAY	=	7
+ENEMYTANK3DELAY	=	7
 
 PLAYERSTARTINGX	=	16
 ENEMY0STARTINGX	=	16
@@ -79,6 +84,8 @@ ENEMY2STARTINGX	=	136
 TANKOFFSCREEN	=	127
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
+
+PLAYERTANKSPEED	=	TANKSPEED3
 
 
 PLAYERTANKVOLUME	=	8
@@ -959,7 +966,8 @@ VSYNCWaitLoop
 	and #GAMEOFF|LEVELCOMPLETE
 	bne GameNotOnVBLANK	
 	jsr CollisionsSubroutine
-	jsr ReadControllersSubroutine
+	;jsr ReadControllersSubroutine
+	jsr PlayerTankMovementRoutine
 GameNotOnVBLANK
 	;--keep playing sound even when game not on
 	jsr SoundSubroutine
@@ -1248,8 +1256,10 @@ MoveAnEnemyTank
 	sta TankStatus,X
 DoNotBringTankOnscreenYet
 	rts
+
+PlayerTankMovementRoutine
+	ldx #0
 TankOnscreenMoveIt
-	
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
 	
@@ -1261,10 +1271,49 @@ AtIntersectionX
 	lda TankY,X
 	sec
 	sbc #1
-FindYIntersectionLoop
-	sbc #BLOCKHEIGHT
-	bcs FindYIntersectionLoop
-	adc #BLOCKHEIGHT
+	
+	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
+	;	post gives credit to December '84 Apple Assembly Line
+	;--constant cycle count divide by 7 !!!!
+	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
+	sta Temp+1 ;save for below --- necessary?
+	sta Temp
+	lsr
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	
+	;--need modulo BLOCKHEIGHT (=7)
+	;	so now multiply by 7 
+	;		x * 7 = x * 4 + x * 2 + x
+	sta Temp
+	asl
+	asl
+	sta Temp+2
+	lda Temp
+	asl
+	adc Temp+2
+	adc Temp
+	sta Temp
+	;--now subtract from original number (all we care is if modulo = 0 or not)
+	sec
+	sbc Temp+1
+	
+	
+	
+	
+	
+; FindYIntersectionLoop
+; 	sbc #BLOCKHEIGHT
+; 	bcs FindYIntersectionLoop
+; 	adc #BLOCKHEIGHT
 	beq AtIntersectionY
 	jmp NotAtIntersection
 AtIntersectionY	
@@ -1272,10 +1321,19 @@ AtIntersectionY
 	;
 	;--new routine: 
 	;--first set TankFractional so that they move immediately
-	lda #255
-	sta TankFractional,X
+	;	If I do this, then when they don't change direction they kind of "jump" when they hit an intersection,
+	;		and it looks bad.
+	;		But if I don't do this, they occasionally reverse directions.  For now, leave it out and live with
+	;		the occasional reversals.  Maybe try to fix later.
+; 	lda #255
+; 	sta TankFractional,X
 	
+	;--if player tank, read joystick
 	
+	txa
+	bne EnemyTankDirectionRoutine
+	jmp ReadControllersSubroutine
+EnemyTankDirectionRoutine
 	;	get allowable directions
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
@@ -2022,7 +2080,7 @@ DoneWithFirstPass
 	sta TankStatus+3
 	
 	;--set speed for player tank
-	lda #TANKRIGHT|TANKSPEED4
+	lda #TANKRIGHT|PLAYERTANKSPEED
 	sta TankStatus
 	
 NotCompletelyDoneWithMaze
@@ -2889,19 +2947,19 @@ CheckForWallSubroutine
 	bne CannotMoveLeft
 	cpx #0
 	bne NoWallL
-	;--this check is only for player 0
-	lda TankX
-	sec
-	sbc #1
-	sta Temp
-	lda TankY
-	sec
-	sbc #8
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
-	beq NoWallL
+; 	;--this check is only for player 0
+; 	lda TankX
+; 	sec
+; 	sbc #1
+; 	sta Temp
+; 	lda TankY
+; 	sec
+; 	sbc #8
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+ 	beq NoWallL
 CannotMoveLeft
 	tya
 	ora #J0LEFT
@@ -2930,21 +2988,21 @@ NotMovingLeft
 	;result is in Temp
 	lda Temp
 	bne CannotMoveRight
-	;--this extra check is only for player 0
-	cpx #0
-	bne NoWallR
-	lda TankX
-	clc
-	adc #8
-	sta Temp
-	lda TankY
-	sec
-	sbc #8
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
-	beq NoWallR
+; 	;--this extra check is only for player 0
+; 	cpx #0
+; 	bne NoWallR
+; 	lda TankX
+; 	clc
+; 	adc #8
+; 	sta Temp
+; 	lda TankY
+; 	sec
+; 	sbc #8
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+ 	beq NoWallR
 	
 CannotMoveRight
 	tya
@@ -2972,18 +3030,18 @@ CheckVerticalMovement
 	;result is in Temp
 	lda Temp
 	bne CannotMoveUp
-	;--this is only for player 0
-	cpx #0
-	bne NoWallU
-	;--temp+1 is unchanged
-	lda TankX
-	clc
-	adc #7
-	sta Temp
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
-	beq NoWallU
+; 	;--this is only for player 0
+; 	cpx #0
+; 	bne NoWallU
+; 	;--temp+1 is unchanged
+; 	lda TankX
+; 	clc
+; 	adc #7
+; 	sta Temp
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+ 	beq NoWallU
 CannotMoveUp
 	tya
 	ora #J0UP
@@ -3011,18 +3069,18 @@ NotMovingUp
 	;result is in Temp
 	lda Temp
 	bne CannotMoveDown
-	;--following check only for player 0
-	cpx #0
-	bne NoWallD
-	;--temp+1 is unchanged
-	lda TankX
-	clc
-	adc #7
-	sta Temp
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
-	beq NoWallD
+; 	;--following check only for player 0
+; 	cpx #0
+; 	bne NoWallD
+; 	;--temp+1 is unchanged
+; 	lda TankX
+; 	clc
+; 	adc #7
+; 	sta Temp
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+ 	beq NoWallD
 CannotMoveDown
 	tya
 	ora #J0DOWN
@@ -3613,7 +3671,7 @@ TanksRemainingGfx
 
 	
 StartingTankStatus
-	.byte  TANKRIGHT|TANKSPEED4, 7, 7, 7
+	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 	
 RotationEven
 	.byte 2, 1, 3, 0
@@ -3716,7 +3774,7 @@ TankDirection
 
 	
 NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte TANKSPEED7, TANKSPEED13, TANKSPEED3
+	.byte TANKSPEED9, TANKSPEED15, TANKSPEED7
 	
 	
 PreventReverses = *-1	;--the ZEROES are wasted bytes
