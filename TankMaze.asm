@@ -3049,10 +3049,75 @@ DoneWithMovementChecks
 	
 	
 	
-;	align 256
 
 
 
+
+	
+	
+;DigitA
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitB
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitC
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00100000;--
+;       .byte #%00111100;--
+;DigitD
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitE
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
+;DigitF
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
+	
+
+
+	
+
+
+	
+
+
+	
+
+	
+	align 256
+	
+	
     
     
 DigitDataMissile
@@ -3187,81 +3252,6 @@ MissileTwo
 
 
 
-	
-	
-;DigitA
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitB
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitC
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00100000;--
-;       .byte #%00111100;--
-;DigitD
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitE
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-;DigitF
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-	
-
-
-;	align 256
-	
-
-
-	
-
-
-	
-PFRegisterLookup
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-PFMaskLookup
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-
-	
-	
 
 	
 	
@@ -3421,7 +3411,16 @@ TitleGraphics
 	.byte %11001100, %00110011, %11111100, %00111111
 	.byte %11111111, %00000011, %00000000, %00000000
 TitleGraphicsEnd				
-		
+
+
+PFRegisterLookup
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+
+
 		align 256
 DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
@@ -3647,7 +3646,25 @@ BulletDirectionMask
 	.byte %11, %11<<2, %11<<4, %11<<6
 
 	
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
 	
+	
+PFMaskLookup
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+
+		
 	align 256
 
 
@@ -3728,16 +3745,6 @@ NumberOfBitsSet
 MovementMask
 	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 	
-	
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
 		
     echo "----", ($10000-*), " bytes left (ROM)"
