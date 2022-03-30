@@ -8,7 +8,7 @@
 ;		objective: destroy enemy tanks while protecting base in a destroyable maze
 ;		arcade game - play for high score
 ;			earn points by destroying tanks and advancing levels
-;		have finite # of tanks to destroy each level (same for all, or increasing?)
+;		have finite # of tanks to destroy each level 
 ;		once destroyed, level is won and advance to new level
 ;		destroy walls by shooting them
 ;		enemy tanks also shoot and also can destroy walls
@@ -17,9 +17,21 @@
 ;		open question: what about tank:tank collisions?
 ;
 ;	To do:
+;	Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
+;		could free up some space by going through things with a fine-toothed comb, but ...
+;		it would be a big stretch even to get the bare minimum for a game in there.
+;		anything extra, like music, or a fancier title screen, or a more-complicated enemy-tank AI routine
+;		is going to require more space.  
+;	Biggest thing at this point is figure out ramping difficulty
+;		IDEAS:
+;			faster tanks at higher levels
+;			more frequent shooting by enemy tanks
+;			more aggressive tank movement routines
+;			smarter shooting by enemy tanks
+;
+
 ;	Figure out better AI for tank movement/firing routines 
 ;	Add explosion graphics
-;	Sound FX
 ;	Music?
 ;	Title/splash screen?  STARTED... still needs work.
 ;	Power-Ups - ???
@@ -28,28 +40,25 @@
 ;			extra life
 ;			"bomb" that destroys all tanks on screen (and all walls?)
 ;			something that slows all enemies down?
-;			
+;			other?
 ;
-;	Maze generation routine done?  Tweaking?  Rewrite?
-;	Collisions!
-;	Score
-;	Level objectives moving through levels - i.e., # of tanks remaining to kill
-;	Difficulty settings
-;	Gameplay tweaking
-;	Graphics/colors
-;	PAL60 version
-;	2-player?  (unlikely but...)
-;	Other...?
+;	Other TODOs:
+;		tank:tank collisions	
+;		display player lives remaining
+;		don't give points for enemy tank actions
+;		replace placeholder font
+;		Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+;		PAL60 version
+;		2-player?  (unlikely but...)
+;		Other...?
+;		sound tweaking/improvements
 ;	
 ;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 ;
 ;	BUG KILLING!
-;		diagonal movement (player) needs to be fixed
-;			thinking about making player tank only able to change directions at intersections - did this and like it.  
-;			saves ROM and time also.  or at least it should... maybe?
 ;		scanline count is wonky, need to tighten up various subroutines that take too long
-
-
+;		remove bullets from screen during level transitions
+;		
 
 
 
@@ -394,8 +403,6 @@ KernelRoutineGame
 	sta NUSIZ0
 	sta NUSIZ1						;+6		29
 
-	
-	
 	SLEEP 7
 	
 	sta HMP0						  ;					 LEFTONE
@@ -957,16 +964,12 @@ VSYNCWaitLoop
 	lda #44
 	sta TIM64T
 	
-	
 	dec FrameCounter
-	
-	
 	
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE
 	bne GameNotOnVBLANK	
 	jsr CollisionsSubroutine
-	;jsr ReadControllersSubroutine
 	jsr PlayerTankMovementRoutine
 GameNotOnVBLANK
 	;--keep playing sound even when game not on
@@ -3672,15 +3675,21 @@ TanksRemainingGfx
 	
 StartingTankStatus
 	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-	
+RotationOdd
+	.byte 0	;and first 3 bytes of next table
 RotationEven
 	.byte 2, 1, 3, 0
-RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
-	.byte 2, 1, 3	
+; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
+; 	.byte 2, 1, 3	
 
 RotationTables
 	.word RotationEven, RotationOdd	
 		
+	
+;--if we are aiming at RAM locations, how do we aim at the base?  Base X = 80, Y = 0
+
+	;
+
 	;tank 0 = player, so don't need entry for that
 	;tank 1 target = player position
 	;tank 2 target = random position
@@ -3785,9 +3794,9 @@ PreventReverses = *-1	;--the ZEROES are wasted bytes
 	;tank 2 target = base (bottom center)
 	;tank 3 target = upper right corner
 SwitchMovementX = *-1
-	.byte 0, 0, 255
+	.byte 0, 80, 255
 SwitchMovementY = *-1
-	.byte 255, 80, 255
+	.byte 255, 0, 255
 	
 Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
