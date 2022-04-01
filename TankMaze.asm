@@ -118,7 +118,7 @@ BRICKSOUNDTONE		=	8
 BRICKSOUNDFREQ		=	20
 BRICKSOUNDLENGTH	=	25
 ENEMYTANKSOUNDTONE	=	8
-ENEMTYTANKSOUNDFREQ	=	30
+ENEMYTANKSOUNDFREQ	=	30
 ENEMYTANKSOUNDLENGTH	=	50
 
 
@@ -347,9 +347,11 @@ MiscPtr ds 2
 
 	seg Bank0
 
-	org $F000
+	org $D000
+	rorg $F000
 
 Start
+	sta $1FF8
 	CLEAN_START
 
 ;--Some Initial Setup
@@ -3802,7 +3804,7 @@ Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
 
 Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMTYTANKSOUNDFREQ
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ
 
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
@@ -3817,9 +3819,28 @@ MovementMask
     echo "----", ($10000-*), " bytes left (ROM)"
 
 
-    org $FFFC
+    org $DFFC
+    rorg $FFFC
 	.word Start
 	.word Start
 
+;----------------------------------------------------------------------------------------------------
+;----------------------------------------------------------------------------------------------------
+;---------------------------------        BANK TWO           ----------------------------------------
+;----------------------------------------------------------------------------------------------------
+;----------------------------------------------------------------------------------------------------
 
 
+	org $E000
+	rorg $F000
+
+Start2
+	sta $1FF8
+
+	
+	
+	
+	org $EFFC
+	rorg $FFFC
+	.word Start2
+	.word Start2
