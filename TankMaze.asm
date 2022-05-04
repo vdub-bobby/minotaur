@@ -971,7 +971,8 @@ VSYNCWaitLoop
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE
 	bne GameNotOnVBLANK	
-	jsr CollisionsSubroutine
+	brk
+	.word CollisionsSubroutine
 	jsr PlayerTankMovementRoutine
 GameNotOnVBLANK
 	;--keep playing sound even when game not on
@@ -1031,7 +1032,8 @@ OverscanRoutine
 	and #GAMEOFF|LEVELCOMPLETE
 	bne GameNotOn	
 	jsr MoveEnemyTanksSubroutine	
-	jsr MoveBulletSubroutine
+	brk
+	.word MoveBulletSubroutine
 GameNotOn
 	lda GameStatus
 	and #LEVELCOMPLETE
@@ -1066,7 +1068,8 @@ LevelCompleteNow
 	lda FrameCounter
 	and #7
 	bne NotGeneratingMaze
-	jsr GenerateMazeSubroutine
+	brk
+	.word GenerateMazeSubroutine
 NotGeneratingMaze
 
 
@@ -1144,251 +1147,7 @@ MoveTanksOffscreenLoop
 	jmp UpdateRandomNumber				;--return from subroutine there
 	
 
-;****************************************************************************
-	
-GenerateMazeSubroutine
 
-	;--first, save RandomNumber
-	lda RandomNumber
-	pha
-	
-	;--let's try splitting it 
-	ldy MazeGenerationPass
-	bpl NotFirstPass
-	ldy #MAZEGENERATIONPASSES+1
-	sty MazeGenerationPass
-	;--on first pass, fill all with walls
-	
-	ldx #MAZEROWS-2
-	lda #$FF
-FillMazeLoop
-	sta PF1Left,X
-	sta PF2Left,X
-	sta PF2Right,X
-	sta PF1Right,X
-	dex 
-	bpl FillMazeLoop
-	
-	;	leave room for enemy tanks to enter:
-	ldx #$3F
-	;clear upper L corner
-	txa
-	and PF1Left+MAZEROWS-2
-	sta PF1Left+MAZEROWS-2
-	
-	;clear upper R corner
-	txa
-	and PF1Right+MAZEROWS-2
-	sta PF1Right+MAZEROWS-2
-	
-	;clear spot directly to L of center in top row
-	txa
-	and PF2Left+MAZEROWS-2
-	sta PF2Left+MAZEROWS-2
-	
-	;--update maze number on first pass also
-	sed
-	lda MazeNumber
-UpdateMazeNumber
-	clc
-	adc #$01
-	sta MazeNumber
-	beq UpdateMazeNumber
-	cld
-
-	;and set seed for maze
-	sta RandomNumber	
-	
-	;--and that's it for the first pass
-	jmp DoneWithFirstPass
-	
-NotFirstPass
-	lda Temp+2
-	sta RandomNumber
-
-	;--use MazeNumber as seed of random number generator
-	;--save current random number so we can restore it when we are done.
-
-	lda #>PF1Left
-	sta MiscPtr+1
-
-	;--now what we are doing is going through every other row
-	;	starting at a random block on the right, and carving out a random-length
-	;	horizontal path to the left.
-	;	when we finish that, we pick a random spot to carve a block out of the row below
-	;	and then we move two blocks to the left (if there is room), and repeat for another 
-	;	random-length horizontal path
-	;	once done with a row, we move two rows down and repeat the whole process
-	;	Y holds row, X holds block within the row
-	
-	tya
-	asl
-	clc
-	adc #1
-	tay
-
-	jsr UpdateRandomNumber
-	and #1
-	eor #15
-	tax
-	
-MakeMazeLoopOuter	
-	stx Temp
-	stx Temp+1
-MakeMazeLoopInner
-	lda #<PF1Left
-	sta MiscPtr
-	
-	;--clear block
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	and (MiscPtr),Y	
-	sta (MiscPtr),Y
-	
-	lda #<PF1Left
-	sta MiscPtr
-
-	;--are we at the end of our horizontal path?  compare random number to constant
-	jsr UpdateRandomNumber
-	;lda RandomNumber
-	cmp #MAZEPATHCUTOFF
-	bcc EndOfRun
-	;--not at the end of the run, so loop around
-	dec Temp+1
-	dex
-	bpl MakeMazeLoopInner
-
-	;--need to carve a passage downward if we reach this spot:
-EndOfRun
-	;--don't carve passage downward if we're on the bottom row
-	cpy #0
-	beq EndRunBeginNextRun
-	;--otherwise, find a random passage to carve
-	;--Temp holds starting block number (X)
-	;--Temp+1 holds ending block number
-	lda Temp
-	sec
-	sbc Temp+1
-	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
- 	beq OnlyOnePlaceToCarve
-	;--this routine tries to find a random place in our new passage to carve downwards
-	;--picks a random number, then subtracts the length of the passage
-	;	until we cross zero, then adds length back for spot to add downward passage
- 	jsr UpdateRandomNumber
-	;--new routine:
-	;	decrease length by 1, then remove random bits
-	dec Temp+1
-	and Temp+1
-	sta Temp+1
-OnlyOnePlaceToCarve
-	lda Temp
-	sec
-	sbc Temp+1
-	sta Temp+1
-	txa
-	pha
-	ldx Temp+1
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	pha
-	dey
-	and (MiscPtr),Y
-	sta (MiscPtr),Y
-	pla
-	dey
-	bmi AtBottomRow
-	and (MiscPtr),Y
-	sta (MiscPtr),Y
-AtBottomRow
-	iny	
-	iny		;restore Y to current row index
-	pla		;get block index back into X
-	tax
-	dex
-	stx Temp
-	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
-	dex
-	bmi DoneWithRow
-	bpl MakeMazeLoopOuter
-EndRunBeginNextRun
-	dex
-	stx Temp
-	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
-
-	
-DoneWithRow
-DoneWithFirstPass
-	dec MazeGenerationPass
-
-	bpl NotCompletelyDoneWithMaze
-
-
-	;--final touchup:
-	;	open up area directly above base:
-	;--- change to CLOSE up area directly above base, not sure about this.
-	lda PF2Left
-	ora #$F0
-	sta PF2Left
-	lda PF2Right
-	ora #$F0
-	sta PF2Right
-
-	;--add walls on bottom row surrounding base
-	lda #$30
-	sta LastRowL
-	sta LastRowR
-	
-	;--and clear GAMEOFF flag and turn off maze generation flag
-	lda GameStatus
-	and #~(GENERATINGMAZE|GAMEOFF)
-	sta GameStatus
-	
-
-	;--set starting tank position
-	
-	;--move tanks off screen
-	lda #255		;--loop until X = 255 (-1)
-	jsr MoveEnemyTanksOffScreen	
-	
-	lda #20
-	sta TanksRemaining
-	
-	;--starting timers for when tanks enter the maze
-	lda #15
-	sta TankStatus+1
-	lsr
-	sta TankStatus+2
-	lsr
-	sta TankStatus+3
-	
-	;--set speed for player tank
-	lda #TANKRIGHT|PLAYERTANKSPEED
-	sta TankStatus
-	
-NotCompletelyDoneWithMaze
-	;--restore original random number
-	lda RandomNumber
-	sta Temp+2
-	pla
-	sta RandomNumber
-	
-	rts
 	
 ;*******************************************************************
 
@@ -1858,327 +1617,11 @@ SkipEOR
     sta RandomNumber
     rts
     
-;****************************************************************************
-
-	;come in with amount to increase in A (units and tens) and Temp (100s and 1000s)
-IncreaseScoreSubroutine
-	clc
-	sed
-	adc Score+2
-	sta Score+2
-	lda Score+1
-	adc Temp
-	sta Score+1
-	lda Score
-	adc #0
-	sta Score
-	cld
-	rts
-
-;****************************************************************************
-
-CollisionsSubroutine
-
-	;--need to use software collision detection, at least for ball
-	ldx #3
-CheckBallCollisionsLoop
-	;--check for collision with wall
-	lda BulletX,X
-	cmp #BALLOFFSCREEN
-	beq BallHasNotHitBlock	;short circuit if the ball is offscreen
-	sta Temp
-	lda BulletY,X
-	sec
-	sbc #2
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;--result is in Temp
-	lda Temp
-	beq BallHasNotHitBlock
-	;--remove block from screen!
-	
-	;--first, add to score
-	lda #0
-	sta Temp
-	lda #5
-	jsr IncreaseScoreSubroutine
-	
-	;--get row of block into Y and column into Temp+1
-
-	lda BulletY,X
-	ldy #0
-	sec
-	sbc #2
-GetRowBulletIsInLoop
-	sbc #BLOCKHEIGHT
-	bcc FoundWhichRowBulletIsIn
-	iny
-	jmp GetRowBulletIsInLoop
-FoundWhichRowBulletIsIn
-	;--special check for row = 0
-	tya
-	bne BulletNotOnBottomRow
-	;--all we care is left or right of center
-	lda BulletX,X
-	cmp #80
-	bcc BulletOnLeftLastRow
-	lda #0
-	sta LastRowR
-	beq RemovedWallBlock
-BulletOnLeftLastRow
-	lda #0
-	sta LastRowL
-	beq RemovedWallBlock
-BulletNotOnBottomRow
-	lda BulletX,X
-	sec
-	sbc #16
-	lsr
-	lsr
-	lsr
-	sta Temp+1
-	txa
-	pha
-		
-	lda #<PF1Left
-	sta MiscPtr
-	lda #>PF1Left
-	sta MiscPtr+1
-	ldx Temp+1
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	dey
-	and (MiscPtr),Y
-	sta (MiscPtr),Y	
-	pla
-	tax
-RemovedWallBlock
-	;--bullet has hit block, remove bullet from screen:
-	lda #BALLOFFSCREEN
-	sta BulletX,X
-	sta BulletY,X
-	
-	;--play brick explosion sound
-	;--only start if longer explosion not happening
-	ldy #BRICKSOUND
-	jsr StartSoundSubroutine
-	
-NoSoundForBrickExplosion
-	
-	
-BallHasNotHitBlock
-	dex
-	bpl CheckBallCollisionsLoop
-
-
-	;--now check if bullet has hit an enemy tank
-	
-	ldx #3
-CheckBulletTankCollisionOuterLoop
-	;first check if tank is offscreen
-	lda TankY,X
-	cmp #MAZEAREAHEIGHT+TANKHEIGHT+4
-	beq EnemyTankOffscreen
-	
-	;now compare ball location to tank location
-	;--only care about player bullets
-	ldy #3
-CheckBulletTankCollisionInnerLoop
-	lda BulletX,Y
-	cmp #BALLOFFSCREEN
-	beq BulletOffScreen
-	;--compare X position
-	clc
-	adc #1
-	cmp TankX,X
-	bcc BulletDidNotHitTank 
-	sbc #1
-	sta Temp
-	lda TankX,X
-	clc
-	adc #8
-	cmp Temp
-	bcc BulletDidNotHitTank
-	;--compare Y position
-	lda BulletY,Y
-	sec
-	sbc #1
-	cmp TankY,X
-	bcs BulletDidNotHitTank
-	adc #1
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #TANKHEIGHT
-	cmp Temp
-	bcs BulletDidNotHitTank
-	
-	
-	
-	;--bullet did hit tank.
-	;	remove bullet and tank from screen
-	lda #BALLOFFSCREEN
-	sta BulletX,Y
-	sta BulletY,Y
-	lda StartingTankYPosition,X
-	sta TankY,X
-	lda StartingTankXPosition,X
-	sta TankX,X
-	lda StartingTankStatus,X
-	sta TankStatus,X
-	
-	ldy #ENEMYTANKSOUND
-	jsr StartSoundSubroutine
-	
-	;--first, add 100 to score
-	lda #$01
-	sta Temp
-	lda #$00
-	jsr IncreaseScoreSubroutine
-	
-	;--and decrease tanks remaining ONLY if enemy tank hit
-	dec TanksRemaining
-	bne LevelNotComplete
-	;--set levelcomplete flag
-	lda GameStatus
-	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
-	sta GameStatus
-	;--remove remaining enemy tanks from screen
-	lda #0		;--X will return with this number in it
-	jsr MoveEnemyTanksOffScreen
-		
-	;--increase score by some amount ...
-	;---what I'd like to do is give like 10 points or something for every brick remaining
-	;	but that could be complicated
-	;	for now, just add level * 100
-	lda MazeNumber
-	sta Temp
-	txa		;--X = 0 following loop above
-	jmp IncreaseScoreSubroutine	;JMP here because if level complete we don't need the rest of this subroutine
-	
-LevelNotComplete
-	
-	
-BulletDidNotHitTank
-BulletOffScreen
-	dey
-	bpl CheckBulletTankCollisionInnerLoop
-	
-EnemyTankOffscreen
-	dex
-	bpl CheckBulletTankCollisionOuterLoop
-	
-	
-	rts
-
-;****************************************************************************
-
-StartSoundSubroutine
-	
-	lda Channel1Decay
-	and #$F0
-	bne DoNotStartSound
-	lda Tone,Y
-	sta AUDC1
-	lda Frequency,Y
-	sta AUDF1
-	lda SoundLength,Y
-	sta Channel1Decay
-	
-DoNotStartSound
-	rts
 
 	
 	
-;****************************************************************************
-
-
 	
-	
-MoveEnemyTanksOffScreen
-	sta Temp
-	ldx #3
-SetStartingEnemyTankLocationsLoop
-	lda StartingTankXPosition,X
-	sta TankX,X
-	lda StartingTankYPosition,X
-	sta TankY,X
-	dex
-	cpx Temp
-	bne SetStartingEnemyTankLocationsLoop
 
-	rts	
-	
-;****************************************************************************
-
-
-	
-MoveBulletSubroutine
-
-	ldx #3
-MoveBulletsLoop
-	lda BulletX,X
-	cmp #BALLOFFSCREEN
-	beq NoBulletMovement
-	lda BulletDirection
-	and BulletDirectionMask,X
-	tay							;save value
-	cmp BulletUp,X
-	bne BulletNotUp
-	lda BulletY,X
-	clc
-	adc #BULLETSPEEDVER
-	sta BulletY,X
-BulletNotUp
-	tya
-	cmp BulletDown,X
-	bne BulletNotDown
-	lda BulletY,X
-	sec
-	sbc #BULLETSPEEDVER
-	sta BulletY,X
-BulletNotDown
-	tya	
-	cmp BulletRight,X
-	bne BulletNotRight
-	lda BulletX,X
-	clc
-	adc #BULLETSPEEDHOR
-	sta BulletX,X
-BulletNotRight	
-	tya
-	cmp BulletLeft,X
-	bne NoBulletMovement
-	lda BulletX,X
-	sec
-	sbc #BULLETSPEEDHOR
-	sta BulletX,X
-NoBulletMovement
-
-	;--check for off screen:
-	lda BulletX,X
-	cmp #16
-	bcc BulletOffscreen
-	cmp #148
-	bcs BulletOffscreen
-	lda BulletY,X
-	cmp #(MAZEAREAHEIGHT)+4
-	bcc BulletOnScreen	
-BulletOffscreen
-	lda #BALLOFFSCREEN
-	sta BulletX,X
-	sta BulletY,X	
-BulletOnScreen	
-	dex
-	bpl MoveBulletsLoop
-
-	rts
 
 ;****************************************************************************
 EliminateDiagonalSubroutine
@@ -2696,8 +2139,30 @@ FoundWhetherBlockExists
 	rts
 
 	
+	
+	
 ;****************************************************************************
 	
+
+StartSoundSubroutine
+	
+	lda Channel1Decay
+	and #$F0
+	bne DoNotStartSound
+	lda Tone,Y
+	sta AUDC1
+	lda Frequency,Y
+	sta AUDF1
+	lda SoundLength,Y
+	sta Channel1Decay
+	
+DoNotStartSound
+	rts
+
+	
+;****************************************************************************
+
+
 CheckForWallSubroutine
 				;--X holds index into which tank, A holds direction (mask against joystick constants)
 				;return A holding allowed directions
@@ -3438,8 +2903,6 @@ TanksRemainingGfx
 			
 
 	
-StartingTankStatus
-	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 		
 	
@@ -3466,8 +2929,6 @@ TankTargetAdjustX = *-1
 TankTargetAdjustY = *-1
 	.byte TankY, TankY+1, TankY+1
 	
-BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
 
 	
 BulletDirectionClear
@@ -3492,11 +2953,6 @@ PFMaskLookup
 	align 256
 
 
-StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
-
-StartingTankYPosition 
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
 
 
 	
@@ -3580,7 +3036,7 @@ RotationEvenBank1
 ; 	.byte 2, 1, 3	
 
 		
-    echo "----", ($10000-*), " bytes left (ROM)"
+    echo "----", ($1F00-*), " bytes left (ROM) in Bank 1"
 
 	org $1F00
 	rorg $1F00
@@ -3870,10 +3326,690 @@ SetupScorePtrsLoop
 	
 	
 	jmp ReturnFromBSSubroutine2
+
+	
 	
 ;****************************************************************************
 
 
+	
+MoveBulletSubroutine
+
+	ldx #3
+MoveBulletsLoop
+	lda BulletX,X
+	cmp #BALLOFFSCREEN
+	beq NoBulletMovement
+	lda BulletDirection
+	and BulletDirectionMask,X
+	tay							;save value
+	cmp BulletUpBank2,X
+	bne BulletNotUp
+	lda BulletY,X
+	clc
+	adc #BULLETSPEEDVER
+	sta BulletY,X
+BulletNotUp
+	tya
+	cmp BulletDownBank2,X
+	bne BulletNotDown
+	lda BulletY,X
+	sec
+	sbc #BULLETSPEEDVER
+	sta BulletY,X
+BulletNotDown
+	tya	
+	cmp BulletRightBank2,X
+	bne BulletNotRight
+	lda BulletX,X
+	clc
+	adc #BULLETSPEEDHOR
+	sta BulletX,X
+BulletNotRight	
+	tya
+	cmp BulletLeftBank2,X
+	bne NoBulletMovement
+	lda BulletX,X
+	sec
+	sbc #BULLETSPEEDHOR
+	sta BulletX,X
+NoBulletMovement
+
+	;--check for off screen:
+	lda BulletX,X
+	cmp #16
+	bcc BulletOffscreen
+	cmp #148
+	bcs BulletOffscreen
+	lda BulletY,X
+	cmp #(MAZEAREAHEIGHT)+4
+	bcc BulletOnScreen	
+BulletOffscreen
+	lda #BALLOFFSCREEN
+	sta BulletX,X
+	sta BulletY,X	
+BulletOnScreen	
+	dex
+	bpl MoveBulletsLoop
+
+	jmp ReturnFromBSSubroutine2
+
+	
+	
+	
+	
+;****************************************************************************
+	
+GenerateMazeSubroutine
+
+	;--first, save RandomNumber
+	lda RandomNumber
+	pha
+	
+	;--let's try splitting it 
+	ldy MazeGenerationPass
+	bpl NotFirstPass
+	ldy #MAZEGENERATIONPASSES+1
+	sty MazeGenerationPass
+	;--on first pass, fill all with walls
+	
+	ldx #MAZEROWS-2
+	lda #$FF
+FillMazeLoop
+	sta PF1Left,X
+	sta PF2Left,X
+	sta PF2Right,X
+	sta PF1Right,X
+	dex 
+	bpl FillMazeLoop
+	
+	;	leave room for enemy tanks to enter:
+	ldx #$3F
+	;clear upper L corner
+	txa
+	and PF1Left+MAZEROWS-2
+	sta PF1Left+MAZEROWS-2
+	
+	;clear upper R corner
+	txa
+	and PF1Right+MAZEROWS-2
+	sta PF1Right+MAZEROWS-2
+	
+	;clear spot directly to L of center in top row
+	txa
+	and PF2Left+MAZEROWS-2
+	sta PF2Left+MAZEROWS-2
+	
+	;--update maze number on first pass also
+	sed
+	lda MazeNumber
+UpdateMazeNumber
+	clc
+	adc #$01
+	sta MazeNumber
+	beq UpdateMazeNumber
+	cld
+
+	;and set seed for maze
+	sta RandomNumber	
+	
+	;--and that's it for the first pass
+	jmp DoneWithFirstPass
+	
+NotFirstPass
+	lda Temp+2
+	sta RandomNumber
+
+	;--use MazeNumber as seed of random number generator
+	;--save current random number so we can restore it when we are done.
+
+	lda #>PF1Left
+	sta MiscPtr+1
+
+	;--now what we are doing is going through every other row
+	;	starting at a random block on the right, and carving out a random-length
+	;	horizontal path to the left.
+	;	when we finish that, we pick a random spot to carve a block out of the row below
+	;	and then we move two blocks to the left (if there is room), and repeat for another 
+	;	random-length horizontal path
+	;	once done with a row, we move two rows down and repeat the whole process
+	;	Y holds row, X holds block within the row
+	
+	tya
+	asl
+	clc
+	adc #1
+	tay
+
+	jsr UpdateRandomNumberBank2
+	and #1
+	eor #15
+	tax
+	
+MakeMazeLoopOuter	
+	stx Temp
+	stx Temp+1
+MakeMazeLoopInner
+	lda #<PF1Left
+	sta MiscPtr
+	
+	;--clear block
+	lda PFMaskLookupBank2,X
+	eor #$FF
+	pha
+	lda PFRegisterLookupBank2,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	and (MiscPtr),Y	
+	sta (MiscPtr),Y
+	
+	lda #<PF1Left
+	sta MiscPtr
+
+	;--are we at the end of our horizontal path?  compare random number to constant
+	jsr UpdateRandomNumberBank2
+	;lda RandomNumber
+	cmp #MAZEPATHCUTOFF
+	bcc EndOfRun
+	;--not at the end of the run, so loop around
+	dec Temp+1
+	dex
+	bpl MakeMazeLoopInner
+
+	;--need to carve a passage downward if we reach this spot:
+EndOfRun
+	;--don't carve passage downward if we're on the bottom row
+	cpy #0
+	beq EndRunBeginNextRun
+	;--otherwise, find a random passage to carve
+	;--Temp holds starting block number (X)
+	;--Temp+1 holds ending block number
+	lda Temp
+	sec
+	sbc Temp+1
+	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
+ 	beq OnlyOnePlaceToCarve
+	;--this routine tries to find a random place in our new passage to carve downwards
+	;--picks a random number, then subtracts the length of the passage
+	;	until we cross zero, then adds length back for spot to add downward passage
+ 	jsr UpdateRandomNumberBank2
+	;--new routine:
+	;	decrease length by 1, then remove random bits
+	dec Temp+1
+	and Temp+1
+	sta Temp+1
+OnlyOnePlaceToCarve
+	lda Temp
+	sec
+	sbc Temp+1
+	sta Temp+1
+	txa
+	pha
+	ldx Temp+1
+	lda PFMaskLookupBank2,X
+	eor #$FF
+	pha
+	lda PFRegisterLookupBank2,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	pha
+	dey
+	and (MiscPtr),Y
+	sta (MiscPtr),Y
+	pla
+	dey
+	bmi AtBottomRow
+	and (MiscPtr),Y
+	sta (MiscPtr),Y
+AtBottomRow
+	iny	
+	iny		;restore Y to current row index
+	pla		;get block index back into X
+	tax
+	dex
+	stx Temp
+	stx Temp+1
+	lda #<PF1Left
+	sta MiscPtr
+	dex
+	bmi DoneWithRow
+	bpl MakeMazeLoopOuter
+EndRunBeginNextRun
+	dex
+	stx Temp
+	stx Temp+1
+	lda #<PF1Left
+	sta MiscPtr
+
+	
+DoneWithRow
+DoneWithFirstPass
+	dec MazeGenerationPass
+
+	bpl NotCompletelyDoneWithMaze
+
+
+	;--final touchup:
+	;	open up area directly above base:
+	;--- change to CLOSE up area directly above base, not sure about this.
+	lda PF2Left
+	ora #$F0
+	sta PF2Left
+	lda PF2Right
+	ora #$F0
+	sta PF2Right
+
+	;--add walls on bottom row surrounding base
+	lda #$30
+	sta LastRowL
+	sta LastRowR
+	
+	;--and clear GAMEOFF flag and turn off maze generation flag
+	lda GameStatus
+	and #~(GENERATINGMAZE|GAMEOFF)
+	sta GameStatus
+	
+
+	;--set starting tank position
+	
+	;--move tanks off screen
+	lda #255		;--loop until X = 255 (-1)
+	jsr MoveEnemyTanksOffScreen	
+	
+	lda #20
+	sta TanksRemaining
+	
+	;--starting timers for when tanks enter the maze
+	lda #15
+	sta TankStatus+1
+	lsr
+	sta TankStatus+2
+	lsr
+	sta TankStatus+3
+	
+	;--set speed for player tank
+	lda #TANKRIGHT|PLAYERTANKSPEED
+	sta TankStatus
+	
+NotCompletelyDoneWithMaze
+	;--restore original random number
+	lda RandomNumber
+	sta Temp+2
+	pla
+	sta RandomNumber
+	
+	jmp ReturnFromBSSubroutine2
+	
+		
+;****************************************************************************
+
+
+UpdateRandomNumberBank2
+    lda RandomNumber
+    lsr
+    bcc .SkipEOR
+    eor #$B2
+.SkipEOR
+    sta RandomNumber
+    rts
+
+;****************************************************************************
+
+
+	
+	
+MoveEnemyTanksOffScreen
+	sta Temp
+	ldx #3
+SetStartingEnemyTankLocationsLoop
+	lda StartingTankXPosition,X
+	sta TankX,X
+	lda StartingTankYPosition,X
+	sta TankY,X
+	dex
+	cpx Temp
+	bne SetStartingEnemyTankLocationsLoop
+
+	rts	
+
+;****************************************************************************
+
+	;come in with amount to increase in A (units and tens) and Temp (100s and 1000s)
+IncreaseScoreSubroutine
+	clc
+	sed
+	adc Score+2
+	sta Score+2
+	lda Score+1
+	adc Temp
+	sta Score+1
+	lda Score
+	adc #0
+	sta Score
+	cld
+	rts
+
+;****************************************************************************
+
+CollisionsSubroutine
+
+	;--need to use software collision detection, at least for ball
+	ldx #3
+CheckBallCollisionsLoop
+	;--check for collision with wall
+	lda BulletX,X
+	cmp #BALLOFFSCREEN
+	beq BallHasNotHitBlock	;short circuit if the ball is offscreen
+	sta Temp
+	lda BulletY,X
+	sec
+	sbc #2
+	sta Temp+1
+	jsr IsBlockAtPositionBank2
+	;--result is in Temp
+	lda Temp
+	beq BallHasNotHitBlock
+	;--remove block from screen!
+	
+	;--first, add to score
+	lda #0
+	sta Temp
+	lda #5
+	jsr IncreaseScoreSubroutine
+	
+	;--get row of block into Y and column into Temp+1
+
+	lda BulletY,X
+	ldy #0
+	sec
+	sbc #2
+GetRowBulletIsInLoop
+	sbc #BLOCKHEIGHT
+	bcc FoundWhichRowBulletIsIn
+	iny
+	jmp GetRowBulletIsInLoop
+FoundWhichRowBulletIsIn
+	;--special check for row = 0
+	tya
+	bne BulletNotOnBottomRow
+	;--all we care is left or right of center
+	lda BulletX,X
+	cmp #80
+	bcc BulletOnLeftLastRow
+	lda #0
+	sta LastRowR
+	beq RemovedWallBlock
+BulletOnLeftLastRow
+	lda #0
+	sta LastRowL
+	beq RemovedWallBlock
+BulletNotOnBottomRow
+	lda BulletX,X
+	sec
+	sbc #16
+	lsr
+	lsr
+	lsr
+	sta Temp+1
+	txa
+	pha
+		
+	lda #<PF1Left
+	sta MiscPtr
+	lda #>PF1Left
+	sta MiscPtr+1
+	ldx Temp+1
+	lda PFMaskLookupBank2,X
+	eor #$FF
+	pha
+	lda PFRegisterLookupBank2,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	dey
+	and (MiscPtr),Y
+	sta (MiscPtr),Y	
+	pla
+	tax
+RemovedWallBlock
+	;--bullet has hit block, remove bullet from screen:
+	lda #BALLOFFSCREEN
+	sta BulletX,X
+	sta BulletY,X
+	
+	;--play brick explosion sound
+	;--only start if longer explosion not happening
+	ldy #BRICKSOUND
+	jsr StartSoundSubroutineBank2
+	
+NoSoundForBrickExplosion
+	
+	
+BallHasNotHitBlock
+	dex
+	bpl CheckBallCollisionsLoop
+
+
+	;--now check if bullet has hit an enemy tank
+	
+	ldx #3
+CheckBulletTankCollisionOuterLoop
+	;first check if tank is offscreen
+	lda TankY,X
+	cmp #MAZEAREAHEIGHT+TANKHEIGHT+4
+	beq EnemyTankOffscreen
+	
+	;now compare ball location to tank location
+	;--only care about player bullets
+	ldy #3
+CheckBulletTankCollisionInnerLoop
+	lda BulletX,Y
+	cmp #BALLOFFSCREEN
+	beq BulletOffScreen
+	;--compare X position
+	clc
+	adc #1
+	cmp TankX,X
+	bcc BulletDidNotHitTank 
+	sbc #1
+	sta Temp
+	lda TankX,X
+	clc
+	adc #8
+	cmp Temp
+	bcc BulletDidNotHitTank
+	;--compare Y position
+	lda BulletY,Y
+	sec
+	sbc #1
+	cmp TankY,X
+	bcs BulletDidNotHitTank
+	adc #1
+	sta Temp
+	lda TankY,X
+	sec
+	sbc #TANKHEIGHT
+	cmp Temp
+	bcs BulletDidNotHitTank
+	
+	
+	
+	;--bullet did hit tank.
+	;	remove bullet and tank from screen
+	lda #BALLOFFSCREEN
+	sta BulletX,Y
+	sta BulletY,Y
+	lda StartingTankYPosition,X
+	sta TankY,X
+	lda StartingTankXPosition,X
+	sta TankX,X
+	lda StartingTankStatus,X
+	sta TankStatus,X
+	
+	ldy #ENEMYTANKSOUND
+	jsr StartSoundSubroutineBank2
+	
+	;--first, add 100 to score
+	lda #$01
+	sta Temp
+	lda #$00
+	jsr IncreaseScoreSubroutine
+	
+	;--and decrease tanks remaining ONLY if enemy tank hit
+	dec TanksRemaining
+	bne LevelNotComplete
+	;--set levelcomplete flag
+	lda GameStatus
+	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
+	sta GameStatus
+	;--remove remaining enemy tanks from screen
+	lda #0		;--X will return with this number in it
+	jsr MoveEnemyTanksOffScreen
+		
+	;--increase score by some amount ...
+	;---what I'd like to do is give like 10 points or something for every brick remaining
+	;	but that could be complicated
+	;	for now, just add level * 100
+	lda MazeNumber
+	sta Temp
+	txa		;--X = 0 following loop above
+	jsr IncreaseScoreSubroutine	;JMP here because if level complete we don't need the rest of this subroutine
+	
+LevelNotComplete
+	
+	
+BulletDidNotHitTank
+BulletOffScreen
+	dey
+	bpl CheckBulletTankCollisionInnerLoop
+	
+EnemyTankOffscreen
+	dex
+	bpl CheckBulletTankCollisionOuterLoop
+	
+	
+	jmp ReturnFromBSSubroutine2
+
+;****************************************************************************
+
+StartSoundSubroutineBank2
+	
+	lda Channel1Decay
+	and #$F0
+	bne .DoNotStartSound
+	lda ToneBank2,Y
+	sta AUDC1
+	lda FrequencyBank2,Y
+	sta AUDF1
+	lda SoundLengthBank2,Y
+	sta Channel1Decay
+	
+.DoNotStartSound
+	rts
+
+	
+;****************************************************************************
+
+
+IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
+	;--returns result in Temp
+	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
+	;--except now first row has walls at two positions (maybe!) only
+		
+	txa
+	pha			;save X on stack
+	lda Temp
+	sec
+	sbc #16
+	lsr
+	lsr
+	lsr
+	tax
+	lda PFRegisterLookupBank2,X
+	pha
+	lda PFMaskLookupBank2,X
+	pha
+	lda Temp+1
+	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
+	sec
+	sbc #BLOCKHEIGHT
+	bcs .NotOnBottomRow
+	;--on bottom row
+	;--only two blocks on bottom row
+	;	at X positions (LastRowL) 64-72 and (LastRowR) 88-96
+	lda LastRowL
+	beq .LastRowNoWallOnLeft
+	lda Temp
+	cmp #73
+	bcs .LastRowCheckRightBlock
+	cmp #64
+	bcs .FoundWhetherBlockExists
+.LastRowNoWallOnLeft
+.LastRowCheckRightBlock
+	lda LastRowR
+	beq .FoundWhetherBlockExists
+	lda Temp
+	cmp #96
+	bcs .LastRowNoHit
+	cmp #88
+	bcs .FoundWhetherBlockExists
+.LastRowNoHit
+	lda #0
+	beq .FoundWhetherBlockExists
+.NotOnBottomRow	
+	;--divide by blockheight
+	;maximum Y value is 77 (TANKAREAHEIGHT=77)
+	;	we subtract BLOCKHEIGHT above to see if we are on the bottom row
+	;	so maximum once we are here is 70
+	;	BLOCKHEIGHT = 7
+	; 	so maximum loops is 10
+
+
+
+	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
+	;	post gives credit to December '84 Apple Assembly Line
+	;--constant cycle count divide by 7 !!!!
+	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
+	sta Temp
+	lsr
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	tax
+
+	;--now add X to 2nd element on stack
+	txa
+	tsx
+	clc
+	adc $00+2,X
+	tax
+	
+	lda PF1Left,X
+	tsx
+	and $00+1,X
+.FoundWhetherBlockExists
+	;--result is now in A --nonzero means a block is there, zero means no
+	sta Temp		;result goes into Temp
+	pla
+	pla		;get intermediate results off of stack
+	pla
+	tax		;restore X from stack
+	rts
+	
+	
+	
 ;------------------------------------------------------
 ;---------------------DATA-----------------------------
 ;------------------------------------------------------
@@ -3898,10 +4034,62 @@ TankDownFrame
 TankRightFrame
 	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
+	
+BulletDirectionMask
+	.byte %11, %11<<2, %11<<4, %11<<6
+
+BulletDirectionClearBank2
+BulletUpBank2
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDownBank2
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeftBank2
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRightBank2
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+	
+	
+	
+PFRegisterLookupBank2
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+	
+	
+PFMaskLookupBank2
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	
+	
+StartingTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+
+StartingTankYPosition 
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+	
+StartingTankStatus
+	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+
+	
+	
+ToneBank2
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
+
+FrequencyBank2
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ
+
+SoundLengthBank2
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
+	
 ;****************************************************************************	
 
+    echo "----", ($3F00-*), " bytes left (ROM) in Bank 2"
 
-	org $2F00
+   	org $2F00
 	rorg $3F00
 	
 BankSwitchSubroutine2
