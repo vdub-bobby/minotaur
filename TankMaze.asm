@@ -347,8 +347,8 @@ MiscPtr ds 2
 
 	seg Bank0
 
-	org $D000
-	rorg $F000
+	org $1000
+	rorg $1000
 
 Start
 	sta $1FF8
@@ -484,9 +484,9 @@ PositioningLoopVBLANK	;--excluding players
 	and #1
 	asl
 	tax
-	lda RotationTables,X
+	lda RotationTablesBank1,X
 	sta MiscPtr
-	lda RotationTables+1,X
+	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
 	
 	lda #WALLCOLOR
@@ -963,7 +963,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #44
+	lda #50
 	sta TIM64T
 	
 	dec FrameCounter
@@ -987,7 +987,8 @@ TriggerDebounceZero
 
 	jsr ReadConsoleSwitchesSubroutine
 
-	jsr KernelSetupSubroutine
+	brk
+	.word KernelSetupSubroutine
 
 	
 
@@ -1097,6 +1098,299 @@ WaitForOverscanEnd
 
 
 
+
+ReadConsoleSwitchesSubroutine
+
+	lda SWCHB
+	lsr				;get RESET into carry
+	bcc RESETPressed
+	;--reset not pressed, so reset debounce flag
+	lda Debounce
+	and #~CONSOLEDEBOUNCEFLAG
+	sta Debounce
+RESETNotReleased
+DoneWithConsoleSwitches
+	rts
+
+RESETPressed
+	lda Debounce
+	and #CONSOLEDEBOUNCEFLAG
+	
+	bne RESETNotReleased
+	lda Debounce
+	ora #CONSOLEDEBOUNCEFLAG
+	sta Debounce
+StartNewLevel
+	;--start game
+	lda GameStatus
+	ora #GENERATINGMAZE
+	sta GameStatus
+	
+	;--move tanks off screen, immobilize and set score to zeroes
+	ldx #3
+	lda #TANKOFFSCREEN
+	ldy #0
+MoveTanksOffscreenLoop
+	sta TankX,X
+	sta TankY,X
+ 	sty TankStatus,X
+	sty Score,X
+	dex
+	bpl MoveTanksOffscreenLoop
+	
+	stx MazeGenerationPass
+	
+	;--finally, cycle the random number
+	jmp UpdateRandomNumber				;--return from subroutine there
+	
+
+;****************************************************************************
+	
+GenerateMazeSubroutine
+
+	;--first, save RandomNumber
+	lda RandomNumber
+	pha
+	
+	;--let's try splitting it 
+	ldy MazeGenerationPass
+	bpl NotFirstPass
+	ldy #MAZEGENERATIONPASSES+1
+	sty MazeGenerationPass
+	;--on first pass, fill all with walls
+	
+	ldx #MAZEROWS-2
+	lda #$FF
+FillMazeLoop
+	sta PF1Left,X
+	sta PF2Left,X
+	sta PF2Right,X
+	sta PF1Right,X
+	dex 
+	bpl FillMazeLoop
+	
+	;	leave room for enemy tanks to enter:
+	ldx #$3F
+	;clear upper L corner
+	txa
+	and PF1Left+MAZEROWS-2
+	sta PF1Left+MAZEROWS-2
+	
+	;clear upper R corner
+	txa
+	and PF1Right+MAZEROWS-2
+	sta PF1Right+MAZEROWS-2
+	
+	;clear spot directly to L of center in top row
+	txa
+	and PF2Left+MAZEROWS-2
+	sta PF2Left+MAZEROWS-2
+	
+	;--update maze number on first pass also
+	sed
+	lda MazeNumber
+UpdateMazeNumber
+	clc
+	adc #$01
+	sta MazeNumber
+	beq UpdateMazeNumber
+	cld
+
+	;and set seed for maze
+	sta RandomNumber	
+	
+	;--and that's it for the first pass
+	jmp DoneWithFirstPass
+	
+NotFirstPass
+	lda Temp+2
+	sta RandomNumber
+
+	;--use MazeNumber as seed of random number generator
+	;--save current random number so we can restore it when we are done.
+
+	lda #>PF1Left
+	sta MiscPtr+1
+
+	;--now what we are doing is going through every other row
+	;	starting at a random block on the right, and carving out a random-length
+	;	horizontal path to the left.
+	;	when we finish that, we pick a random spot to carve a block out of the row below
+	;	and then we move two blocks to the left (if there is room), and repeat for another 
+	;	random-length horizontal path
+	;	once done with a row, we move two rows down and repeat the whole process
+	;	Y holds row, X holds block within the row
+	
+	tya
+	asl
+	clc
+	adc #1
+	tay
+
+	jsr UpdateRandomNumber
+	and #1
+	eor #15
+	tax
+	
+MakeMazeLoopOuter	
+	stx Temp
+	stx Temp+1
+MakeMazeLoopInner
+	lda #<PF1Left
+	sta MiscPtr
+	
+	;--clear block
+	lda PFMaskLookup,X
+	eor #$FF
+	pha
+	lda PFRegisterLookup,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	and (MiscPtr),Y	
+	sta (MiscPtr),Y
+	
+	lda #<PF1Left
+	sta MiscPtr
+
+	;--are we at the end of our horizontal path?  compare random number to constant
+	jsr UpdateRandomNumber
+	;lda RandomNumber
+	cmp #MAZEPATHCUTOFF
+	bcc EndOfRun
+	;--not at the end of the run, so loop around
+	dec Temp+1
+	dex
+	bpl MakeMazeLoopInner
+
+	;--need to carve a passage downward if we reach this spot:
+EndOfRun
+	;--don't carve passage downward if we're on the bottom row
+	cpy #0
+	beq EndRunBeginNextRun
+	;--otherwise, find a random passage to carve
+	;--Temp holds starting block number (X)
+	;--Temp+1 holds ending block number
+	lda Temp
+	sec
+	sbc Temp+1
+	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
+ 	beq OnlyOnePlaceToCarve
+	;--this routine tries to find a random place in our new passage to carve downwards
+	;--picks a random number, then subtracts the length of the passage
+	;	until we cross zero, then adds length back for spot to add downward passage
+ 	jsr UpdateRandomNumber
+	;--new routine:
+	;	decrease length by 1, then remove random bits
+	dec Temp+1
+	and Temp+1
+	sta Temp+1
+OnlyOnePlaceToCarve
+	lda Temp
+	sec
+	sbc Temp+1
+	sta Temp+1
+	txa
+	pha
+	ldx Temp+1
+	lda PFMaskLookup,X
+	eor #$FF
+	pha
+	lda PFRegisterLookup,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	pha
+	dey
+	and (MiscPtr),Y
+	sta (MiscPtr),Y
+	pla
+	dey
+	bmi AtBottomRow
+	and (MiscPtr),Y
+	sta (MiscPtr),Y
+AtBottomRow
+	iny	
+	iny		;restore Y to current row index
+	pla		;get block index back into X
+	tax
+	dex
+	stx Temp
+	stx Temp+1
+	lda #<PF1Left
+	sta MiscPtr
+	dex
+	bmi DoneWithRow
+	bpl MakeMazeLoopOuter
+EndRunBeginNextRun
+	dex
+	stx Temp
+	stx Temp+1
+	lda #<PF1Left
+	sta MiscPtr
+
+	
+DoneWithRow
+DoneWithFirstPass
+	dec MazeGenerationPass
+
+	bpl NotCompletelyDoneWithMaze
+
+
+	;--final touchup:
+	;	open up area directly above base:
+	;--- change to CLOSE up area directly above base, not sure about this.
+	lda PF2Left
+	ora #$F0
+	sta PF2Left
+	lda PF2Right
+	ora #$F0
+	sta PF2Right
+
+	;--add walls on bottom row surrounding base
+	lda #$30
+	sta LastRowL
+	sta LastRowR
+	
+	;--and clear GAMEOFF flag and turn off maze generation flag
+	lda GameStatus
+	and #~(GENERATINGMAZE|GAMEOFF)
+	sta GameStatus
+	
+
+	;--set starting tank position
+	
+	;--move tanks off screen
+	lda #255		;--loop until X = 255 (-1)
+	jsr MoveEnemyTanksOffScreen	
+	
+	lda #20
+	sta TanksRemaining
+	
+	;--starting timers for when tanks enter the maze
+	lda #15
+	sta TankStatus+1
+	lsr
+	sta TankStatus+2
+	lsr
+	sta TankStatus+3
+	
+	;--set speed for player tank
+	lda #TANKRIGHT|PLAYERTANKSPEED
+	sta TankStatus
+	
+NotCompletelyDoneWithMaze
+	;--restore original random number
+	lda RandomNumber
+	sta Temp+2
+	pla
+	sta RandomNumber
+	
+	rts
+	
+;*******************************************************************
 
 InitialSetupSubroutine
 
@@ -1805,300 +2099,6 @@ DoNotStartSound
 ;****************************************************************************
 
 
-
-ReadConsoleSwitchesSubroutine
-
-	lda SWCHB
-	lsr				;get RESET into carry
-	bcc RESETPressed
-	;--reset not pressed, so reset debounce flag
-	lda Debounce
-	and #~CONSOLEDEBOUNCEFLAG
-	sta Debounce
-RESETNotReleased
-DoneWithConsoleSwitches
-	rts
-
-RESETPressed
-	lda Debounce
-	and #CONSOLEDEBOUNCEFLAG
-	
-	bne RESETNotReleased
-	lda Debounce
-	ora #CONSOLEDEBOUNCEFLAG
-	sta Debounce
-StartNewLevel
-	;--start game
-	lda GameStatus
-	ora #GENERATINGMAZE
-	sta GameStatus
-	
-	;--move tanks off screen, immobilize and set score to zeroes
-	ldx #3
-	lda #TANKOFFSCREEN
-	ldy #0
-MoveTanksOffscreenLoop
-	sta TankX,X
-	sta TankY,X
- 	sty TankStatus,X
-	sty Score,X
-	dex
-	bpl MoveTanksOffscreenLoop
-	
-	stx MazeGenerationPass
-	
-	;--finally, cycle the random number
-	jmp UpdateRandomNumber				;--return from subroutine there
-	
-
-;****************************************************************************
-	
-GenerateMazeSubroutine
-
-	;--first, save RandomNumber
-	lda RandomNumber
-	pha
-	
-	;--let's try splitting it 
-	ldy MazeGenerationPass
-	bpl NotFirstPass
-	ldy #MAZEGENERATIONPASSES+1
-	sty MazeGenerationPass
-	;--on first pass, fill all with walls
-	
-	ldx #MAZEROWS-2
-	lda #$FF
-FillMazeLoop
-	sta PF1Left,X
-	sta PF2Left,X
-	sta PF2Right,X
-	sta PF1Right,X
-	dex 
-	bpl FillMazeLoop
-	
-	;	leave room for enemy tanks to enter:
-	ldx #$3F
-	;clear upper L corner
-	txa
-	and PF1Left+MAZEROWS-2
-	sta PF1Left+MAZEROWS-2
-	
-	;clear upper R corner
-	txa
-	and PF1Right+MAZEROWS-2
-	sta PF1Right+MAZEROWS-2
-	
-	;clear spot directly to L of center in top row
-	txa
-	and PF2Left+MAZEROWS-2
-	sta PF2Left+MAZEROWS-2
-	
-	;--update maze number on first pass also
-	sed
-	lda MazeNumber
-UpdateMazeNumber
-	clc
-	adc #$01
-	sta MazeNumber
-	beq UpdateMazeNumber
-	cld
-
-	;and set seed for maze
-	sta RandomNumber	
-	
-	;--and that's it for the first pass
-	jmp DoneWithFirstPass
-	
-NotFirstPass
-	lda Temp+2
-	sta RandomNumber
-
-	;--use MazeNumber as seed of random number generator
-	;--save current random number so we can restore it when we are done.
-
-	lda #>PF1Left
-	sta MiscPtr+1
-
-	;--now what we are doing is going through every other row
-	;	starting at a random block on the right, and carving out a random-length
-	;	horizontal path to the left.
-	;	when we finish that, we pick a random spot to carve a block out of the row below
-	;	and then we move two blocks to the left (if there is room), and repeat for another 
-	;	random-length horizontal path
-	;	once done with a row, we move two rows down and repeat the whole process
-	;	Y holds row, X holds block within the row
-	
-	tya
-	asl
-	clc
-	adc #1
-	tay
-
-	jsr UpdateRandomNumber
-	and #1
-	eor #15
-	tax
-	
-MakeMazeLoopOuter	
-	stx Temp
-	stx Temp+1
-MakeMazeLoopInner
-	lda #<PF1Left
-	sta MiscPtr
-	
-	;--clear block
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	and (MiscPtr),Y	
-	sta (MiscPtr),Y
-	
-	lda #<PF1Left
-	sta MiscPtr
-
-	;--are we at the end of our horizontal path?  compare random number to constant
-	jsr UpdateRandomNumber
-	;lda RandomNumber
-	cmp #MAZEPATHCUTOFF
-	bcc EndOfRun
-	;--not at the end of the run, so loop around
-	dec Temp+1
-	dex
-	bpl MakeMazeLoopInner
-
-	;--need to carve a passage downward if we reach this spot:
-EndOfRun
-	;--don't carve passage downward if we're on the bottom row
-	cpy #0
-	beq EndRunBeginNextRun
-	;--otherwise, find a random passage to carve
-	;--Temp holds starting block number (X)
-	;--Temp+1 holds ending block number
-	lda Temp
-	sec
-	sbc Temp+1
-	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
- 	beq OnlyOnePlaceToCarve
-	;--this routine tries to find a random place in our new passage to carve downwards
-	;--picks a random number, then subtracts the length of the passage
-	;	until we cross zero, then adds length back for spot to add downward passage
- 	jsr UpdateRandomNumber
-	;--new routine:
-	;	decrease length by 1, then remove random bits
-	dec Temp+1
-	and Temp+1
-	sta Temp+1
-OnlyOnePlaceToCarve
-	lda Temp
-	sec
-	sbc Temp+1
-	sta Temp+1
-	txa
-	pha
-	ldx Temp+1
-	lda PFMaskLookup,X
-	eor #$FF
-	pha
-	lda PFRegisterLookup,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	pha
-	dey
-	and (MiscPtr),Y
-	sta (MiscPtr),Y
-	pla
-	dey
-	bmi AtBottomRow
-	and (MiscPtr),Y
-	sta (MiscPtr),Y
-AtBottomRow
-	iny	
-	iny		;restore Y to current row index
-	pla		;get block index back into X
-	tax
-	dex
-	stx Temp
-	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
-	dex
-	bmi DoneWithRow
-	bpl MakeMazeLoopOuter
-EndRunBeginNextRun
-	dex
-	stx Temp
-	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
-
-	
-DoneWithRow
-DoneWithFirstPass
-	dec MazeGenerationPass
-
-	bpl NotCompletelyDoneWithMaze
-
-
-	;--final touchup:
-	;	open up area directly above base:
-	;--- change to CLOSE up area directly above base, not sure about this.
-	lda PF2Left
-	ora #$F0
-	sta PF2Left
-	lda PF2Right
-	ora #$F0
-	sta PF2Right
-
-	;--add walls on bottom row surrounding base
-	lda #$30
-	sta LastRowL
-	sta LastRowR
-	
-	;--and clear GAMEOFF flag and turn off maze generation flag
-	lda GameStatus
-	and #~(GENERATINGMAZE|GAMEOFF)
-	sta GameStatus
-	
-
-	;--set starting tank position
-	
-	;--move tanks off screen
-	lda #255		;--loop until X = 255 (-1)
-	jsr MoveEnemyTanksOffScreen	
-	
-	lda #20
-	sta TanksRemaining
-	
-	;--starting timers for when tanks enter the maze
-	lda #15
-	sta TankStatus+1
-	lsr
-	sta TankStatus+2
-	lsr
-	sta TankStatus+3
-	
-	;--set speed for player tank
-	lda #TANKRIGHT|PLAYERTANKSPEED
-	sta TankStatus
-	
-NotCompletelyDoneWithMaze
-	;--restore original random number
-	lda RandomNumber
-	sta Temp+2
-	pla
-	sta RandomNumber
-	
-	rts
-
-	
-;****************************************************************************
 	
 	
 MoveEnemyTanksOffScreen
@@ -2589,235 +2589,7 @@ TriggerNotDebounced
 ;****************************************************************************
 
 
-KernelSetupSubroutine
 
-
-	;rotate Tanks through Players and Missiles
-	
-	lda FrameCounter
-	and #1
-	asl
-	tax
-	lda RotationTables,X
-	sta MiscPtr
-	lda RotationTables+1,X
-	sta MiscPtr+1
-	ldy #3
-RotationLoop
-	lax (MiscPtr),Y
-	lda TankX,Y
-	sta PlayerX,X
-	lda TankY,Y
-	sta PlayerY,X
-	txa
-	lsr		;--only setup gfx pointer when the tank is displayed with the player
-	beq PlayerNotMissile 
-	jmp MissileNotPlayer
-PlayerNotMissile
-	;--get correct tank gfx ptr set up
-	txa
-	asl
-	asl
-	tax		;we need X * 4
-	lda TankStatus,Y
-	and #TANKUP
-	beq TankNotFacingUp
-	
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
-	lda TankUpFrame,X
-	pha
-	lda TankUpFrame+1,X
-	ldx Temp		;restore X
-	jmp SetTankGfxPtr
-TankNotFacingUp
-	lda TankStatus,Y
-	and #TANKDOWN
-	beq TankNotFacingDown
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
-	lda TankDownFrame,X
-	pha
-	lda TankDownFrame+1,X
-	ldx Temp		;restore X
-	jmp SetTankGfxPtr
-TankNotFacingDown
-	lda TankStatus,Y
-	and #TANKRIGHT
-	beq TankNotFacingRight
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-	ldx Temp		;restore X
-	jmp SetTankGfxPtr
-TankNotFacingRight
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-	ldx Temp		;restore X
-SetTankGfxPtr
-	sta Player0Ptr+1,X
-	sta Player0Ptr+3,X
-	pla
-	clc
-	adc #TANKHEIGHT
-	sec
-	sbc TankY,Y
-	sta Player0Ptr,X
-	clc
-	adc #TANKHEIGHT
-	sta Player0Ptr+2,X
-	jmp EndRotationLoop
-MissileNotPlayer	
-	;--adjust missile width and position
-MissileNotPlayer	
-	;--adjust missile width and position
-	txa
-	and #1
-	tax		;get correct index
-	lda MissileX,X
-	sec
-	sbc #2
-	sta MissileX,X
-	lda #OCTWIDTHMISSILE
-	sta NUSIZ0,X
-	lda #TANKHEIGHT-2
-	sta MissileHeight,X
-EndRotationLoop
-	dey
-	bmi DoneWithRotationLoop
-	jmp RotationLoop
-DoneWithRotationLoop
-	
-	
-	lda #TANKAREAHEIGHT
-	sec
-	sbc PlayerY+1
-	adc #TANKHEIGHT
-	asl
-	sta PlayerYTemp
-
-	lda PlayerY
-	sta Player0Top
-	sec
-	sbc #TANKHEIGHT	
-	ora #$80
-	sta Player0Bottom
-	lda PlayerY
-	cmp #TANKAREAHEIGHT
-	bcc NoSpecialAdjustmentToPlayer0Top
-	lda Player0Bottom
-	sta Player0Top	
-
-NoSpecialAdjustmentToPlayer0Top
-
-
-
-
-
-
-
-
-	ldx #1
-PreKernelSetupLoop2
-	lda #TANKAREAHEIGHT+1
-	sec
-	sbc MissileY,X
-	adc MissileHeight,X
-	sta MissileYTemp,X
-	
-	lda MissileX,X
-	clc
-	adc #3
-	sta MissileX,X
-	dex
-	bpl PreKernelSetupLoop2
-	
-	
-	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
-	ldx #1
-AdjustMissileYLoop
-	lda MissileYTemp,X
-	cmp #TANKHEIGHT-2
-	bcs NoAdjustMissileY
-	adc #1
-	sta MissileYTemp,X
-NoAdjustMissileY
-	dex
-	bpl AdjustMissileYLoop
-	
-	
-	;bullet flicker rotation:
-	lda FrameCounter
-	and #3
-	tax
-	lda BulletX,X
-	sta BallX
-	lda BulletY,X
-	sta BallY
-
-
-	;--cycle BaseColor
-	lda FrameCounter
-	and #$0F
-	sta Temp
-	lda #BASECOLOR
-	and #$F0
-	ora Temp
-	sta Temp+1
-	
-	;--set up score pointers
-	
-	ldx #10
-SetupScorePtrsLoop
-	txa
-	lsr
-	lsr
-	tay
-	lda Score,Y
-	pha
-	and #$0F
-	tay
-	lda DigitDataLo,Y
-	sta ScorePtr,X
-	pla
-	lsr
-	lsr
-	lsr
-	lsr
-	tay
-	lda DigitDataLo,Y
-	sta ScorePtr-2,X
-	lda #>DigitData
-	sta ScorePtr+1,X
-	sta ScorePtr-1,X
-	dex
-	dex
-	dex
-	dex
-	bpl SetupScorePtrsLoop
-	
-	
-	
-	rts
-	
-;****************************************************************************
 
 
 IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
@@ -3485,9 +3257,6 @@ PFRegisterLookup
 
 
 		align 256
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 	
 DigitData
 Zero
@@ -3654,12 +3423,6 @@ TankRightAnimated4b
 		
 		
 		
-TankUpFrame
-	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
-TankDownFrame
-	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
-TankRightFrame
-	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
 
 TanksRemainingGfx
 ;	.byte 0
@@ -3677,15 +3440,7 @@ TanksRemainingGfx
 	
 StartingTankStatus
 	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-RotationOdd
-	.byte 0	;and first 3 bytes of next table
-RotationEven
-	.byte 2, 1, 3, 0
-; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
-; 	.byte 2, 1, 3	
 
-RotationTables
-	.word RotationEven, RotationOdd	
 		
 	
 ;--if we are aiming at RAM locations, how do we aim at the base?  Base X = 80, Y = 0
@@ -3814,15 +3569,61 @@ NumberOfBitsSet
 MovementMask
 	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 	
+RotationTablesBank1
+	.word RotationEvenBank1, RotationOddBank1	
+
+RotationOddBank1
+	.byte 0	;and first 3 bytes of next table
+RotationEvenBank1
+	.byte 2, 1, 3, 0
+; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
+; 	.byte 2, 1, 3	
 
 		
     echo "----", ($10000-*), " bytes left (ROM)"
 
+	org $1F00
+	rorg $1F00
+	
+BankSwitchSubroutine1
+	plp
+	tsx
+	dec $01,X
+	lda ($01,X)
+	sta MiscPtr
+	inc $01,X
+	lda ($01,X)
+	sta MiscPtr+1
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+	
+	jmp (MiscPtr)
+	
+ReturnFromBSSubroutine1
+	tsx
+	inx
+	inx
+	lda $00,X      ;get high byte of return address
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+	
+	rts    
 
-    org $DFFC
-    rorg $FFFC
+	org $1FFC
+    rorg $1FFC
+    
 	.word Start
-	.word Start
+	.word BankSwitchSubroutine1
 
 ;----------------------------------------------------------------------------------------------------
 ;----------------------------------------------------------------------------------------------------
@@ -3831,16 +3632,317 @@ MovementMask
 ;----------------------------------------------------------------------------------------------------
 
 
-	org $E000
-	rorg $F000
+	org $2000
+	rorg $3000
 
 Start2
 	sta $1FF8
 
 	
+
+
+	
+
+
+
+	
+;****************************************************************************	
+
+KernelSetupSubroutine
+
+
+	;rotate Tanks through Players and Missiles
+	
+	lda FrameCounter
+	and #1
+	asl
+	tax
+	lda RotationTables,X
+	sta MiscPtr
+	lda RotationTables+1,X
+	sta MiscPtr+1
+	ldy #3
+RotationLoop
+	lax (MiscPtr),Y
+	lda TankX,Y
+	sta PlayerX,X
+	lda TankY,Y
+	sta PlayerY,X
+	txa
+	lsr		;--only setup gfx pointer when the tank is displayed with the player
+	beq PlayerNotMissile 
+	jmp MissileNotPlayer
+PlayerNotMissile
+	;--get correct tank gfx ptr set up
+	txa
+	asl
+	asl
+	tax		;we need X * 4
+	lda TankStatus,Y
+	and #TANKUP
+	beq TankNotFacingUp
+	
+	stx Temp		;save X index
+	lda FrameCounter
+	lsr
+	and #%00000110
+	tax
+	lda TankUpFrame,X
+	pha
+	lda TankUpFrame+1,X
+	ldx Temp		;restore X
+	jmp SetTankGfxPtr
+TankNotFacingUp
+	lda TankStatus,Y
+	and #TANKDOWN
+	beq TankNotFacingDown
+	stx Temp		;save X index
+	lda FrameCounter
+	lsr
+	and #%00000110
+	tax
+	lda TankDownFrame,X
+	pha
+	lda TankDownFrame+1,X
+	ldx Temp		;restore X
+	jmp SetTankGfxPtr
+TankNotFacingDown
+	lda TankStatus,Y
+	and #TANKRIGHT
+	beq TankNotFacingRight
+	stx Temp		;save X index
+	lda FrameCounter
+	lsr
+	and #%00000110
+	tax
+	lda TankRightFrame,X
+	pha
+	lda TankRightFrame+1,X
+	ldx Temp		;restore X
+	jmp SetTankGfxPtr
+TankNotFacingRight
+	stx Temp		;save X index
+	lda FrameCounter
+	lsr
+	and #%00000110
+	tax
+	lda TankRightFrame,X
+	pha
+	lda TankRightFrame+1,X
+	ldx Temp		;restore X
+SetTankGfxPtr
+	sta Player0Ptr+1,X
+	sta Player0Ptr+3,X
+	pla
+	clc
+	adc #TANKHEIGHT
+	sec
+	sbc TankY,Y
+	sta Player0Ptr,X
+	clc
+	adc #TANKHEIGHT
+	sta Player0Ptr+2,X
+	jmp EndRotationLoop
+MissileNotPlayer	
+	;--adjust missile width and position
+MissileNotPlayer	
+	;--adjust missile width and position
+	txa
+	and #1
+	tax		;get correct index
+	lda MissileX,X
+	sec
+	sbc #2
+	sta MissileX,X
+	lda #OCTWIDTHMISSILE
+	sta NUSIZ0,X
+	lda #TANKHEIGHT-2
+	sta MissileHeight,X
+EndRotationLoop
+	dey
+	bmi DoneWithRotationLoop
+	jmp RotationLoop
+DoneWithRotationLoop
 	
 	
-	org $EFFC
-	rorg $FFFC
+	lda #TANKAREAHEIGHT
+	sec
+	sbc PlayerY+1
+	adc #TANKHEIGHT
+	asl
+	sta PlayerYTemp
+
+	lda PlayerY
+	sta Player0Top
+	sec
+	sbc #TANKHEIGHT	
+	ora #$80
+	sta Player0Bottom
+	lda PlayerY
+	cmp #TANKAREAHEIGHT
+	bcc NoSpecialAdjustmentToPlayer0Top
+	lda Player0Bottom
+	sta Player0Top	
+
+NoSpecialAdjustmentToPlayer0Top
+
+
+
+	ldx #1
+PreKernelSetupLoop2
+	lda #TANKAREAHEIGHT+1
+	sec
+	sbc MissileY,X
+	adc MissileHeight,X
+	sta MissileYTemp,X
+	
+	lda MissileX,X
+	clc
+	adc #3
+	sta MissileX,X
+	dex
+	bpl PreKernelSetupLoop2
+	
+	
+	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
+	ldx #1
+AdjustMissileYLoop
+	lda MissileYTemp,X
+	cmp #TANKHEIGHT-2
+	bcs NoAdjustMissileY
+	adc #1
+	sta MissileYTemp,X
+NoAdjustMissileY
+	dex
+	bpl AdjustMissileYLoop
+	
+	
+	;bullet flicker rotation:
+	lda FrameCounter
+	and #3
+	tax
+	lda BulletX,X
+	sta BallX
+	lda BulletY,X
+	sta BallY
+
+
+	;--cycle BaseColor
+	lda FrameCounter
+	and #$0F
+	sta Temp
+	lda #BASECOLOR
+	and #$F0
+	ora Temp
+	sta Temp+1
+	
+	;--set up score pointers
+	
+	ldx #10
+SetupScorePtrsLoop
+	txa
+	lsr
+	lsr
+	tay
+	lda Score,Y
+	pha
+	and #$0F
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr,X
+	pla
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr-2,X
+	lda #>DigitData
+	sta ScorePtr+1,X
+	sta ScorePtr-1,X
+	dex
+	dex
+	dex
+	dex
+	bpl SetupScorePtrsLoop
+	
+	
+	
+	jmp ReturnFromBSSubroutine2
+	
+;****************************************************************************
+
+
+;------------------------------------------------------
+;---------------------DATA-----------------------------
+;------------------------------------------------------
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
+RotationTables
+	.word RotationEven, RotationOdd	
+
+RotationOdd
+	.byte 0	;and first 3 bytes of next table
+RotationEven
+	.byte 2, 1, 3, 0
+; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
+; 	.byte 2, 1, 3	
+
+TankUpFrame
+	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
+TankDownFrame
+	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
+TankRightFrame
+	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
+
+;****************************************************************************	
+
+
+	org $2F00
+	rorg $3F00
+	
+BankSwitchSubroutine2
+	plp
+	tsx
+	dec $01,X
+	lda ($01,X)
+	sta MiscPtr
+	inc $01,X
+	lda ($01,X)
+	sta MiscPtr+1
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+	
+	jmp (MiscPtr)
+	
+ReturnFromBSSubroutine2
+	tsx
+	inx
+	inx
+	lda $00,X      ;get high byte of return address
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+	
+	rts
+
+
+;****************************************************************************	
+
+
+	org $2FFC
+	rorg $3FFC
 	.word Start2
-	.word Start2
+	.word BankSwitchSubroutine2
