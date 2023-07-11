@@ -975,16 +975,25 @@ VSYNCWaitLoop
 	.word CollisionsSubroutine
 	jsr PlayerTankMovementRoutine
 GameNotOnVBLANK
+	;--if game not on (and ONLY IF) read joystick button to start game
+	lda Debounce
+	and #$0F
+	beq TriggerDebounceZero
+	dec Debounce
+	jmp TriggerNotDebouncedYet
+TriggerDebounceZero	
+	lda INPT4
+	bmi NoTriggerToStartGame
+	jsr StartNewLevel
+NoTriggerToStartGame
+TriggerNotDebouncedYet
+
 	;--keep playing sound even when game not on
 	jsr SoundSubroutine
 	
 	jsr UpdateRandomNumber
 	
-	lda Debounce
-	and #$0F
-	beq TriggerDebounceZero
-	dec Debounce
-TriggerDebounceZero	
+
 
 	jsr ReadConsoleSwitchesSubroutine
 
