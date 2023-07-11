@@ -89,7 +89,8 @@ PLAYERSTARTINGX	=	16
 ENEMY0STARTINGX	=	16
 ENEMY1STARTINGX	=	72
 ENEMY2STARTINGX	=	136
-
+ENEMY1STARTINGX2	=	8
+ENEMY2STARTINGX2	=	144
 TANKOFFSCREEN	=	127
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
@@ -1316,11 +1317,28 @@ MoveAnEnemyTank
 	bne DoNotBringTankOnscreenYet
 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
-	lda #MAZEAREAHEIGHT+TANKHEIGHT
-	sta TankY,X
+	;lda #MAZEAREAHEIGHT+TANKHEIGHT
+	;sta TankY,X
+	; if tank off left edge of screen, move right.  if off right edge of screen, move left.  otherwise, move down
+	lda TankX,X
+	cmp #16
+	bpl TankNotOffLeftEdge
+	lda #J0RIGHT
+	bne SetInitialEnemyTankSpeed
+TankNotOffLeftEdge
+	cmp #140
+	bmi TankNotOffRightEdge
+	lda #J0LEFT
+	bne SetInitialEnemyTankSpeed
+TankNotOffRightEdge
 	lda #J0DOWN
+
+SetInitialEnemyTankSpeed
 	ora NewTankSpeed,X
 	sta TankStatus,X
+	;--set tank fractional so it moves immediately and doesn't turn before it gets onscreen
+ 	lda #255
+ 	sta TankFractional,X
 DoNotBringTankOnscreenYet
 	rts
 
@@ -3811,8 +3829,9 @@ CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
 	lda TankY,X
 	cmp #MAZEAREAHEIGHT+TANKHEIGHT+4
-	beq EnemyTankOffscreen
-	
+	bne EnemyTankOnScreen
+	jmp EnemyTankOffscreen
+EnemyTankOnScreen
 	;now compare ball location to tank location
 	;--only care about player bullets
 	ldy #3
@@ -3853,13 +3872,27 @@ CheckBulletTankCollisionInnerLoop
 	lda #BALLOFFSCREEN
 	sta BulletX,Y
 	sta BulletY,Y
+	;--if player tank is in top part (?) of screen, use different starting positions
+	lda TankY
+	cmp #BLOCKHEIGHT*8
+	bmi RegularEnemyTankRespawn
+	;--use alternate positions
+	lda StartingTankYPosition+2,X
+	sta TankY,X
+	lda StartingTankXPosition+2,X
+	sta TankX,X
+	lda StartingTankStatus+2,X
+	sta TankStatus,X
+	jmp FinishedEnemyTankRespawn
+RegularEnemyTankRespawn
 	lda StartingTankYPosition,X
 	sta TankY,X
 	lda StartingTankXPosition,X
 	sta TankX,X
 	lda StartingTankStatus,X
 	sta TankStatus,X
-	
+FinishedEnemyTankRespawn	
+
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
 	
@@ -3895,12 +3928,14 @@ LevelNotComplete
 BulletDidNotHitTank
 BulletOffScreen
 	dey
-	bpl CheckBulletTankCollisionInnerLoop
+	bmi EnemyTankOffscreen
+	jmp CheckBulletTankCollisionInnerLoop
 	
 EnemyTankOffscreen
 	dex
-	bpl CheckBulletTankCollisionOuterLoop
-	
+	bmi DoneWithCheckBulletTankCollisionOuterLoop
+	jmp CheckBulletTankCollisionOuterLoop
+DoneWithCheckBulletTankCollisionOuterLoop
 	
 	jmp ReturnFromBSSubroutine2
 
@@ -4075,13 +4110,13 @@ PFMaskLookupBank2
 	
 	
 StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX, ENEMY1STARTINGX2, ENEMY2STARTINGX2
 
 StartingTankYPosition 
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4, MAZEAREAHEIGHT+TANKHEIGHT+4	
+	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT, MAZEAREAHEIGHT+TANKHEIGHT, MAZEAREAHEIGHT+TANKHEIGHT, BLOCKHEIGHT*8+1, BLOCKHEIGHT*8+1 ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
-	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 	
 	
