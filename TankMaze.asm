@@ -2,7 +2,7 @@
 ;---------Tank Battalion Atari 2600 port----------------------------------
 ;-------------------------------------------------------------------------
 ;	Bob Montgomery
-;	(c) 2012-2022
+;	(c) 2012-2023
 ;
 ;	VERY loose port of Tank Battalion
 ;		objective: destroy enemy tanks while protecting base in a destroyable maze
