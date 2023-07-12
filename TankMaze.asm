@@ -92,6 +92,9 @@ ENEMY2STARTINGX	=	136
 ENEMY1STARTINGX2	=	8
 ENEMY2STARTINGX2	=	144
 TANKOFFSCREEN	=	127
+ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
+ENEMYSTARTINGYMIDROW = 5
+ENEMYSTARTINGYMID = (BLOCKHEIGHT * ENEMYSTARTINGYMIDROW) + 1
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
@@ -971,11 +974,8 @@ VSYNCWaitLoop
 	
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE
-	bne GameNotOnVBLANK	
-	brk
-	.word CollisionsSubroutine
-	jsr PlayerTankMovementRoutine
-GameNotOnVBLANK
+	beq GameOnVBLANK	
+
 	;--if game not on (and ONLY IF) read joystick button to start game
 	lda Debounce
 	and #$0F
@@ -988,7 +988,14 @@ TriggerDebounceZero
 	jsr StartNewLevel
 NoTriggerToStartGame
 TriggerNotDebouncedYet
+	jmp GameNotOnVBLANK
+GameOnVBLANK
 
+	brk
+	.word CollisionsSubroutine
+	jsr PlayerTankMovementRoutine
+
+GameNotOnVBLANK
 	;--keep playing sound even when game not on
 	jsr SoundSubroutine
 	
@@ -1419,6 +1426,25 @@ AtIntersectionY
 	bne EnemyTankDirectionRoutine
 	jmp ReadControllersSubroutine
 EnemyTankDirectionRoutine
+
+	lda TankY,X
+	cmp #MAZEAREAHEIGHT+1
+	bcc TankNotAboveMaze
+	lda #J0DOWN
+	bne SetNewTankDirection	;branch always
+TankNotAboveMaze	
+	lda TankX,X
+	cmp #ENEMY1STARTINGX2+1
+	bcs TankNotLeftOfMaze
+	lda #J0RIGHT
+	bne SetNewTankDirection	;branch always
+TankNotLeftOfMaze
+	cmp #ENEMY2STARTINGX2-1
+	bcc TankInMaze
+	lda #J0LEFT
+	bne SetNewTankDirection
+TankInMaze
+
 	;	get allowable directions
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
@@ -1439,6 +1465,7 @@ EnemyTankDirectionRoutine
 	cmp #1
 	bne MoreThanOneAllowedDirection
 	pla			;get direction back off stack
+SetNewTankDirection
 	sta Temp
 	lda TankStatus,X
 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
@@ -3405,17 +3432,17 @@ NoBulletMovement
 	;--check for off screen:
 	lda BulletX,X
 	cmp #16
-	bcc BulletOffscreen
+	bcc BulletOffScreen
 	cmp #148
-	bcs BulletOffscreen
+	bcs BulletOffScreen
 	lda BulletY,X
 	cmp #(MAZEAREAHEIGHT)+4
 	bcc BulletOnScreen	
-BulletOffscreen
+BulletOffScreen
 	lda #BALLOFFSCREEN
 	sta BulletX,X
 	sta BulletY,X	
-BulletOnScreen	
+BulletOnScreen
 	dex
 	bpl MoveBulletsLoop
 
@@ -3466,6 +3493,13 @@ FillMazeLoop
 	txa
 	and PF2Left+MAZEROWS-2
 	sta PF2Left+MAZEROWS-2
+	
+	;--clear left and right blocks on the middle row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYMIDROW - 2
+	sta PF1Left + ENEMYSTARTINGYMIDROW - 2
+	and PF1Right + ENEMYSTARTINGYMIDROW - 2
+	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
 	
 	;--update maze number on first pass also
 	sed
@@ -3643,7 +3677,7 @@ DoneWithFirstPass
 
 	;--set starting tank position
 	
-	;--move tanks off screen
+	;--move tanks and bullets off screen
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
@@ -3700,8 +3734,21 @@ SetStartingEnemyTankLocationsLoop
 	dex
 	cpx Temp
 	bne SetStartingEnemyTankLocationsLoop
-
+	
 	rts	
+
+	
+;****************************************************************************
+	
+MoveBulletsOffScreen
+	ldx #3
+	lda #BALLOFFSCREEN
+RemoveBulletsFromScreenLoop
+	sta BulletX,X
+	sta BulletY,X
+	dex
+	bpl RemoveBulletsFromScreenLoop
+	rts
 
 ;****************************************************************************
 
@@ -3838,7 +3885,9 @@ EnemyTankOnScreen
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 	cmp #BALLOFFSCREEN
-	beq BulletOffScreen
+	bne BulletOnScreen2
+	jmp BulletOffScreen2
+BulletOnScreen2
 	;--compare X position
 	clc
 	adc #1
@@ -3874,14 +3923,14 @@ CheckBulletTankCollisionInnerLoop
 	sta BulletY,Y
 	;--if player tank is in top part (?) of screen, use different starting positions
 	lda TankY
-	cmp #BLOCKHEIGHT*8
-	bmi RegularEnemyTankRespawn
+	cmp #BLOCKHEIGHT*7
+	bcc RegularEnemyTankRespawn
 	;--use alternate positions
-	lda StartingTankYPosition+2,X
+	lda StartingTankYPosition+4,X
 	sta TankY,X
-	lda StartingTankXPosition+2,X
+	lda StartingTankXPosition+4,X
 	sta TankX,X
-	lda StartingTankStatus+2,X
+	lda StartingTankStatus+4,X
 	sta TankStatus,X
 	jmp FinishedEnemyTankRespawn
 RegularEnemyTankRespawn
@@ -3912,6 +3961,7 @@ FinishedEnemyTankRespawn
 	;--remove remaining enemy tanks from screen
 	lda #0		;--X will return with this number in it
 	jsr MoveEnemyTanksOffScreen
+	jsr MoveBulletsOffScreen	;--returns with X=255
 		
 	;--increase score by some amount ...
 	;---what I'd like to do is give like 10 points or something for every brick remaining
@@ -3919,14 +3969,14 @@ FinishedEnemyTankRespawn
 	;	for now, just add level * 100
 	lda MazeNumber
 	sta Temp
-	txa		;--X = 0 following loop above
-	jsr IncreaseScoreSubroutine	;JMP here because if level complete we don't need the rest of this subroutine
+	lda #0
+	jsr IncreaseScoreSubroutine	
 	
 LevelNotComplete
 	
 	
 BulletDidNotHitTank
-BulletOffScreen
+BulletOffScreen2
 	dey
 	bmi EnemyTankOffscreen
 	jmp CheckBulletTankCollisionInnerLoop
@@ -4110,13 +4160,13 @@ PFMaskLookupBank2
 	
 	
 StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX, ENEMY1STARTINGX2, ENEMY2STARTINGX2
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX2, ENEMY2STARTINGX2
 
 StartingTankYPosition 
-	.byte TANKHEIGHT+1, MAZEAREAHEIGHT+TANKHEIGHT, MAZEAREAHEIGHT+TANKHEIGHT, MAZEAREAHEIGHT+TANKHEIGHT, BLOCKHEIGHT*8+1, BLOCKHEIGHT*8+1 ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYMID, ENEMYSTARTINGYMID ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
-	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY, TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 	
 	
