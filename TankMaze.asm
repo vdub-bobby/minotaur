@@ -295,6 +295,7 @@ MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
 Score ds 3
+Lives ds 1
 TanksRemaining ds 1
 
 Channel1Decay ds 1
@@ -495,7 +496,7 @@ PositioningLoopVBLANK	;--excluding players
 	
 	lda #WALLCOLOR
 	sta COLUPF
-	ldx #$80
+	ldx #$C0
 	lda #$FF
 	sta WSYNC
 	stx PF0
@@ -1143,6 +1144,9 @@ RESETPressed
 StartNewLevel
 	;--start game
 	lda GameStatus
+	and #GENERATINGMAZE
+	bne AlreadyStartingNewLevel
+	lda GameStatus
 	ora #GENERATINGMAZE
 	sta GameStatus
 	
@@ -1159,7 +1163,7 @@ MoveTanksOffscreenLoop
 	bpl MoveTanksOffscreenLoop
 	
 	stx MazeGenerationPass
-	
+AlreadyStartingNewLevel	
 	;--finally, cycle the random number
 	jmp UpdateRandomNumber				;--return from subroutine there
 	
