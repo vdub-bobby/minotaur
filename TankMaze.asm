@@ -1432,7 +1432,7 @@ AtIntersectionY
 EnemyTankDirectionRoutine
 
 	lda TankY,X
-	cmp #MAZEAREAHEIGHT+1
+	cmp #MAZEAREAHEIGHT+2
 	bcc TankNotAboveMaze
 	lda #J0DOWN
 	bne SetNewTankDirection	;branch always
