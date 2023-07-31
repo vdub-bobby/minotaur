@@ -108,8 +108,8 @@ BULLETFREQ		=	15
 BRICKSOUND	=	0
 BULLETSOUND = 1
 ENEMYTANKSOUND	=	2
-
-
+SHORTBRICKSOUND = 3
+LONGEXPLOSIONSOUND	=	4
 
 PLAYERTANKENGINEFREQ	=	8;31
 PLAYERTANKENGINETONE	=	2;ENGINESOUND
@@ -124,17 +124,25 @@ BRICKSOUNDLENGTH	=	25
 ENEMYTANKSOUNDTONE	=	8
 ENEMYTANKSOUNDFREQ	=	30
 ENEMYTANKSOUNDLENGTH	=	50
+SHORTBRICKSOUNDTONE	=	BRICKSOUNDTONE
+SHORTBRICKSOUNDFREQ	=	BRICKSOUNDFREQ
+SHORTBRICKSOUNDLENGTH	=	7
+LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
+LONGEXPLOSIONFREQ	=	18
+LONGEXPLOSIONLENGTH	=	200
 
-
-
-;--GameStatus bits
+;--GameStatus flags
 
 GAMEOFF			=	%10000000
 GENERATINGMAZE	=	%01000000
 LEVELCOMPLETE	=	%00100000
+TITLESCREEN		=	%00010000
+GAMEOVER		=	%00001000
+
+LEVELCOMPLETETIMER	=	$07
 
 
-LEVELCOMPLETETIMER	=	$0F
+;--end GameStatus flags
 
 BALLOFFSCREEN	=	0
 
@@ -364,7 +372,8 @@ Start
 
 	jsr InitialSetupSubroutine
 
-
+	lda #TitleGraphicsEnd-TitleGraphics-1
+	sta MazeGenerationPass
 		
 	
 ;	lda #BASECOLOR
@@ -976,7 +985,8 @@ VSYNCWaitLoop
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE
 	beq GameOnVBLANK	
-
+	and #GAMEOFF
+	beq InBetweenLevels
 	;--if game not on (and ONLY IF) read joystick button to start game
 	lda Debounce
 	and #$0F
@@ -989,6 +999,8 @@ TriggerDebounceZero
 	jsr StartNewLevel
 NoTriggerToStartGame
 TriggerNotDebouncedYet
+
+
 	jmp GameNotOnVBLANK
 GameOnVBLANK
 
@@ -997,6 +1009,7 @@ GameOnVBLANK
 	jsr PlayerTankMovementRoutine
 
 GameNotOnVBLANK
+InBetweenLevels
 	;--keep playing sound even when game not on
 	jsr SoundSubroutine
 	
@@ -1036,9 +1049,6 @@ EndVBLANK
 ;----------------------------------------------------------------------------
 OverscanRoutine
 
-
-
-
 	ldy #2
 	sty WSYNC
 	sty VBLANK
@@ -1047,18 +1057,19 @@ OverscanRoutine
 	
 	
 	lda GameStatus
-	and #GAMEOFF|LEVELCOMPLETE
+	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
 	jsr MoveEnemyTanksSubroutine	
 	brk
 	.word MoveBulletSubroutine
+	jmp WaitForOverscanEnd
 GameNotOn
-	lda GameStatus
+	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	and #LEVELCOMPLETE
 	beq .LevelNotComplete
 	;--level complete
 	lda FrameCounter
-	and #7
+	and #$F
 	bne .LevelNotComplete
 	lda GameStatus
 	and #LEVELCOMPLETETIMER
@@ -1079,6 +1090,8 @@ LevelCompleteNow
 	sta GameStatus
 	jsr StartNewLevel
 .LevelNotComplete
+	
+
 
 	lda GameStatus
 	and #GENERATINGMAZE
@@ -1089,7 +1102,17 @@ LevelCompleteNow
 	brk
 	.word GenerateMazeSubroutine
 NotGeneratingMaze
-
+	lda GameStatus
+	and #TITLESCREEN
+	beq NotOnTitleScreen
+	lda MazeGenerationPass
+	bmi GameNotOnVBLANK
+	lda FrameCounter
+	and #$7
+	bne WaitToDrawTitleScreen
+	jsr DrawTitleScreen
+WaitToDrawTitleScreen
+NotOnTitleScreen
 
 
 WaitForOverscanEnd
@@ -1118,6 +1141,66 @@ WaitForOverscanEnd
 ;----------------------------------------------------------------------------
 
 
+DrawTitleScreen
+
+	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
+	ldx MazeGenerationPass
+PutTitleGraphicsInPlayfieldLoop
+	txa
+	and #3
+	asl
+	tay
+	lda PFPointer,Y
+	sta MiscPtr
+	lda PFPointer+1,Y
+	sta MiscPtr+1
+	
+	txa
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)
+	bcc DrawTitleScreenModerately
+	;--else slower
+	lda FrameCounter
+	and #$1F
+	bne SkipDrawingTitleScreenThisFrame
+DrawTitleScreenModerately	
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)
+	bcc DrawTitleScreenFast
+	lda FrameCounter
+	and #$F
+	bne SkipDrawingTitleScreenThisFrame
+DrawTitleScreenFast
+	txa
+	lsr
+	lsr
+	tay
+	lda TitleGraphics,X
+	
+	sta (MiscPtr),Y
+
+	
+	dex
+	stx MazeGenerationPass
+	tay	;set flags based on what we wrote
+	beq PutTitleGraphicsInPlayfieldLoop	;--this only works if last value is NOT zero
+	
+	;--play sound
+	txa	;reset flags
+	bmi PlayLongSound
+	ldy #SHORTBRICKSOUND
+	.byte $2C 
+PlayLongSound	
+	ldy #LONGEXPLOSIONSOUND
+	jsr StartSoundSubroutine
+SkipDrawingTitleScreenThisFrame	
+	
+	rts
+
+	
+PFPointer
+	.word PF1Left, PF2Left, PF2Right, PF1Right
+	
+	
+;----------------------------------------------------------------------------
 
 
 ReadConsoleSwitchesSubroutine
@@ -1147,7 +1230,8 @@ StartNewLevel
 	and #GENERATINGMAZE
 	bne AlreadyStartingNewLevel
 	lda GameStatus
-	ora #GENERATINGMAZE
+	ora #GENERATINGMAZE	;--start generating maze
+	and #~TITLESCREEN	;--turn off title screen
 	sta GameStatus
 	
 	;--move tanks off screen, immobilize and set score to zeroes
@@ -1184,7 +1268,7 @@ SetUpTankInitialValues
 	
 	sta RandomNumber
 	
-	lda #GAMEOFF
+	lda #GAMEOFF|TITLESCREEN
 	sta GameStatus
 
 	lda #PLAYERTANKENGINETONE
@@ -1202,29 +1286,8 @@ SetUpTankInitialValues
 
 	
 	
-	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
-	ldx #TitleGraphicsEnd-TitleGraphics-1
-	ldy #MAZEROWS-2
-PutTitleGraphicsInPlayfieldLoop
-	txa
-	lsr
-	lsr
-	tay
-	lda TitleGraphics,X
-	sta PF1Right,Y
-	dex
-	lda TitleGraphics,X
-	sta PF2Right,Y
-	dex
-	lda TitleGraphics,X
-	sta PF2Left,Y
-	dex
-	lda TitleGraphics,X
-	sta PF1Left,Y
-	dex
-	bpl PutTitleGraphicsInPlayfieldLoop
-	
 	rts
+	
 
 
 ;****************************************************************************
@@ -1606,6 +1669,27 @@ ReturnFromTankMovementSubroutine
 ;****************************************************************************
 
 
+PositionASpriteSubroutine
+	sec
+	sta HMCLR
+	sta WSYNC
+DivideLoop			;				this loop can't cross a page boundary!!!
+	sbc #15
+	bcs DivideLoop	;+4		 4
+	eor #7
+	asl
+	asl
+	asl
+	asl				;+10	14
+	sta.wx HMP0,X	;+5		19
+	sta RESP0,X		;+4		23
+	sta WSYNC
+	sta HMOVE
+Return					;label for cycle-burning code
+	rts
+
+;****************************************************************************
+
 SoundSubroutine
 	;--no sound for enemy tanks; too annoying
 	
@@ -1629,26 +1713,6 @@ DoNotUpdateChannel1Decay
 
 
 
-PositionASpriteSubroutine
-	sec
-	sta HMCLR
-	sta WSYNC
-DivideLoop			;				this loop can't cross a page boundary!!!
-	sbc #15
-	bcs DivideLoop	;+4		 4
-	eor #7
-	asl
-	asl
-	asl
-	asl				;+10	14
-	sta.wx HMP0,X	;+5		19
-	sta RESP0,X		;+4		23
-	sta WSYNC
-	sta HMOVE
-Return					;label for cycle-burning code
-	rts
-
-;****************************************************************************
 
 DivideByTwoSubroutine		;come in with number in accumlator
 	and #$FF		;set flags
@@ -3063,13 +3127,13 @@ SwitchMovementY = *-1
 	.byte 255, 0, 255
 	
 Tone
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE
 
 Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ
 
 SoundLength
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH
 	
 NumberOfBitsSet
 	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
@@ -3766,7 +3830,67 @@ IncreaseScoreSubroutine
 
 ;****************************************************************************
 
+
+CollisionRotationTables
+	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1
+	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
+	
+TankCollisionRegisterOdd
+	.byte CXM0P, CXPPMM, CXM1P
+TankCollisionBitOdd
+	.byte $40, $80, $80
+TankCollisionRegisterEven
+	.byte CXM0P, CXPPMM, CXM0P
+TankCollisionBitEven
+	.byte $80, $40, $40	
+
 CollisionsSubroutine
+
+
+	;--can use hardware collisions for tank to tank
+	;tentative plan: use movement routine to prevent enemy tanks from colliding
+	;                if enemy tank crashes into player tank, then both die
+	;Rotation:		Frame 1		Frame 2
+	;		P0		player		tank 3
+	;		P1		tank 2		tank 2
+	;		M0		tank 1		player
+	;		M1		tank 3		tank 2
+
+
+	lda FrameCounter
+	and #1
+	asl
+	tax
+	lda CollisionRotationTables,X
+	sta MiscPtr
+	lda CollisionRotationTables+1,X
+	sta MiscPtr+1
+	lda CollisionRotationTables+4,X
+	sta MiscPtr+2
+	lda CollisionRotationTables+5,X
+	sta MiscPtr+3
+	
+	ldy #3
+TankCollisionLoop
+	lda (MiscPtr),Y
+	tax
+	lda ($00,X)
+	and (MiscPtr+2),Y
+	beq NoTankToTankCollision
+	
+	;--remove player tank
+	lda StartingTankYPosition+4
+	sta TankY
+	lda StartingTankXPosition+4
+	sta TankX
+	lda StartingTankStatus+4
+	sta TankStatus
+	
+NoTankToTankCollision
+	dey
+	bne TankCollisionLoop
+	 
+
 
 	;--need to use software collision detection, at least for ball
 	ldx #3
@@ -3942,6 +4066,8 @@ FinishedEnemyTankRespawn
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
 	
+	txa
+	beq PlayerTankHit
 	;--first, add 100 to score
 	lda #$01
 	sta Temp
@@ -3949,6 +4075,7 @@ FinishedEnemyTankRespawn
 	jsr IncreaseScoreSubroutine
 	
 	;--and decrease tanks remaining ONLY if enemy tank hit
+
 	dec TanksRemaining
 	bne LevelNotComplete
 	;--set levelcomplete flag
@@ -3968,7 +4095,7 @@ FinishedEnemyTankRespawn
 	sta Temp
 	lda #0
 	jsr IncreaseScoreSubroutine	
-	
+PlayerTankHit	
 LevelNotComplete
 	
 	
