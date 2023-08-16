@@ -81,14 +81,14 @@ TANKLEFT		=	J0LEFT
 TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
-ENEMYTANK1DELAY	=	7
-ENEMYTANK2DELAY	=	7
-ENEMYTANK3DELAY	=	7
+ENEMYTANK1DELAY	=	1;7
+ENEMYTANK2DELAY	=	1;7
+ENEMYTANK3DELAY	=	1;7
 
 PLAYERSTARTINGX	=	16
-ENEMY0STARTINGX	=	16
+ENEMY0STARTINGX	=	56;16
 ENEMY1STARTINGX	=	72
-ENEMY2STARTINGX	=	136
+ENEMY2STARTINGX	=	96;136
 ENEMY1STARTINGX2	=	8
 ENEMY2STARTINGX2	=	144
 TANKOFFSCREEN	=	127
@@ -528,8 +528,6 @@ EndREFPLoop
 	dey
 	bpl SetREFPLoop
 	
-	;--clear collision registers
-	sta CXCLR
 
 
 	ldx #2
@@ -538,6 +536,9 @@ PositioningLoop	;--just players
 	jsr PositionASpriteSubroutine
 	dex
 	bpl PositioningLoop
+
+		;--clear collision registers
+	sta CXCLR
 
 	sta WSYNC
 	lda #0
@@ -1003,9 +1004,8 @@ TriggerNotDebouncedYet
 
 	jmp GameNotOnVBLANK
 GameOnVBLANK
-
 	brk
-	.word CollisionsSubroutine
+	.word MoveBulletSubroutine
 	jsr PlayerTankMovementRoutine
 
 GameNotOnVBLANK
@@ -1059,9 +1059,9 @@ OverscanRoutine
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
-	jsr MoveEnemyTanksSubroutine	
 	brk
-	.word MoveBulletSubroutine
+	.word CollisionsSubroutine
+	jsr MoveEnemyTanksSubroutine	
 	jmp WaitForOverscanEnd
 GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
@@ -3832,8 +3832,10 @@ IncreaseScoreSubroutine
 
 
 CollisionRotationTables
-	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1
+	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
+			
 	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
+			
 	
 TankCollisionRegisterOdd
 	.byte CXM0P, CXPPMM, CXM1P
@@ -3842,7 +3844,7 @@ TankCollisionBitOdd
 TankCollisionRegisterEven
 	.byte CXM0P, CXPPMM, CXM0P
 TankCollisionBitEven
-	.byte $80, $40, $40	
+	.byte $80, $40, $40 ; $40, $40	
 
 CollisionsSubroutine
 
@@ -3850,13 +3852,22 @@ CollisionsSubroutine
 	;--can use hardware collisions for tank to tank
 	;tentative plan: use movement routine to prevent enemy tanks from colliding
 	;                if enemy tank crashes into player tank, then both die
-	;Rotation:		Frame 1		Frame 2
-	;		P0		player		tank 3
-	;		P1		tank 2		tank 2
-	;		M0		tank 1		player
-	;		M1		tank 3		tank 2
+	;Rotation:		Frame odd		Frame even
+	;Framecounter = xxxxxxx1        xxxxxxx0
+	;		P0		player			tank 3
+	;		P1		tank 2			tank 1
+	;		M0		tank 1			player
+	;		M1		tank 3			tank 2
 
-
+	;player to tank collisions:
+	
+	;Tank 1			M0 to P0		P1 to M0
+	;Tank 2			P1 to P0		M1 to M0
+	;Tank 3			M1 to P0		P0 to M0
+	
+	
+	;screws up with tank 1 and tank 3
+	
 	lda FrameCounter
 	and #1
 	asl
@@ -3874,7 +3885,7 @@ CollisionsSubroutine
 TankCollisionLoop
 	lda (MiscPtr),Y
 	tax
-	lda ($00,X)
+	lda $00,X
 	and (MiscPtr+2),Y
 	beq NoTankToTankCollision
 	
