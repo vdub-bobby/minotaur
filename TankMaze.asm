@@ -43,10 +43,11 @@
 ;			other?
 ;
 ;	Other TODOs:
+;       fix scanline count
 ;		tank:tank collisions	
-;		display player lives remaining
+;		OR NOT?  display player lives remaining
 ;		don't give points for enemy tank actions
-;		replace placeholder font
+;		DONE replace placeholder font
 ;		Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 ;		PAL60 version
 ;		2-player?  (unlikely but...)
@@ -86,9 +87,9 @@ ENEMYTANK2DELAY	=	1;7
 ENEMYTANK3DELAY	=	1;7
 
 PLAYERSTARTINGX	=	16
-ENEMY0STARTINGX	=	56;16
+ENEMY0STARTINGX	=	16
 ENEMY1STARTINGX	=	72
-ENEMY2STARTINGX	=	96;136
+ENEMY2STARTINGX	=	136
 ENEMY1STARTINGX2	=	8
 ENEMY2STARTINGX2	=	144
 TANKOFFSCREEN	=	127
@@ -978,7 +979,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #50
+	lda #48
 	sta TIM64T
 	
 	dec FrameCounter
@@ -1004,10 +1005,10 @@ TriggerNotDebouncedYet
 
 	jmp GameNotOnVBLANK
 GameOnVBLANK
+	jsr MoveEnemyTanksSubroutine
 	brk
 	.word MoveBulletSubroutine
-	jsr PlayerTankMovementRoutine
-
+	
 GameNotOnVBLANK
 InBetweenLevels
 	;--keep playing sound even when game not on
@@ -1022,7 +1023,7 @@ InBetweenLevels
 	brk
 	.word KernelSetupSubroutine
 
-	
+	nop	;placeholder for debugging scanline counts
 
 WaitForVblankEnd
 	lda INTIM
@@ -1052,7 +1053,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #34
+	lda  #30
 	sta  TIM64T
 	
 	
@@ -1061,7 +1062,9 @@ OverscanRoutine
 	bne GameNotOn	
 	brk
 	.word CollisionsSubroutine
-	jsr MoveEnemyTanksSubroutine	
+	jsr PlayerTankMovementRoutine
+
+
 	jmp WaitForOverscanEnd
 GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
@@ -1331,25 +1334,14 @@ NoVerticalTankMovement
 	
 	rts
 
+;****************************************************************************	
 
-;****************************************************************************
-
-MoveEnemyTanksSubroutine
-
-	;	can't move all 3 enemies every frame, takes too long.
-	;	So instead move one per frame (moving none every 4th frame)
-	;	Works well enough for now, work on optimizing this routine later
-
-	lda FrameCounter
-	and #3
-	bne MoveAnEnemyTank
-	dec TankMovementCounter
-	;--if we ain't moving a tank, let's shoot a bullet
+FireEnemyBulletRoutine
 	;--- only every ... 16 frames
 	lda EnemyDebounce
 	beq FireEnemyBullet
 	dec EnemyDebounce
-	jmp DoNotFireEnemyBullet
+	rts					;--and we're done
 FireEnemyBullet
 	ldx #1
 FindAvailableEnemyBallLoop
@@ -1365,20 +1357,35 @@ FoundAvailableEnemyBall
 	lda #ENEMYDEBOUNCE
 	sta EnemyDebounce
 	;--find random tank 
-FindAnotherRandomTank
 	lda RandomNumber
 	and #3
 	tay
 	bne ShootFromTank
-	iny
+	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
 	
 	jsr FireBulletRoutine
 DoNotFireEnemyBullet	
 NoAvailableEnemyBalls
 	;--then we're done
-	rts
+	rts	
 	
+	
+;****************************************************************************
+
+MoveEnemyTanksSubroutine
+
+	;	can't move all 3 enemies every frame, takes too long.
+	;	So instead move one per frame (moving none every 4th frame)
+	;	Works well enough for now, work on optimizing this routine later
+
+	lda FrameCounter
+	and #3
+	bne MoveAnEnemyTank
+	dec TankMovementCounter
+	;--if we ain't moving a tank, let's shoot a bullet
+	jmp FireEnemyBulletRoutine
+
 MoveAnEnemyTank
 	tax
 
@@ -1856,11 +1863,13 @@ NotTryingToMove
 	ldx #0		;index into which tank	
 
 
-TankMovementSubroutine				;jump here when moving enemy tanks
 	pha			;--save desired direction of tank
 	
 	
 	jsr CheckForWallSubroutine		;--returns with allowed directions in A
+	.byte $24	;--skip next byte
+TankMovementSubroutine				;jump here when moving enemy tanks
+	pha			;--save desired direction of tank (skipped when player tank)
 	
 	;--if no directions are allowed, but tank is trying to move, turn tank but do not move.
 	and #$F0	;clear bottom nibble
@@ -3896,6 +3905,8 @@ TankCollisionLoop
 	sta TankX
 	lda StartingTankStatus+4
 	sta TankStatus
+	
+	;--to do: play a "you died" sound
 	
 NoTankToTankCollision
 	dey
