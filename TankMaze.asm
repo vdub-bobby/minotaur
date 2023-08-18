@@ -87,15 +87,18 @@ ENEMYTANK2DELAY	=	1;7
 ENEMYTANK3DELAY	=	1;7
 
 PLAYERSTARTINGX	=	16
+
 ENEMY0STARTINGX	=	16
 ENEMY1STARTINGX	=	72
 ENEMY2STARTINGX	=	136
+ENEMY0STARTINGX2	=	144
 ENEMY1STARTINGX2	=	8
 ENEMY2STARTINGX2	=	144
 TANKOFFSCREEN	=	127
 ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
 ENEMYSTARTINGYMIDROW = 5
 ENEMYSTARTINGYMID = (BLOCKHEIGHT * ENEMYSTARTINGYMIDROW) + 1
+ENEMYSTARTINGYLOW	=	BLOCKHEIGHT + 1
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
@@ -1410,7 +1413,7 @@ TankNotOffLeftEdge
 	cmp #140
 	bmi TankNotOffRightEdge
 	lda #J0LEFT
-	bne SetInitialEnemyTankSpeed
+	bne SetInitialEnemyTankSpeed	;branch always
 TankNotOffRightEdge
 	lda #J0DOWN
 
@@ -1497,7 +1500,23 @@ AtIntersectionY
 	bne EnemyTankDirectionRoutine
 	jmp ReadControllersSubroutine
 EnemyTankDirectionRoutine
-
+	;--new thought.  if tank is turning, wait until it is actually going to move (fractional overflow) before calculating new direction.
+	;--should fix reversals and also should prvent tanks from turning through solid barriers (oops)
+	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
+	clc
+	adc TankFractional,X
+	bcs TimeForEnemyTankToTurn
+	sta TankFractional,X
+	rts
+TimeForEnemyTankToTurn
+	
+	
 	lda TankY,X
 	cmp #MAZEAREAHEIGHT+2
 	bcc TankNotAboveMaze
@@ -1555,7 +1574,7 @@ MoreThanOneAllowedDirection
 	lsr			;index into table with opposite directions
 	tay
 	pla
-	eor PreventReverses,Y
+	and PreventReverses,Y
 	sta Temp
 	lda TankStatus,X
 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
@@ -1574,7 +1593,7 @@ MoreThanTwoAllowedDirections
 	lsr			;index into table with opposite directions
 	tay
 	pla
-	eor PreventReverses,Y
+	and PreventReverses,Y
 	pha
 	
 	;--if TankMovementCounter < 8, then move tanks towards various corners, otherwise, follow regular pattern
@@ -3123,8 +3142,8 @@ NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
 	.byte TANKSPEED9, TANKSPEED15, TANKSPEED7
 	
 	
-PreventReverses = *-1	;--the ZEROES are wasted bytes
-	.byte 	J0DOWN, J0UP, 0, J0RIGHT, 0, 0, 0, J0LEFT
+PreventReverses = *-1	;--the FF are wasted bytes
+	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
 	
 	;tank 0 = player, so don't need initial byte
 	;tank 1 target = upper left corner
@@ -3875,8 +3894,7 @@ CollisionsSubroutine
 	;Tank 3			M1 to P0		P0 to M0
 	
 	
-	;screws up with tank 1 and tank 3
-	
+
 	lda FrameCounter
 	and #1
 	asl
@@ -4058,7 +4076,28 @@ BulletOnScreen2
 	bcs BulletDidNotHitTank
 	
 	
+	jsr BulletHitTank
+
 	
+	
+BulletDidNotHitTank
+BulletOffScreen2
+	dey
+	bmi EnemyTankOffscreen
+	jmp CheckBulletTankCollisionInnerLoop
+	
+EnemyTankOffscreen
+	dex
+	bmi DoneWithCheckBulletTankCollisionOuterLoop
+	jmp CheckBulletTankCollisionOuterLoop
+DoneWithCheckBulletTankCollisionOuterLoop
+	
+	jmp ReturnFromBSSubroutine2
+
+;****************************************************************************
+
+
+BulletHitTank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
 	lda #BALLOFFSCREEN
@@ -4074,7 +4113,6 @@ BulletOnScreen2
 	lda StartingTankXPosition+4,X
 	sta TankX,X
 	lda StartingTankStatus+4,X
-	sta TankStatus,X
 	jmp FinishedEnemyTankRespawn
 RegularEnemyTankRespawn
 	lda StartingTankYPosition,X
@@ -4082,8 +4120,10 @@ RegularEnemyTankRespawn
 	lda StartingTankXPosition,X
 	sta TankX,X
 	lda StartingTankStatus,X
-	sta TankStatus,X
 FinishedEnemyTankRespawn	
+	sta TankStatus,X
+; 	lda #$FF
+; 	sta TankFractional,X
 
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
@@ -4119,21 +4159,8 @@ FinishedEnemyTankRespawn
 	jsr IncreaseScoreSubroutine	
 PlayerTankHit	
 LevelNotComplete
-	
-	
-BulletDidNotHitTank
-BulletOffScreen2
-	dey
-	bmi EnemyTankOffscreen
-	jmp CheckBulletTankCollisionInnerLoop
-	
-EnemyTankOffscreen
-	dex
-	bmi DoneWithCheckBulletTankCollisionOuterLoop
-	jmp CheckBulletTankCollisionOuterLoop
-DoneWithCheckBulletTankCollisionOuterLoop
-	
-	jmp ReturnFromBSSubroutine2
+
+	rts
 
 ;****************************************************************************
 
@@ -4306,13 +4333,16 @@ PFMaskLookupBank2
 	
 	
 StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX2, ENEMY2STARTINGX2
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2
 
 StartingTankYPosition 
-	.byte TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYMID, ENEMYSTARTINGYMID ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYMID ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
-	.byte  TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY, TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 	
 	
