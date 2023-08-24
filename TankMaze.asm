@@ -86,7 +86,9 @@ ENEMYTANK1DELAY	=	1;7
 ENEMYTANK2DELAY	=	1;7
 ENEMYTANK3DELAY	=	1;7
 
-PLAYERSTARTINGX	=	16
+PLAYERRESPAWNDELAY = 15
+
+PLAYERSTARTINGX	=	8
 
 ENEMY0STARTINGX	=	16
 ENEMY1STARTINGX	=	72
@@ -98,7 +100,8 @@ TANKOFFSCREEN	=	127
 ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
 ENEMYSTARTINGYMIDROW = 5
 ENEMYSTARTINGYMID = (BLOCKHEIGHT * ENEMYSTARTINGYMIDROW) + 1
-ENEMYSTARTINGYLOW	=	BLOCKHEIGHT + 1
+ENEMYSTARTINGYLOWROW = 3
+ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
@@ -1428,6 +1431,38 @@ DoNotBringTankOnscreenYet
 
 PlayerTankMovementRoutine
 	ldx #0
+	;--if tank off left edge of screen, we don't read joystick, we just wait (??) and then move it on to the maze from the left
+	lda TankX
+	cmp #16
+	bcs TankOnscreenMoveIt
+	;--wait only if TankX == 8
+	cmp #8
+	bne DoneWaitingBringPlayerTankOnScreen
+	lda TankStatus
+	and #$0F
+	beq AllFinishedWaitingStartPlayerRespawn
+	;--else still waiting
+	;--update counter every 8 frames
+	lda FrameCounter
+	and #7
+	bne WaitToUpdateRespawnCounter
+	dec TankStatus
+WaitToUpdateRespawnCounter
+	rts
+AllFinishedWaitingStartPlayerRespawn
+	;--set player to move immediately and reset speed correctly
+	lda #255
+	sta TankFractional
+	lda #PLAYERTANKSPEED
+	ora TankStatus
+	sta TankStatus
+DoneWaitingBringPlayerTankOnScreen
+	ldx #PLAYERTANKENGINEVOLUME
+ 	lda #0		
+	pha			;movement flag
+	lda #~J0RIGHT
+	jmp SkipReadingControllers
+	
 TankOnscreenMoveIt
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
@@ -1630,7 +1665,7 @@ RegularMovement
 	pha
 
 
-	jmp ChooseTankDirection
+	jmp ChooseTankDirection	;--why this?
 	
 	
 ChooseTankDirection
@@ -1871,11 +1906,12 @@ ReadControllersSubroutine
 	lda SWCHA	;A holds joystick
 	
 	;--play engine sound if tank is moving
-	ldx #0		;index into which tank
+	ldx #0		;index into which tank	;--I think X always already equals zero when we get here.
 	and #$F0	;clear bottom nibble
 	cmp #$F0
 	beq NotTryingToMove
 	ldx #PLAYERTANKENGINEVOLUME
+SkipReadingControllers
 NotTryingToMove
 	stx AUDV0	
 
@@ -2040,6 +2076,12 @@ NoLeft
 DoneMoving
 	pla		;pop movement flag off of stack and discard
 
+	;--don't allow player to fire when offscreen
+	lda TankX
+	cmp #16
+	bcs PlayerOnScreenCanShoot
+	jmp NotFiring
+PlayerOnScreenCanShoot
 	;are any balls available for firing
 	ldx #1
 FindAvailableBallLoop
@@ -3587,8 +3629,13 @@ FillMazeLoop
 	txa
 	and PF1Left + ENEMYSTARTINGYMIDROW - 2
 	sta PF1Left + ENEMYSTARTINGYMIDROW - 2
+	txa
 	and PF1Right + ENEMYSTARTINGYMIDROW - 2
 	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
+	;--and clear right block on low row where tanks enter when player is near top of screen
+	txa
+	and PF1Right + ENEMYSTARTINGYLOWROW - 2 
+	sta PF1Right + ENEMYSTARTINGYLOWROW - 2 
 	
 	;--update maze number on first pass also
 	sed
@@ -3916,13 +3963,18 @@ TankCollisionLoop
 	and (MiscPtr+2),Y
 	beq NoTankToTankCollision
 	
-	;--remove player tank
+	;--remove player tank 
 	lda StartingTankYPosition+4
 	sta TankY
 	lda StartingTankXPosition+4
 	sta TankX
 	lda StartingTankStatus+4
 	sta TankStatus
+	;... & enemy tank?
+	
+	tya
+	tax
+	jsr PlayerHitTank
 	
 	;--to do: play a "you died" sound
 	
@@ -4103,7 +4155,12 @@ BulletHitTank
 	lda #BALLOFFSCREEN
 	sta BulletX,Y
 	sta BulletY,Y
-	;--if player tank is in top part (?) of screen, use different starting positions
+PlayerHitTank
+	;--save and restore Y in this routine
+	tya
+	pha
+
+	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
 	cmp #BLOCKHEIGHT*7
 	bcc RegularEnemyTankRespawn
@@ -4148,7 +4205,10 @@ FinishedEnemyTankRespawn
 	lda #0		;--X will return with this number in it
 	jsr MoveEnemyTanksOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
+	;--TODO stop sounds and/or play "level end" sound
+	
 		
+	
 	;--increase score by some amount ...
 	;---what I'd like to do is give like 10 points or something for every brick remaining
 	;	but that could be complicated
@@ -4159,6 +4219,9 @@ FinishedEnemyTankRespawn
 	jsr IncreaseScoreSubroutine	
 PlayerTankHit	
 LevelNotComplete
+	;--save and restore Y in this routine
+	pla
+	tay
 
 	rts
 
@@ -4341,8 +4404,8 @@ StartingTankYPosition
 	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYMID ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
-	.byte TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-	.byte TANKRIGHT|TANKSPEED4, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 	
 	
