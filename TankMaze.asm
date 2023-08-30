@@ -110,6 +110,9 @@ ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
 PLAYERTANKSPEED	=	TANKSPEED3
+ENEMYTANKBASESPEED0	=	TANKSPEED7
+ENEMYTANKBASESPEED1 = 	TANKSPEED6
+ENEMYTANKBASESPEED2	=	TANKSPEED5
 
 
 PLAYERTANKVOLUME	=	8
@@ -1072,6 +1075,10 @@ OverscanRoutine
 	bne GameNotOn	
 	brk
 	.word CollisionsSubroutine
+	;--need to recheck, since a collision could have modified these flags
+	lda GameStatus
+	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
+	bne GameNotOn	
 	jsr PlayerTankMovementRoutine
 
 
@@ -1387,6 +1394,35 @@ NoAvailableEnemyBalls
 	;--then we're done
 	rts	
 	
+;****************************************************************************
+	
+SetInitialEnemyTankSpeedRoutine
+	sta TankStatus,X	;--first write new direction
+	;--tank starting speed and add level, capped at 15-tank # (0, 1, 2)
+	lda NewTankSpeed,X
+	clc
+	adc MazeNumber
+	cmp #15
+	bcc NewSpeedNotTooHigh
+	lda #TANKSPEED15
+NewSpeedNotTooHigh
+	sta Temp
+	;convert X's range (1-3) to (0-2)
+	txa
+	sec
+	sbc #1
+	;make X negative
+	eor #$FF
+	clc
+	adc #1
+	;add -(X-1) to the new speed and set.
+	clc
+	adc Temp
+	ora TankStatus,X
+	sta TankStatus,X
+	
+	rts
+	
 	
 ;****************************************************************************
 
@@ -1449,8 +1485,11 @@ TankNotOffRightEdge
 	lda #J0DOWN
 
 SetInitialEnemyTankSpeed
-	ora NewTankSpeed,X
-	sta TankStatus,X
+	jsr SetInitialEnemyTankSpeedRoutine
+	
+	
+
+
 	;--set tank fractional so it moves immediately and doesn't turn before it gets onscreen
  	lda #255
  	sta TankFractional,X
@@ -1931,6 +1970,10 @@ ReadControllersSubroutine
 	lda #0
 	pha			;movement flag
 
+	;--if between levels, don't process movement
+	;lda GameStatus
+	
+	
 	lda SWCHA	;A holds joystick
 	
 	;--play engine sound if tank is moving
@@ -3209,7 +3252,7 @@ TankDirection
 
 	
 NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte TANKSPEED9, TANKSPEED15, TANKSPEED7
+	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2
 	
 	
 PreventReverses = *-1	;--the FF are wasted bytes
@@ -4234,7 +4277,9 @@ FinishedEnemyTankRespawn
 	jsr MoveEnemyTanksOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
 	;--TODO stop sounds and/or play "level end" sound
-	
+	lda #0
+	sta AUDV0
+	sta AUDV1
 		
 	
 	;--increase score by some amount ...
