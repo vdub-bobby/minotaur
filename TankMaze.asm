@@ -88,6 +88,10 @@ ENEMYTANK3DELAY	=	1;7
 
 PLAYERRESPAWNDELAY = 15
 
+
+STARTINGENEMYTANKCOUNT	=	 4
+
+
 PLAYERSTARTINGX	=	8
 
 ENEMY0STARTINGX	=	16
@@ -1004,7 +1008,7 @@ VSYNCWaitLoop
 TriggerDebounceZero	
 	lda INPT4
 	bmi NoTriggerToStartGame
-	jsr StartNewLevel
+	jsr StartNewGame
 NoTriggerToStartGame
 TriggerNotDebouncedYet
 
@@ -1233,6 +1237,15 @@ RESETPressed
 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
 	sta Debounce
+	
+StartNewGame	
+	;--reset score here if REST pressed
+	lda #0
+	sta Score
+	sta Score+1
+	sta Score+2
+
+	
 StartNewLevel
 	;--start game
 	lda GameStatus
@@ -1243,15 +1256,13 @@ StartNewLevel
 	and #~TITLESCREEN	;--turn off title screen
 	sta GameStatus
 	
-	;--move tanks off screen, immobilize and set score to zeroes
+	;--move tanks off screen, immobilize 
 	ldx #3
 	lda #TANKOFFSCREEN
-	ldy #0
 MoveTanksOffscreenLoop
 	sta TankX,X
 	sta TankY,X
  	sty TankStatus,X
-	sty Score,X
 	dex
 	bpl MoveTanksOffscreenLoop
 	
@@ -1399,6 +1410,23 @@ MoveAnEnemyTank
 	and #$F0
 	bne TankOnscreenMoveIt
 	;tank offscreen
+	;--only bring tank onscreen if there are enemy tanks remaining
+	;--how many tanks onscreen?
+	lda #0
+	sta Temp
+	ldy #3
+CountTanksOnScreenLoop
+	lda TankStatus,Y
+	and #$F0
+	beq TankNotOnscreen
+	inc Temp
+TankNotOnscreen
+	dey
+	bne CountTanksOnScreenLoop
+	;--now compare with tanks remaining	
+	lda Temp
+	cmp TanksRemaining
+	bcs DoNotBringTankOnscreenYet
 	lda TankMovementCounter
 	and #7
 	bne DoNotBringTankOnscreenYet
@@ -3817,7 +3845,7 @@ DoneWithFirstPass
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
-	lda #20
+	lda #STARTINGENEMYTANKCOUNT
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
