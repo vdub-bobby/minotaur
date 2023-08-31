@@ -89,7 +89,7 @@ ENEMYTANK3DELAY	=	1;7
 PLAYERRESPAWNDELAY = 15
 
 
-STARTINGENEMYTANKCOUNT	=	 4
+STARTINGENEMYTANKCOUNT	=	 20
 
 
 PLAYERSTARTINGX	=	8
@@ -110,9 +110,9 @@ ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
 PLAYERTANKSPEED	=	TANKSPEED3
-ENEMYTANKBASESPEED0	=	TANKSPEED7
-ENEMYTANKBASESPEED1 = 	TANKSPEED6
-ENEMYTANKBASESPEED2	=	TANKSPEED5
+ENEMYTANKBASESPEED0	=   TANKSPEED7
+ENEMYTANKBASESPEED1 = 	TANKSPEED5
+ENEMYTANKBASESPEED2	=	TANKSPEED3
 
 
 PLAYERTANKVOLUME	=	8
@@ -289,7 +289,7 @@ SELECT		=	%00000010
 RESET		=	%00000001
 
 
-TANKAISWITCH	=	0
+TANKAISWITCH	=	64
 
 
 ;-------------------------End Constants-----------------------------------
@@ -517,7 +517,14 @@ PositioningLoopVBLANK	;--excluding players
 	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
 	
+;	lda TankMovementCounter
+;	cmp #TANKAISWITCH
+;	bcc ShowAISwitch
+	
 	lda #WALLCOLOR
+;	.byte $2C   ;--skip next two bytes
+;ShowAISwitch
+ ;   ora #$0F
 	sta COLUPF
 	ldx #$C0
 	lda #$FF
@@ -1402,9 +1409,19 @@ SetInitialEnemyTankSpeedRoutine
 	lda NewTankSpeed,X
 	clc
 	adc MazeNumber
+	;--if tanks remaining is less than 8 increase speed by 4
+	sta Temp
+	lda TanksRemaining
+	cmp #8
+	bcs MoreThanTenTanksRemaining
+	adc #4
+	sta Temp	
+MoreThanTenTanksRemaining
+	lda Temp
 	cmp #15
 	bcc NewSpeedNotTooHigh
 	lda #TANKSPEED15
+	
 NewSpeedNotTooHigh
 	sta Temp
 	;convert X's range (1-3) to (0-2)
@@ -1698,7 +1715,12 @@ MoreThanTwoAllowedDirections
 	and PreventReverses,Y
 	pha
 	
-	;--if TankMovementCounter < 8, then move tanks towards various corners, otherwise, follow regular pattern
+	;--TANK AI ROUTINE ... such as it is
+	;--if TankMovementCounter < TANKAISWITCH, then move tanks towards various corners, otherwise, follow regular pattern
+	;--TankMovementCounter updates every 4 frames, so goes from 0 to 255 every ... 16-ish seconds (1024 frames)
+	;--at fastest tank speed it is moving ....a pixel every 4 frames.  At slowest tank speed a pixel every 32 frames.
+	;--and each block is approx 8x8, so - at fastest speed, tanks will choose a new direction every 32 frames, at slowest speed will
+	;       choose a new direction every 256 frames
 	lda TankMovementCounter
 	cmp #TANKAISWITCH
 	bcs RegularMovement
@@ -3888,7 +3910,15 @@ DoneWithFirstPass
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
-	lda #STARTINGENEMYTANKCOUNT
+	lda MazeNumber
+	asl
+	clc
+	adc #6
+	;lda #STARTINGENEMYTANKCOUNT
+	cmp #20
+	bcc SetInitialTanksRemaining
+    lda #20
+SetInitialTanksRemaining
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
