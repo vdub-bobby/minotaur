@@ -61,7 +61,7 @@
 ;		remove bullets from screen during level transitions
 ;	
 ;   Notes from ZeroPage livestream on 9/1:
-;       screen rolls are way more frequent than I thought, ugh.  Need to work on that.
+;       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
 ;       if possible would like to speed up game play.
 ;       update spawn points to force player to move from bottom of screen ...
 ;       FIXED: found bug that you can shoot tanks before they are on the screen (!)
@@ -1053,16 +1053,17 @@ InBetweenLevels
 	brk
 	.word KernelSetupSubroutine
 
-	nop	;placeholder for debugging scanline counts
+;	nop	;placeholder for debugging scanline counts
 
 WaitForVblankEnd
 	lda INTIM
-	bpl WaitForVblankEnd
-; 	bmi OverTimeVBLANK
-; 	bne WaitForVblankEnd
-; 	beq EndVBLANK
-; OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
-; 	nop
+; 	bpl WaitForVblankEnd
+	bmi OverTimeVBLANK
+	cmp #1
+	bne WaitForVblankEnd
+	beq EndVBLANK
+OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+	nop
 		
 EndVBLANK	
 
@@ -1083,7 +1084,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #30
+	lda  #34
 	sta  TIM64T
 	
 	
@@ -1154,13 +1155,14 @@ NotOnTitleScreen
 
 WaitForOverscanEnd
 	lda INTIM
-	bpl WaitForOverscanEnd
-;	bmi OverTimeOverscan
-;	bne WaitForOverscanEnd
-;	beq EndOverscan
-;OverTimeOverscan
-;	nop
-;EndOverscan	
+; 	bpl WaitForOverscanEnd
+	bmi OverTimeOverscan
+	cmp #1
+	bne WaitForOverscanEnd
+	beq EndOverscan
+OverTimeOverscan
+	nop
+EndOverscan	
 	
 	sta WSYNC		;last line...I think?
 
