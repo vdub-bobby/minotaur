@@ -66,7 +66,7 @@
 ;       update spawn points to force player to move from bottom of screen ...
 ;       FIXED: found bug that you can shoot tanks before they are on the screen (!)
 ;       need to make AI more aggressively chasing "base"
-;       probably need to finally implement the "game over" logic for when a tank gets the base	
+;       IN PROGRESS: probably need to finally implement the "game over" logic for when a tank gets the base	
 
 
 
@@ -1267,9 +1267,15 @@ RESETPressed
 StartNewGame	
 	;--reset score here if REST pressed
 	lda #0
-	sta Score
-	sta Score+1
-	sta Score+2
+	ldx #3
+	bne NewGameZeroLoopEntryPoint
+NewGameZeroLoop
+	sta Score,X
+NewGameZeroLoopEntryPoint
+    sta BulletX,X
+    sta BulletY,X
+    dex
+    bpl NewGameZeroLoop
 
 	
 StartNewLevel
@@ -4080,6 +4086,37 @@ TankCollisionBitEven
 
 CollisionsSubroutine
 
+
+    ;--first and most important collision check: has anything at all touched the base?
+    ;-check bullets first
+    ;--I think we can use the collision registers... maybe
+    bit CXBLPF
+    bpl NoBulletToBaseCollision
+    ;--hit PF, now let's see if it is in the middle on the bottom row
+    lda FrameCounter
+    and #3
+    tax
+    lda BulletY,X
+    cmp #BLOCKHEIGHT+2
+    bcs NoBulletToBaseCollision
+    lda BulletX,X
+    cmp #76
+    bcc NoBulletToBaseCollision
+    cmp #85
+    bcs NoBulletToBaseCollision
+    
+    ;--collision!  Game Over, man, Game Over.
+    lda GameStatus
+    ora #GAMEOVER|GAMEOFF
+    sta GameStatus
+    lda #0
+    ;--kill sounds just for my own sanity
+    sta AUDV0
+    sta AUDV1
+    
+NoBulletToBaseCollision
+    
+    
 
 	;--can use hardware collisions for tank to tank
 	;tentative plan: use movement routine to prevent enemy tanks from colliding
