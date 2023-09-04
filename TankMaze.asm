@@ -24,7 +24,7 @@
 ;		is going to require more space.  
 ;	Biggest thing at this point is figure out ramping difficulty
 ;		IDEAS:
-;			faster tanks at higher levels
+;			faster tanks at higher levels  DONE
 ;			more frequent shooting by enemy tanks
 ;			more aggressive tank movement routines
 ;			smarter shooting by enemy tanks
@@ -59,7 +59,14 @@
 ;	BUG KILLING!
 ;		scanline count is wonky, need to tighten up various subroutines that take too long
 ;		remove bullets from screen during level transitions
-;		
+;	
+;   Notes from ZeroPage livestream on 9/1:
+;       screen rolls are way more frequent than I thought, ugh.  Need to work on that.
+;       if possible would like to speed up game play.
+;       update spawn points to force player to move from bottom of screen ...
+;       FIXED: found bug that you can shoot tanks before they are on the screen (!)
+;       need to make AI more aggressively chasing "base"
+;       probably need to finally implement the "game over" logic for when a tank gets the base	
 
 
 
@@ -91,6 +98,9 @@ PLAYERRESPAWNDELAY = 15
 
 STARTINGENEMYTANKCOUNT	=	 20
 
+TANKONSCREENLEFT    =   16
+TANKONSCREENRIGHT   =   136
+TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
 PLAYERSTARTINGX	=	8
 
@@ -1368,7 +1378,7 @@ NoVerticalTankMovement
 ;****************************************************************************	
 
 FireEnemyBulletRoutine
-	;--- only every ... 16 frames
+	;--- only every ... variable # of frames
 	lda EnemyDebounce
 	beq FireEnemyBullet
 	dec EnemyDebounce
@@ -1385,7 +1395,14 @@ FindAvailableEnemyBallLoop
 FoundAvailableEnemyBall
 	inx
 	inx
-	lda #ENEMYDEBOUNCE
+	;--shoot more often as levels increase
+	ldy MazeNumber
+	dey
+	tya
+	and #$0F
+	tay
+	lda EnemyBulletDebounce,Y
+	;lda #ENEMYDEBOUNCE
 	sta EnemyDebounce
 	;--find random tank 
 	lda RandomNumber
@@ -1394,15 +1411,32 @@ FoundAvailableEnemyBall
 	bne ShootFromTank
 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
-	
+    ;--if tank offscreen, don't shoot from it
+	lda TankStatus,Y
+	and #$F0
+	beq TankOffscreenCannotShoot
 	jsr FireBulletRoutine
+TankOffscreenCannotShoot
 DoNotFireEnemyBullet	
 NoAvailableEnemyBalls
 	;--then we're done
 	rts	
 	
 ;****************************************************************************
-	
+
+EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
+    .byte 30, 30, 25, 25
+    .byte 20, 20, 18, 18
+    .byte 15, 15, 12, 12
+    .byte 10, 7, 2, 1	
+
+    
+;****************************************************************************
+
+TanksRemainingSpeedBoost
+    .byte 15, 10, 8, 6, 4, 2, 1, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
+    	
 SetInitialEnemyTankSpeedRoutine
 	sta TankStatus,X	;--first write new direction
 	;--tank starting speed and add level, capped at 15-tank # (0, 1, 2)
@@ -1413,14 +1447,17 @@ SetInitialEnemyTankSpeedRoutine
 	sta Temp
 	lda TanksRemaining
 	cmp #8
-	bcs MoreThanTenTanksRemaining
+	bcs MoreThanEightTanksRemaining
 	adc #4
 	sta Temp	
-MoreThanTenTanksRemaining
-	lda Temp
+MoreThanEightTanksRemaining
+ 	lda Temp
+;     ldy TanksRemaining
+;     adc TanksRemainingSpeedBoost,Y
 	cmp #15
 	bcc NewSpeedNotTooHigh
 	lda #TANKSPEED15
+	bne SetNewEnemyTankSpeed
 	
 NewSpeedNotTooHigh
 	sta Temp
@@ -1435,6 +1472,7 @@ NewSpeedNotTooHigh
 	;add -(X-1) to the new speed and set.
 	clc
 	adc Temp
+SetNewEnemyTankSpeed
 	ora TankStatus,X
 	sta TankStatus,X
 	
@@ -4005,7 +4043,23 @@ IncreaseScoreSubroutine
 	rts
 
 ;****************************************************************************
-
+IsTankOnScreen
+    ;--X holds tank number to check
+    ;--return in accumulator:  0 if offscreen, 1 if onscreen
+    lda TankX,X
+    cmp #TANKONSCREENLEFT
+    bcc TankOffScreen
+    cmp #TANKONSCREENRIGHT+1
+    bcs TankOffScreen
+    lda TankY,X
+    cmp #TANKONSCREENTOP+2
+    bcc TankOnScreen    
+TankOffScreen
+    lda #0
+    rts
+TankOnScreen
+    lda #1
+    rts
 
 CollisionRotationTables
 	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
@@ -4040,9 +4094,6 @@ CollisionsSubroutine
 	;Tank 1			M0 to P0		P1 to M0
 	;Tank 2			P1 to P0		M1 to M0
 	;Tank 3			M1 to P0		P0 to M0
-	
-	
-
 	lda FrameCounter
 	and #1
 	asl
@@ -4064,19 +4115,29 @@ TankCollisionLoop
 	and (MiscPtr+2),Y
 	beq NoTankToTankCollision
 	
-	;--remove player tank 
+	;--remove player tank ONLY if fully onscreen
+	lda TankX
+	cmp #16
+	bcc PlayerNotOnScreenCannotDie
 	lda StartingTankYPosition+4
 	sta TankY
 	lda StartingTankXPosition+4
 	sta TankX
 	lda StartingTankStatus+4
 	sta TankStatus
-	;... & enemy tank?
-	
+	;--play tank explosion sound
+	ldy #ENEMYTANKSOUND
+	jsr StartSoundSubroutineBank2
+
+PlayerNotOnScreenCannotDie
 	tya
 	tax
+    ;--remove enemy tank only if IT is fully onscreen
+    jsr IsTankOnScreen ;returns 1 in A if onscreen, 0 in A if not
+    and #$FF
+    beq EnemyNotOnScreenCannotDie
 	jsr PlayerHitTank
-	
+EnemyNotOnScreenCannotDie
 	;--to do: play a "you died" sound
 	
 NoTankToTankCollision
@@ -4188,8 +4249,8 @@ BallHasNotHitBlock
 	ldx #3
 CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
-	lda TankY,X
-	cmp #MAZEAREAHEIGHT+TANKHEIGHT+4
+	jsr IsTankOnScreen
+	and #$FF
 	bne EnemyTankOnScreen
 	jmp EnemyTankOffscreen
 EnemyTankOnScreen
