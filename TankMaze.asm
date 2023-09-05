@@ -1027,6 +1027,8 @@ VSYNCWaitLoop
 TriggerDebounceZero	
 	lda INPT4
 	bmi NoTriggerToStartGame
+	lda #0
+	sta MazeNumber
 	jsr StartNewGame
 NoTriggerToStartGame
 TriggerNotDebouncedYet
@@ -1272,7 +1274,7 @@ SELECTPressed
 	sta Debounce
 	
 StartNewGame	
-	;--reset score here if REST pressed
+	;--reset score here 
 	lda #0
 	ldx #3
 	bne NewGameZeroLoopEntryPoint
