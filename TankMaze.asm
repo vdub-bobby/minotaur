@@ -25,14 +25,13 @@
 ;	Biggest thing at this point is figure out ramping difficulty
 ;		IDEAS:
 ;			faster tanks at higher levels  DONE
-;			more frequent shooting by enemy tanks
-;			more aggressive tank movement routines
-;			smarter shooting by enemy tanks
+;			more frequent shooting by enemy tanks DONE
+;			more aggressive tank movement routines IN PROGRESS
+;			smarter shooting by enemy tanks HMM
 ;
 
 ;	Figure out better AI for tank movement/firing routines 
 ;	Add explosion graphics
-;	Music?
 ;	Title/splash screen?  STARTED... still needs work.
 ;	Power-Ups - ???
 ;		keep this simple: 
@@ -46,7 +45,7 @@
 ;       fix scanline count
 ;		tank:tank collisions	
 ;		OR NOT?  display player lives remaining
-;		don't give points for enemy tank actions
+;		DONE: don't give points for enemy tank actions
 ;		DONE replace placeholder font
 ;		Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 ;		PAL60 version
@@ -58,7 +57,7 @@
 ;
 ;	BUG KILLING!
 ;		scanline count is wonky, need to tighten up various subroutines that take too long
-;		remove bullets from screen during level transitions
+;		FIXED: remove bullets from screen during level transitions
 ;	
 ;   Notes from ZeroPage livestream on 9/1:
 ;       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
@@ -1247,7 +1246,9 @@ ReadConsoleSwitchesSubroutine
 	lda SWCHB
 	lsr				;get RESET into carry
 	bcc RESETPressed
-	;--reset not pressed, so reset debounce flag
+	lsr
+	bcc SELECTPressed
+	;--switch not pressed, so reset debounce flag
 	lda Debounce
 	and #~CONSOLEDEBOUNCEFLAG
 	sta Debounce
@@ -1255,7 +1256,13 @@ RESETNotReleased
 DoneWithConsoleSwitches
 	rts
 
+
+    
+	
 RESETPressed
+    lda #0
+    sta MazeNumber
+SELECTPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
 	
@@ -1276,7 +1283,6 @@ NewGameZeroLoopEntryPoint
     sta BulletY,X
     dex
     bpl NewGameZeroLoop
-
 	
 StartNewLevel
 	;--start game
@@ -4203,79 +4209,8 @@ CheckBallCollisionsLoop
 	beq BallHasNotHitBlock
 	;--remove block from screen!
 	
-	;--first, add to score
-	lda #0
-	sta Temp
-	lda #5
-	jsr IncreaseScoreSubroutine
-	
-	;--get row of block into Y and column into Temp+1
+	jsr BulletHitBrickSubroutine
 
-	lda BulletY,X
-	ldy #0
-	sec
-	sbc #2
-GetRowBulletIsInLoop
-	sbc #BLOCKHEIGHT
-	bcc FoundWhichRowBulletIsIn
-	iny
-	jmp GetRowBulletIsInLoop
-FoundWhichRowBulletIsIn
-	;--special check for row = 0
-	tya
-	bne BulletNotOnBottomRow
-	;--all we care is left or right of center
-	lda BulletX,X
-	cmp #80
-	bcc BulletOnLeftLastRow
-	lda #0
-	sta LastRowR
-	beq RemovedWallBlock
-BulletOnLeftLastRow
-	lda #0
-	sta LastRowL
-	beq RemovedWallBlock
-BulletNotOnBottomRow
-	lda BulletX,X
-	sec
-	sbc #16
-	lsr
-	lsr
-	lsr
-	sta Temp+1
-	txa
-	pha
-		
-	lda #<PF1Left
-	sta MiscPtr
-	lda #>PF1Left
-	sta MiscPtr+1
-	ldx Temp+1
-	lda PFMaskLookupBank2,X
-	eor #$FF
-	pha
-	lda PFRegisterLookupBank2,X
-	clc
-	adc MiscPtr
-	sta MiscPtr
-	pla
-	dey
-	and (MiscPtr),Y
-	sta (MiscPtr),Y	
-	pla
-	tax
-RemovedWallBlock
-	;--bullet has hit block, remove bullet from screen:
-	lda #BALLOFFSCREEN
-	sta BulletX,X
-	sta BulletY,X
-	
-	;--play brick explosion sound
-	;--only start if longer explosion not happening
-	ldy #BRICKSOUND
-	jsr StartSoundSubroutineBank2
-	
-NoSoundForBrickExplosion
 	
 	
 BallHasNotHitBlock
@@ -4348,6 +4283,89 @@ DoneWithCheckBulletTankCollisionOuterLoop
 	jmp ReturnFromBSSubroutine2
 
 ;****************************************************************************
+
+
+BulletHitBrickSubroutine
+	;--first, add to score ONLY if player bullet
+	cpx #2
+	bcs NoScoreForWallDestructionByEnemies
+	lda #0
+	sta Temp
+	lda #5
+	jsr IncreaseScoreSubroutine
+NoScoreForWallDestructionByEnemies	
+	;--get row of block into Y and column into Temp+1
+
+	lda BulletY,X
+	ldy #0
+	sec
+	sbc #2
+GetRowBulletIsInLoop
+	sbc #BLOCKHEIGHT
+	bcc FoundWhichRowBulletIsIn
+	iny
+	jmp GetRowBulletIsInLoop
+FoundWhichRowBulletIsIn
+	;--special check for row = 0
+	tya
+	bne BulletNotOnBottomRow
+	;--all we care is left or right of center
+	lda BulletX,X
+	cmp #80
+	bcc BulletOnLeftLastRow
+	lda #0
+	sta LastRowR
+	beq RemovedWallBlock
+BulletOnLeftLastRow
+	lda #0
+	sta LastRowL
+	beq RemovedWallBlock
+BulletNotOnBottomRow
+	lda BulletX,X
+	sec
+	sbc #16
+	lsr
+	lsr
+	lsr
+	sta Temp+1
+	txa
+	pha
+		
+	lda #<PF1Left
+	sta MiscPtr
+	lda #>PF1Left
+	sta MiscPtr+1
+	ldx Temp+1
+	lda PFMaskLookupBank2,X
+	eor #$FF
+	pha
+	lda PFRegisterLookupBank2,X
+	clc
+	adc MiscPtr
+	sta MiscPtr
+	pla
+	dey
+	and (MiscPtr),Y
+	sta (MiscPtr),Y	
+	pla
+	tax
+RemovedWallBlock
+	;--bullet has hit block, remove bullet from screen:
+	lda #BALLOFFSCREEN
+	sta BulletX,X
+	sta BulletY,X
+	
+	;--play brick explosion sound
+	;--only start if longer explosion not happening
+	ldy #BRICKSOUND
+	jsr StartSoundSubroutineBank2
+	
+NoSoundForBrickExplosion
+
+    rts
+    
+;****************************************************************************
+
 
 
 BulletHitTank
