@@ -103,9 +103,9 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
 PLAYERSTARTINGX	=	8
 
-ENEMY0STARTINGX	=	16
+ENEMY0STARTINGX	=	24
 ENEMY1STARTINGX	=	72
-ENEMY2STARTINGX	=	136
+ENEMY2STARTINGX	=	128
 ENEMY0STARTINGX2	=	144
 ENEMY1STARTINGX2	=	8
 ENEMY2STARTINGX2	=	144
@@ -1341,13 +1341,8 @@ SetUpTankInitialValues
 	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	sta CTRLPF
 	
-
-	
-	
 	rts
 	
-
-
 ;****************************************************************************
 
 ;--X is index into which tank
@@ -3754,7 +3749,7 @@ FillMazeLoop
 	bpl FillMazeLoop
 	
 	;	leave room for enemy tanks to enter:
-	ldx #$3F
+	ldx #$CF
 	;clear upper L corner
 	txa
 	and PF1Left+MAZEROWS-2
@@ -3766,7 +3761,7 @@ FillMazeLoop
 	sta PF1Right+MAZEROWS-2
 	
 	;clear spot directly to L of center in top row
-	txa
+	lda #$3F
 	and PF2Left+MAZEROWS-2
 	sta PF2Left+MAZEROWS-2
 	
@@ -4382,7 +4377,7 @@ PlayerHitTank
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
 	cmp #BLOCKHEIGHT*7
-	bcc RegularEnemyTankRespawn
+	bcc TopRowEnemyTankRespawn
 	;--use alternate positions
 	lda StartingTankYPosition+4,X
 	sta TankY,X
@@ -4390,8 +4385,17 @@ PlayerHitTank
 	sta TankX,X
 	lda StartingTankStatus+4,X
 	jmp FinishedEnemyTankRespawn
-RegularEnemyTankRespawn
-	lda StartingTankYPosition,X
+TopRowEnemyTankRespawn
+	;--find random starting X position
+;     lda RandomNumber
+;     and #31
+;     tay
+; FindOpenEntryBlockLoop
+;     $$$
+
+
+
+    lda StartingTankYPosition,X
 	sta TankY,X
 	lda StartingTankXPosition,X
 	sta TankX,X
