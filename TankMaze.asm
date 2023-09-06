@@ -89,8 +89,8 @@ TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
 ENEMYTANK1DELAY	=	1;7
-ENEMYTANK2DELAY	=	1;7
-ENEMYTANK3DELAY	=	1;7
+ENEMYTANK2DELAY	=	3;7
+ENEMYTANK3DELAY	=	5;7
 
 PLAYERRESPAWNDELAY = 15
 
@@ -101,16 +101,24 @@ TANKONSCREENLEFT    =   16
 TANKONSCREENRIGHT   =   136
 TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
+FIRSTCOLUMNX    =   16
+
+
 PLAYERSTARTINGX	=	8
 
 ENEMY0STARTINGX	=	24
 ENEMY1STARTINGX	=	72
 ENEMY2STARTINGX	=	128
 ENEMY0STARTINGX2	=	144
-ENEMY1STARTINGX2	=	8
+ENEMY1STARTINGX2	=	144
 ENEMY2STARTINGX2	=	144
+ENEMY0STARTINGX3	=	8
+ENEMY1STARTINGX3	=	8
+ENEMY2STARTINGX3	=	8
 TANKOFFSCREEN	=	127
 ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
+ENEMYSTARTINGYHIGHROW = 7
+ENEMYSTARTINGYHIGH = (BLOCKHEIGHT * ENEMYSTARTINGYHIGHROW) + 1
 ENEMYSTARTINGYMIDROW = 5
 ENEMYSTARTINGYMID = (BLOCKHEIGHT * ENEMYSTARTINGYMIDROW) + 1
 ENEMYSTARTINGYLOWROW = 3
@@ -1692,7 +1700,7 @@ TimeForEnemyTankToTurn
 	bne SetNewTankDirection	;branch always
 TankNotAboveMaze	
 	lda TankX,X
-	cmp #ENEMY1STARTINGX2+1
+	cmp #FIRSTCOLUMNX
 	bcs TankNotLeftOfMaze
 	lda #J0RIGHT
 	bne SetNewTankDirection	;branch always
@@ -2051,10 +2059,17 @@ ReadControllersSubroutine
 	ldx #0		;index into which tank	;--I think X always already equals zero when we get here.
 	and #$F0	;clear bottom nibble
 	cmp #$F0
-	beq NotTryingToMove
+; 	beq NotTryingToMove
+    bne TryingToMove
+    ;--not trying to move, so just ... exit?
+    ;ldx #0
+    stx AUDV0
+    pla ;--pop movement flag off stack
+    rts
+TryingToMove
 	ldx #PLAYERTANKENGINEVOLUME
 SkipReadingControllers
-NotTryingToMove
+; NotTryingToMove
 	stx AUDV0	
 
 	ldx #0		;index into which tank	
@@ -3763,10 +3778,18 @@ FillMazeLoop
 	sta PF1Right+MAZEROWS-2
 	
 	;clear spot directly to L of center in top row
-	lda #$3F
+	ldx #$3F
+	txa
 	and PF2Left+MAZEROWS-2
 	sta PF2Left+MAZEROWS-2
 	
+	;--clear left and right blocks on the high row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYHIGHROW - 2
+	sta PF1Left + ENEMYSTARTINGYHIGHROW - 2
+	txa
+	and PF1Right + ENEMYSTARTINGYHIGHROW - 2
+	sta PF1Right + ENEMYSTARTINGYHIGHROW - 2
 	;--clear left and right blocks on the middle row where tanks enter when player is near top of screen
 	txa
 	and PF1Left + ENEMYSTARTINGYMIDROW - 2
@@ -3774,10 +3797,14 @@ FillMazeLoop
 	txa
 	and PF1Right + ENEMYSTARTINGYMIDROW - 2
 	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
-	;--and clear right block on low row where tanks enter when player is near top of screen
+	;--and clear left and right blocks on low row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYLOWROW - 2
+	sta PF1Left + ENEMYSTARTINGYLOWROW - 2
 	txa
 	and PF1Right + ENEMYSTARTINGYLOWROW - 2 
 	sta PF1Right + ENEMYSTARTINGYLOWROW - 2 
+	
 	
 	;--update maze number on first pass also
 	sed
@@ -4381,6 +4408,18 @@ PlayerHitTank
 	cmp #BLOCKHEIGHT*7
 	bcc TopRowEnemyTankRespawn
 	;--use alternate positions
+	;--if player is on left part of screen, use right respawn locations
+	lda TankX
+	cmp #80
+	bcc RightSideEnemyTankRespawn
+    ;--else left side
+	lda StartingTankYPosition+8,X
+	sta TankY,X
+	lda StartingTankXPosition+8,X
+	sta TankX,X
+	lda StartingTankStatus+8,X
+	jmp FinishedEnemyTankRespawn
+RightSideEnemyTankRespawn
 	lda StartingTankYPosition+4,X
 	sta TankY,X
 	lda StartingTankXPosition+4,X
@@ -4388,15 +4427,6 @@ PlayerHitTank
 	lda StartingTankStatus+4,X
 	jmp FinishedEnemyTankRespawn
 TopRowEnemyTankRespawn
-	;--find random starting X position
-;     lda RandomNumber
-;     and #31
-;     tay
-; FindOpenEntryBlockLoop
-;     $$$
-
-
-
     lda StartingTankYPosition,X
 	sta TankY,X
 	lda StartingTankXPosition,X
@@ -4625,10 +4655,12 @@ PFMaskLookupBank2
 StartingTankXPosition
 	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
 	.byte PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2
+	.byte PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3
 
 StartingTankYPosition 
 	.byte TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYMID ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
 	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
