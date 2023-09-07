@@ -2404,13 +2404,14 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	sec
 	sbc #BLOCKHEIGHT
 	bcs NotOnBottomRow
+OnBottomRow
 	;--on bottom row
 	;--only two blocks on bottom row
-	;	at X positions (LastRowL) 64-72 and (LastRowR) 88-96
+	;	at X positions (LastRowL) 64-71 and (LastRowR) 88-95
 	lda LastRowL
 	beq LastRowNoWallOnLeft
 	lda Temp
-	cmp #73
+	cmp #72
 	bcs LastRowCheckRightBlock
 	cmp #64
 	bcs FoundWhetherBlockExists
