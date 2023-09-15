@@ -185,6 +185,7 @@ BULLETUP		=	3
 BULLETCLEAR		=	3
 
 TRIGGERDEBOUNCEVALUE = 15
+TRIGGERDEBOUNCEFLAG =   %00100000
 CONSOLEDEBOUNCEFLAG	=	%00010000
 ENEMYDEBOUNCE = 32
 
@@ -1027,20 +1028,27 @@ VSYNCWaitLoop
 	and #GAMEOFF
 	beq InBetweenLevels
 	;--if game not on (and ONLY IF) read joystick button to start game
-	lda Debounce
-	and #$0F
-	beq TriggerDebounceZero
-	dec Debounce
-	jmp TriggerNotDebouncedYet
-TriggerDebounceZero	
 	lda INPT4
-	bmi NoTriggerToStartGame
+	bmi NoTriggerToStartGameClearTriggerDebounce
+	;--trigger IS pressed, now check debounce
+	lda Debounce
+	and #TRIGGERDEBOUNCEFLAG
+	bne TriggerNotDebouncedYet
+    ;--set trigger debounce and then start new game
+    lda Debounce
+    ora #TRIGGERDEBOUNCEFLAG
+    sta Debounce
+	
 	lda #0
 	sta MazeNumber
 	jsr StartNewGame
-NoTriggerToStartGame
+	jmp DoneStartingNewGameWithTrigger
+NoTriggerToStartGameClearTriggerDebounce
+    lda Debounce
+    and #~TRIGGERDEBOUNCEFLAG
+    sta Debounce
 TriggerNotDebouncedYet
-
+DoneStartingNewGameWithTrigger
 
 	jmp GameNotOnVBLANK
 GameOnVBLANK
@@ -1266,16 +1274,17 @@ RESETNotReleased
 DoneWithConsoleSwitches
 	rts
 
-
-    
+ 
 	
 RESETPressed
+	lda Debounce
+	and #CONSOLEDEBOUNCEFLAG
+	bne RESETNotReleased
     lda #0
     sta MazeNumber
 SELECTPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
-	
 	bne RESETNotReleased
 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
@@ -1875,6 +1884,28 @@ ReturnFromTankMovementSubroutine
 
 ;****************************************************************************
 
+SoundSubroutine
+	;--no sound for enemy tanks; too annoying
+	
+	;  tentative:
+	;	channel 0 = player tank movement
+	;	channel 1 = all shots and explosions (no shot sound when an explosion is happening)
+	
+	lda Channel1Decay
+ 	cmp #$07
+ 	bcc SetChannel1Volume
+ 	lda #$07
+SetChannel1Volume
+	sta AUDV1
+	lda Channel1Decay
+	beq DoNotUpdateChannel1Decay
+	dec Channel1Decay
+DoNotUpdateChannel1Decay	
+	rts
+
+	
+;****************************************************************************
+
 
 PositionASpriteSubroutine
 	sec
@@ -1895,27 +1926,9 @@ DivideLoop			;				this loop can't cross a page boundary!!!
 Return					;label for cycle-burning code
 	rts
 
-;****************************************************************************
-
-SoundSubroutine
-	;--no sound for enemy tanks; too annoying
 	
-	;  tentative:
-	;	channel 0 = player tank movement
-	;	channel 1 = all shots and explosions (no shot sound when an explosion is happening)
 	
-	lda Channel1Decay
- 	cmp #$07
- 	bcc SetChannel1Volume
- 	lda #$07
-SetChannel1Volume
-	sta AUDV1
-	lda Channel1Decay
-	beq DoNotUpdateChannel1Decay
-	dec Channel1Decay
-DoNotUpdateChannel1Decay	
-	rts
-
+	
 ;****************************************************************************
 
 
@@ -4108,13 +4121,31 @@ CollisionRotationTables
 	
 TankCollisionRegisterOdd
 	.byte CXM0P, CXPPMM, CXM1P
+; 	.byte CXM0P, CXM1P, CXPPMM
 TankCollisionBitOdd
 	.byte $40, $80, $80
 TankCollisionRegisterEven
 	.byte CXM0P, CXPPMM, CXM0P
+; 	.byte CXM0P, CXM0P, CXPPMM
 TankCollisionBitEven
 	.byte $80, $40, $40 ; $40, $40	
+	
+	
+	;Rotation:		Frame odd		Frame even
+	;Framecounter = xxxxxxx1        xxxxxxx0
+	;		P0		player			tank 3
+	;		P1		tank 2			tank 1
+	;		M0		tank 1			player
+	;		M1		tank 3			tank 2
 
+	;player to tank collisions:
+	
+	;Tank 1			M0 to P0		P1 to M0
+	;Tank 2			P1 to P0		M1 to M0
+	;Tank 3			M1 to P0		P0 to M0
+	
+	
+	
 CollisionsSubroutine
 
 
@@ -4184,7 +4215,8 @@ TankCollisionLoop
 	lda $00,X
 	and (MiscPtr+2),Y
 	beq NoTankToTankCollision
-	
+	tya
+	tax
 	;--remove player tank ONLY if fully onscreen
 	lda TankX
 	cmp #16
@@ -4200,8 +4232,6 @@ TankCollisionLoop
 	jsr StartSoundSubroutineBank2
 
 PlayerNotOnScreenCannotDie
-	tya
-	tax
     ;--remove enemy tank only if IT is fully onscreen
     jsr IsTankOnScreen ;returns 1 in A if onscreen, 0 in A if not
     and #$FF
