@@ -62,7 +62,7 @@
 ;   Notes from ZeroPage livestream on 9/1:
 ;       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
 ;       if possible would like to speed up game play.
-;       update spawn points to force player to move from bottom of screen ...
+;       FIXED: update spawn points to force player to move from bottom of screen ...
 ;       FIXED: found bug that you can shoot tanks before they are on the screen (!)
 ;       need to make AI more aggressively chasing "base"
 ;       IN PROGRESS: probably need to finally implement the "game over" logic for when a tank gets the base	
@@ -96,6 +96,9 @@ PLAYERRESPAWNDELAY = 15
 
 
 STARTINGENEMYTANKCOUNT	=	 20
+
+
+LEVELENDTANKSPEEDBOOST  =   4
 
 TANKONSCREENLEFT    =   16
 TANKONSCREENRIGHT   =   136
@@ -1461,7 +1464,8 @@ EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet f
     
 ;****************************************************************************
 
-TanksRemainingSpeedBoost
+TanksRemainingSpeedBoost ;--just realized the first three values in this table have no effect.  not sure
+                        ;   yet if I want to shift the values or not.
     .byte 15, 10, 8, 6, 4, 2, 1, 0, 0, 0
     .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
     	
@@ -1473,15 +1477,15 @@ SetInitialEnemyTankSpeedRoutine
 	adc MazeNumber
 	;--if tanks remaining is less than 8 increase speed by 4
 	sta Temp
-	lda TanksRemaining
-	cmp #8
-	bcs MoreThanEightTanksRemaining
-	adc #4
-	sta Temp	
-MoreThanEightTanksRemaining
+;	lda TanksRemaining
+;	cmp #8
+;	bcs MoreThanEightTanksRemaining
+;	adc #4
+;	sta Temp	
+;MoreThanEightTanksRemaining
  	lda Temp
-;     ldy TanksRemaining
-;     adc TanksRemainingSpeedBoost,Y
+     ldy TanksRemaining
+     adc TanksRemainingSpeedBoost,Y
 	cmp #15
 	bcc NewSpeedNotTooHigh
 	lda #TANKSPEED15
@@ -4507,6 +4511,36 @@ FinishedEnemyTankRespawn
 	jsr IncreaseScoreSubroutine	
 PlayerTankHit	
 LevelNotComplete
+    ;--what I want to do here is IF the # of tanks remaining <= 3, 
+    ;   increase all enemy tank speeds by .... 4?  constant value.
+    lda TanksRemaining
+    cmp #4
+    bcs MoreThanFourTanksRemainingStill
+    ;--loop through tanks and increase speed?
+    ;--use Y variable... or save X and restore?
+    txa
+    pha
+    ldx #3
+IncreaseEnemyTankSpeedLoop
+    lda TankStatus,X
+    and #$0F
+    clc
+    adc #LEVELENDTANKSPEEDBOOST
+    cmp #15
+    bcc NewEnemyTankSpeedNotTooHigh
+    lda #$0F    
+NewEnemyTankSpeedNotTooHigh
+    sta Temp
+    lda TankStatus,X
+    and #$F0
+    ora Temp
+    sta TankStatus,X
+    dex
+    bne IncreaseEnemyTankSpeedLoop
+    
+    pla
+    tax    
+MoreThanFourTanksRemainingStill    
 	;--save and restore Y in this routine
 	pla
 	tay
