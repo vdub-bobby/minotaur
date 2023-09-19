@@ -88,9 +88,9 @@ TANKLEFT		=	J0LEFT
 TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
-ENEMYTANK1DELAY	=	1;7
-ENEMYTANK2DELAY	=	3;7
-ENEMYTANK3DELAY	=	5;7
+ENEMYTANK1DELAY	=	7;7     # of frames of delay is x 4
+ENEMYTANK2DELAY	=	11;7
+ENEMYTANK3DELAY	=	15;7
 
 PLAYERRESPAWNDELAY = 15
 
@@ -537,15 +537,9 @@ PositioningLoopVBLANK	;--excluding players
 	sta MiscPtr
 	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
-	
-;	lda TankMovementCounter
-;	cmp #TANKAISWITCH
-;	bcc ShowAISwitch
+
 	
 	lda #WALLCOLOR
-;	.byte $2C   ;--skip next two bytes
-;ShowAISwitch
- ;   ora #$0F
 	sta COLUPF
 	ldx #$C0
 	lda #$FF
@@ -555,16 +549,16 @@ PositioningLoopVBLANK	;--excluding players
 	sta PF2
 	
 	;---reflect P0/P1
-	;--this loop is garbage, need to rewrite so it is faster
+	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
 	ldy #3
 SetREFPLoop
 	lda TankStatus,Y
 	and #TANKLEFT
-	beq EndREFPLoop
-	lax (MiscPtr),Y		;get original X index back
+	beq EndREFPLoop     ;--only if facing left do we reflect
+	lax (MiscPtr),Y		;get X index into graphics registers
 	cpx #2
 	bcs EndREFPLoop
-	lda #$FF
+	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
 	sta REFP0,X	
 EndREFPLoop
 	dey
@@ -793,6 +787,7 @@ DoDraw10b
 	sta PF2					;+6		34
 	
 	SLEEP 6					;		40
+
 	
 	lda LastRowR
 	sta PF2					;+6		46
@@ -1456,9 +1451,9 @@ NoAvailableEnemyBalls
 ;****************************************************************************
 
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 30, 30, 25, 25
-    .byte 20, 20, 18, 18
-    .byte 15, 15, 12, 12
+    .byte 30, 28, 25, 22
+    .byte 20, 19, 18, 17
+    .byte 15, 13, 12, 11
     .byte 10, 7, 2, 1	
 
     
@@ -1470,22 +1465,17 @@ TanksRemainingSpeedBoost ;--just realized the first three values in this table h
     .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
     	
 SetInitialEnemyTankSpeedRoutine
+    ;--come in here with X pointing to tank # (1-3)
 	sta TankStatus,X	;--first write new direction
 	;--tank starting speed and add level, capped at 15-tank # (0, 1, 2)
 	lda NewTankSpeed,X
 	clc
 	adc MazeNumber
-	;--if tanks remaining is less than 8 increase speed by 4
-	sta Temp
-;	lda TanksRemaining
-;	cmp #8
-;	bcs MoreThanEightTanksRemaining
-;	adc #4
-;	sta Temp	
-;MoreThanEightTanksRemaining
- 	lda Temp
-     ldy TanksRemaining
-     adc TanksRemainingSpeedBoost,Y
+	;--increase speed depending on tanks remaining
+;	sta Temp
+; 	lda Temp
+    ldy TanksRemaining
+    adc TanksRemainingSpeedBoost,Y
 	cmp #15
 	bcc NewSpeedNotTooHigh
 	lda #TANKSPEED15
@@ -1516,13 +1506,13 @@ SetNewEnemyTankSpeed
 MoveEnemyTanksSubroutine
 
 	;	can't move all 3 enemies every frame, takes too long.
-	;	So instead move one per frame (moving none every 4th frame)
+	;	So instead move one per frame (moving none every 4th frame - this is when we fire a bullet)
 	;	Works well enough for now, work on optimizing this routine later
 
 	lda FrameCounter
 	and #3
 	bne MoveAnEnemyTank
-	dec TankMovementCounter
+	dec TankMovementCounter     ;tank movement counter decremented every four frames
 	;--if we ain't moving a tank, let's shoot a bullet
 	jmp FireEnemyBulletRoutine
 
@@ -1535,12 +1525,12 @@ MoveAnEnemyTank
 	;tank offscreen
 	;--only bring tank onscreen if there are enemy tanks remaining
 	;--how many tanks onscreen?
-	lda #0
+	;lda #0  ;---A is zero already following BNE above
 	sta Temp
 	ldy #3
 CountTanksOnScreenLoop
 	lda TankStatus,Y
-	and #$F0
+	and #$F0    ;--if tank has no direction set, it is offscreen and waiting to be respawned, and lower 4 bits hold wait counter until it is brought back onscreen
 	beq TankNotOnscreen
 	inc Temp
 TankNotOnscreen
@@ -1550,13 +1540,11 @@ TankNotOnscreen
 	lda Temp
 	cmp TanksRemaining
 	bcs DoNotBringTankOnscreenYet
-	lda TankMovementCounter
-	and #7
+	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 4.
+	and #3
 	bne DoNotBringTankOnscreenYet
 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
-	;lda #MAZEAREAHEIGHT+TANKHEIGHT
-	;sta TankY,X
 	; if tank off left edge of screen, move right.  if off right edge of screen, move left.  otherwise, move down
 	lda TankX,X
 	cmp #16
@@ -1574,9 +1562,6 @@ TankNotOffRightEdge
 SetInitialEnemyTankSpeed
 	jsr SetInitialEnemyTankSpeedRoutine
 	
-	
-
-
 	;--set tank fractional so it moves immediately and doesn't turn before it gets onscreen
  	lda #255
  	sta TankFractional,X
@@ -1630,6 +1615,8 @@ AtIntersectionX
 	sec
 	sbc #1
 	
+	
+	;--could use giant table instead.... 
 	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
 	;	post gives credit to December '84 Apple Assembly Line
 	;--constant cycle count divide by 7 !!!!
@@ -1910,6 +1897,10 @@ DoNotUpdateChannel1Decay
 	
 ;****************************************************************************
 
+    ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
+    if ((* + 5) & $FF00) != ((* + 8) & $FF00)
+        ds $FF - ((* + 4) & $FF)
+    endif
 
 PositionASpriteSubroutine
 	sec
@@ -3387,7 +3378,7 @@ MovementMask
 	
 RotationTablesBank1
 	.word RotationEvenBank1, RotationOddBank1	
-
+	
 RotationOddBank1
 	.byte 0	;and first 3 bytes of next table
 RotationEvenBank1
@@ -4016,16 +4007,23 @@ SetInitialTanksRemaining
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
-	lda #15
-	sta TankStatus+1
-	lsr
-	sta TankStatus+2
-	lsr
-	sta TankStatus+3
+	;--rewrite this:
+	ldx #3
+SetNewLevelTankDelay
+    lda StartingTankStatus,X
+    sta TankStatus,X
+    dex
+    bpl SetNewLevelTankDelay
+; 	lda #15
+; 	sta TankStatus+1
+; 	lsr
+; 	sta TankStatus+2
+; 	lsr
+; 	sta TankStatus+3
 	
 	;--set speed for player tank
-	lda #TANKRIGHT|PLAYERTANKSPEED
-	sta TankStatus
+; 	lda #TANKRIGHT|PLAYERTANKSPEED
+; 	sta TankStatus
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
