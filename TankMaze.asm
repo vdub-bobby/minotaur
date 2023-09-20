@@ -1317,7 +1317,7 @@ StartNewLevel
 MoveTanksOffscreenLoop
 	sta TankX,X
 	sta TankY,X
- 	sty TankStatus,X
+ 	sty TankStatus,X    ;--what does Y hold here?
 	dex
 	bpl MoveTanksOffscreenLoop
 	
@@ -2056,23 +2056,15 @@ ReadControllersSubroutine
 
 	lda #0
 	pha			;movement flag
-
-	;--if between levels, don't process movement
-	;lda GameStatus
-	
 	
 	lda SWCHA	;A holds joystick
-	
-	;--play engine sound if tank is moving
-	ldx #0		;index into which tank	;--I think X always already equals zero when we get here.
 	and #$F0	;clear bottom nibble
 	cmp #$F0
-; 	beq NotTryingToMove
     bne TryingToMove
     ;--not trying to move, so just ... exit?
-    ;ldx #0
-    stx AUDV0
-    pla ;--pop movement flag off stack
+    ;--stop engine sound
+    pla ;--pop movement flag (0) off stack
+    sta AUDV0
     rts
 TryingToMove
 	ldx #PLAYERTANKENGINEVOLUME
@@ -4227,7 +4219,7 @@ TankCollisionLoop
 	sta TankY
 	lda StartingTankXPosition+4
 	sta TankX
-	lda StartingTankStatus+4
+	lda StartingTankStatus;+4
 	sta TankStatus
 	;--play tank explosion sound
 	ldy #ENEMYTANKSOUND
@@ -4436,6 +4428,23 @@ PlayerHitTank
 	tya
 	pha
 
+	;--find random tank that is offscreen and spawn from that location
+	;--pick random tank and see if it is offscreen.  If so, use it.  
+	;   If not, use standard starting position of the tank we are respawning
+	txa
+	beq UseRegularRespawnPosition   ;--if player tank, use same respawn position
+	lda RandomNumber
+	and #3
+	beq UseRegularRespawnPosition
+	tay
+	lda TankStatus,Y
+	and #$F0
+	beq FoundRespawnPosition
+UseRegularRespawnPosition
+    txa
+    tay    
+FoundRespawnPosition
+
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
 	cmp #BLOCKHEIGHT*7
@@ -4446,25 +4455,21 @@ PlayerHitTank
 	cmp #80
 	bcc RightSideEnemyTankRespawn
     ;--else left side
-	lda StartingTankYPosition+8,X
-	sta TankY,X
-	lda StartingTankXPosition+8,X
-	sta TankX,X
-	lda StartingTankStatus+8,X
-	jmp FinishedEnemyTankRespawn
+    tya
+    clc
+    adc #4
+    tay
 RightSideEnemyTankRespawn
-	lda StartingTankYPosition+4,X
-	sta TankY,X
-	lda StartingTankXPosition+4,X
-	sta TankX,X
-	lda StartingTankStatus+4,X
-	jmp FinishedEnemyTankRespawn
+    tya
+;     clc   ;not needed since carry clear after addition above and BCC branch that took us directly here
+    adc #4
+    tay
 TopRowEnemyTankRespawn
-    lda StartingTankYPosition,X
+    lda StartingTankYPosition,Y
 	sta TankY,X
-	lda StartingTankXPosition,X
+	lda StartingTankXPosition,Y
 	sta TankX,X
-	lda StartingTankStatus,X
+	lda StartingTankStatus,X    ;%%%
 FinishedEnemyTankRespawn	
 	sta TankStatus,X
 ; 	lda #$FF
