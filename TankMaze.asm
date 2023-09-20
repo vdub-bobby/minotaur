@@ -108,6 +108,7 @@ FIRSTCOLUMNX    =   16
 
 
 PLAYERSTARTINGX	=	8
+PLAYERSTARTINGY =   TANKHEIGHT+1
 
 ENEMY0STARTINGX	=	24
 ENEMY1STARTINGX	=	72
@@ -118,7 +119,9 @@ ENEMY2STARTINGX2	=	144
 ENEMY0STARTINGX3	=	8
 ENEMY1STARTINGX3	=	8
 ENEMY2STARTINGX3	=	8
+
 TANKOFFSCREEN	=	127
+
 ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
 ENEMYSTARTINGYHIGHROW = 7
 ENEMYSTARTINGYHIGH = (BLOCKHEIGHT * ENEMYSTARTINGYHIGHROW) + 1
@@ -1650,12 +1653,6 @@ AtIntersectionX
 	;--now subtract from original number (all we care is if modulo = 0 or not)
 	sec
 	sbc Temp+1
-	
-	
-; FindYIntersectionLoop
-; 	sbc #BLOCKHEIGHT
-; 	bcs FindYIntersectionLoop
-; 	adc #BLOCKHEIGHT
 	beq AtIntersectionY
 	jmp NotAtIntersection
 AtIntersectionY	
@@ -2062,6 +2059,10 @@ ReadControllersSubroutine
 	cmp #$F0
     bne TryingToMove
     ;--not trying to move, so just ... exit?
+    ;--also clear TankStatus bottom nibble so we know it isn't trying to move.
+    lda TankStatus
+    and #$F0
+    sta TankStatus
     ;--stop engine sound
     pla ;--pop movement flag (0) off stack
     sta AUDV0
@@ -2071,12 +2072,18 @@ TryingToMove
 SkipReadingControllers
 ; NotTryingToMove
 	stx AUDV0	
-
 	ldx #0		;index into which tank	
 
 
-	pha			;--save desired direction of tank
-	
+	sta Temp			;--save desired direction of tank
+    ;--and set player speed which we set to zero when he stopped
+    lda TankStatus
+    and #$F0
+    ora #PLAYERTANKSPEED
+    sta TankStatus 
+    
+	lda Temp
+	pha
 	
 	jsr CheckForWallSubroutine		;--returns with allowed directions in A
 	.byte $24	;--skip next byte
@@ -3468,68 +3475,66 @@ RotationLoop
 	lda TankY,Y
 	sta PlayerY,X
 	txa
-	lsr		;--only setup gfx pointer when the tank is displayed with the player
+	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
 	beq PlayerNotMissile 
-	jmp MissileNotPlayer
+	jmp MissileNotPlayer    ;--can use BNE here if the routine in between isn't too long.
 PlayerNotMissile
 	;--get correct tank gfx ptr set up
 	txa
 	asl
 	asl
-	tax		;we need X * 4
-	lda TankStatus,Y
-	and #TANKUP
-	beq TankNotFacingUp
-	
-	stx Temp		;save X index
+; 	tax		;we need X * 4
+	sta Temp		;save X index
+	;--if Y = 0 then we are doing player tank.  Check if not moving.
+	tya ;set flags based on Y
+	bne NotPlayerTankSkipNotMovingCheck
+	;--how do we know if tank is not moving?  
+	lda TankStatus
+	and #$0F
+	bne PlayerTankMovingSetRegularGraphicsPointers
+; 	lda #0
+	.byte $2C   ;--skip two bytes 
+	;--end
+PlayerTankMovingSetRegularGraphicsPointers
+NotPlayerTankSkipNotMovingCheck
+	;--get index into tank graphics image
 	lda FrameCounter
 	lsr
 	and #%00000110
 	tax
+
+	;--what would it take to make the player tank static if not moving? 
+
+	lda TankStatus,Y
+	and #TANKUP
+	beq TankNotFacingUp
+	
 	lda TankUpFrame,X
 	pha
 	lda TankUpFrame+1,X
-	ldx Temp		;restore X
 	jmp SetTankGfxPtr
 TankNotFacingUp
 	lda TankStatus,Y
 	and #TANKDOWN
 	beq TankNotFacingDown
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
 	lda TankDownFrame,X
 	pha
 	lda TankDownFrame+1,X
-	ldx Temp		;restore X
 	jmp SetTankGfxPtr
 TankNotFacingDown
 	lda TankStatus,Y
 	and #TANKRIGHT
 	beq TankNotFacingRight
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
 	lda TankRightFrame,X
 	pha
 	lda TankRightFrame+1,X
-	ldx Temp		;restore X
 	jmp SetTankGfxPtr
 TankNotFacingRight
-	stx Temp		;save X index
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
 	lda TankRightFrame,X
 	pha
 	lda TankRightFrame+1,X
-	ldx Temp		;restore X
 SetTankGfxPtr
+    ldx Temp
 	sta Player0Ptr+1,X
 	sta Player0Ptr+3,X
 	pla
@@ -3542,8 +3547,6 @@ SetTankGfxPtr
 	adc #TANKHEIGHT
 	sta Player0Ptr+2,X
 	jmp EndRotationLoop
-MissileNotPlayer	
-	;--adjust missile width and position
 MissileNotPlayer	
 	;--adjust missile width and position
 	txa
@@ -4494,14 +4497,17 @@ FinishedEnemyTankRespawn
 	lda GameStatus
 	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
 	sta GameStatus
+	;--stop player tank from moving
+	lda TankStatus
+	and #$F0
+	sta TankStatus
 	;--remove remaining enemy tanks from screen
-	lda #0		;--X will return with this number in it
+	lda #0		
+	sta AUDV0
+	sta AUDV1
 	jsr MoveEnemyTanksOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
 	;--TODO stop sounds and/or play "level end" sound
-	lda #0
-	sta AUDV0
-	sta AUDV1
 		
 	
 	;--increase score by some amount ...
@@ -4726,13 +4732,13 @@ StartingTankXPosition
 	.byte PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3
 
 StartingTankYPosition 
-	.byte TANKHEIGHT+1, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	.byte TANKHEIGHT+1, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
 	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+; 	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
 	
 	
