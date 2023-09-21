@@ -41,7 +41,7 @@ BallY                    00b0              (R )
 BallYTemp                00b8                  
 BankSwitchSubroutine1    1f00              (R )
 BankSwitchSubroutine2    3f00              (R )
-BASECOLOR                00b0              (R )
+BASECOLOR                0010              (R )
 BASSSOUND                0006                  
 BeginMainMazeKernel      1114              (R )
 BLOCKHEIGHT              0007              (R )
@@ -64,8 +64,8 @@ BulletDirection          00a6              (R )
 BulletDirectionClear     1c9e              (R )
 BulletDirectionClearBank2 35bf                  
 BulletDirectionMask      35bb              (R )
-BulletDown               1ca2              (R )
 BULLETDOWN               0002              (R )
+BulletDown               1ca2              (R )
 BulletDownBank2          35c3              (R )
 BULLETFREQ               000f                  
 BulletHitBrickSubroutine 3415              (R )
@@ -460,7 +460,7 @@ QUADWIDTHMISSILE         0020              (R )
 RandomNumber             0082              (R )
 ReadConsoleSwitchesSubroutine 140a              (R )
 ReadControllersSubroutine 1774              (R )
-RED                      0040              (R )
+RED                      0040                  
 REFLECTEDPF              0001              (R )
 REFP0                    000b              (R )
 REFP1                    000c              (R )
@@ -501,6 +501,7 @@ RotationTablesBank1      1dde              (R )
 RSYNC                    0003                  
 SAWSOUND                 0001                  
 Score                    0086              (R )
+SCORECOLOR               000c              (R )
 ScoreKernelLoop          1059              (R )
 SCOREPF                  0002                  
 ScorePtr                 00ef              (R )
@@ -626,6 +627,7 @@ TANKSPEED7               0007
 TANKSPEED8               0008                  
 TANKSPEED9               0009                  
 TanksRemaining           008a              (R )
+TANKSREMAININGCOLOR      00aa              (R )
 TanksRemainingGfx        1c89              (R )
 TanksRemainingPF1Mask    1d90              (R )
 TanksRemainingPF2Mask    1d9b              (R )
