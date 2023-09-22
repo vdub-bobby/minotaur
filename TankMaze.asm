@@ -168,6 +168,9 @@ LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
 
+WALLDESTRUCTIONSCORE    =   $0005
+KILLTANKSCORE           =   $0100
+
 ;--GameStatus flags
 
 GAMEOFF			=	%10000000
@@ -175,8 +178,9 @@ GENERATINGMAZE	=	%01000000
 LEVELCOMPLETE	=	%00100000
 TITLESCREEN		=	%00010000
 GAMEOVER		=	%00001000
+DRAWBASE        =   %00000100
 
-LEVELCOMPLETETIMER	=	$07
+LEVELCOMPLETETIMER	=	$03
 
 
 ;--end GameStatus flags
@@ -825,15 +829,21 @@ DoDraw11b
 	lda LastRowL
 	sta PF2				;+6		19
 
+    ;--don't draw base sometimes	
+    lda GameStatus
+    and #DRAWBASE
+    beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
 	
-	SLEEP 7			;		31
-	
-
 	lda #$80
 	sta PF2				;+5		31
 	dey
 	bne KernelLastRowLoop		;+5		36
-	
+	beq DoneWithKernelLastRowLoop   ;is this necessary?
+DoNotDrawBase
+    sta.w PF2           ;+4
+    dey
+    bne KernelLastRowLoop
+DoneWithKernelLastRowLoop
 	sty PF2		;AKSHUALLY don't display base on last row
 	ldx Temp
 	txs			;+8		44
@@ -1104,7 +1114,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #34
+	lda  #31
 	sta  TIM64T
 	
 	
@@ -1239,17 +1249,26 @@ DrawTitleScreenFast
 	
 	dex
 	stx MazeGenerationPass
+	bmi DoneDrawingTitleScreen
 	tay	;set flags based on what we wrote
 	beq PutTitleGraphicsInPlayfieldLoop	;--this only works if last value is NOT zero
-	
+DoneDrawingTitleScreen
 	;--play sound
 	txa	;reset flags
 	bmi PlayLongSound
 	ldy #SHORTBRICKSOUND
-	.byte $2C 
-PlayLongSound	
+	bne PlayShortSound      ;branch always
+PlayLongSound
+	lda #%11111100
+	sta LastRowL
+	sta LastRowR	
+	lda GameStatus
+	ora #DRAWBASE
+	sta GameStatus
 	ldy #LONGEXPLOSIONSOUND
+PlayShortSound
 	jsr StartSoundSubroutine
+
 SkipDrawingTitleScreenThisFrame	
 	
 	rts
@@ -3056,16 +3075,29 @@ TankDownAnimated4b
 		.byte 0
 		
 TitleGraphics
-	.byte %00001100, %11001100, %00111111, %11001100	
-	.byte %00001100, %11111100, %00110011, %00111100
-	.byte %00001100, %11001100, %00110011, %11001100
-	.byte %11111111, %11111100, %00110011, %11111100
-	.byte %11000000, %00000000, %00000000, %00000000
-	.byte %11000000, %00110011, %11001100, %00111111
-	.byte %11000000, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11001100, %00110011
-	.byte %11001100, %00110011, %11111100, %00111111
-	.byte %11111111, %00000011, %00000000, %00000000
+; 	.byte %00001100, %11001100, %00111111, %11001100	
+; 	.byte %00001100, %11111100, %00110011, %00111100
+; 	.byte %00001100, %11001100, %00110011, %11001100
+; 	.byte %11111111, %11111100, %00110011, %11111100
+; 	.byte %11000000, %00000000, %00000000, %00000000
+; 	.byte %11000000, %00110011, %11001100, %00111111
+; 	.byte %11000000, %00110011, %11001100, %00110011
+; 	.byte %11001100, %00110011, %11001100, %00110011
+; 	.byte %11001100, %00110011, %11111100, %00111111
+; 	.byte %11111111, %00000011, %00000000, %00000000
+    ;-----PF1--------PF2--------PF2--------PF1
+    .byte %00001000, %11111100, %11111100, %00001000
+    .byte %00001000, %10001100, %10001100, %00001000
+    .byte %00001111, %11101111, %11101111, %00001111
+    .byte %00000111, %11111111, %11111111, %00000111
+    .byte %00000000, %00000000, %00000000, %00000000
+    .byte %10101010, %01110101, %01001010, %01010111
+    .byte %10101010, %01010101, %01001110, %00110101
+    .byte %10101010, %01010101, %01001010, %01010101
+    .byte %11111010, %01110111, %11101110, %01110101
+    .byte %11011010, %01110111, %11101110, %01110101
+
+
 TitleGraphicsEnd				
 
 
@@ -3759,7 +3791,10 @@ GenerateMazeSubroutine
 	bpl NotFirstPass
 	ldy #MAZEGENERATIONPASSES+1
 	sty MazeGenerationPass
-	;--on first pass, fill all with walls
+	;--on first pass, make base disappear and fill all with walls
+	lda GameStatus
+	and #~DRAWBASE
+	sta GameStatus
 	
 	ldx #MAZEROWS-2
 	lda #$FF
@@ -3771,45 +3806,7 @@ FillMazeLoop
 	dex 
 	bpl FillMazeLoop
 	
-	;	leave room for enemy tanks to enter:
-	ldx #$CF
-	;clear upper L corner
-	txa
-	and PF1Left+MAZEROWS-2
-	sta PF1Left+MAZEROWS-2
-	
-	;clear upper R corner
-	txa
-	and PF1Right+MAZEROWS-2
-	sta PF1Right+MAZEROWS-2
-	
-	;clear spot directly to L of center in top row
-	ldx #$3F
-	txa
-	and PF2Left+MAZEROWS-2
-	sta PF2Left+MAZEROWS-2
-	
-	;--clear left and right blocks on the high row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYHIGHROW - 2
-	sta PF1Left + ENEMYSTARTINGYHIGHROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYHIGHROW - 2
-	sta PF1Right + ENEMYSTARTINGYHIGHROW - 2
-	;--clear left and right blocks on the middle row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYMIDROW - 2
-	sta PF1Left + ENEMYSTARTINGYMIDROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYMIDROW - 2
-	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
-	;--and clear left and right blocks on low row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYLOWROW - 2
-	sta PF1Left + ENEMYSTARTINGYLOWROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYLOWROW - 2 
-	sta PF1Right + ENEMYSTARTINGYLOWROW - 2 
+
 	
 	
 	;--update maze number on first pass also
@@ -3980,6 +3977,52 @@ DoneWithFirstPass
 	sta LastRowL
 	sta LastRowR
 	
+	;	leave room for enemy tanks to enter:
+	ldx #$CF
+	;clear upper L corner
+	txa
+	and PF1Left+MAZEROWS-2
+	sta PF1Left+MAZEROWS-2
+	
+	;clear upper R corner
+	txa
+	and PF1Right+MAZEROWS-2
+	sta PF1Right+MAZEROWS-2
+	
+	;clear spot directly to L of center in top row
+	ldx #$3F
+	txa
+	and PF2Left+MAZEROWS-2
+	sta PF2Left+MAZEROWS-2
+	
+	;--clear left and right blocks on the high row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYHIGHROW - 2
+	sta PF1Left + ENEMYSTARTINGYHIGHROW - 2
+	txa
+	and PF1Right + ENEMYSTARTINGYHIGHROW - 2
+	sta PF1Right + ENEMYSTARTINGYHIGHROW - 2
+	;--clear left and right blocks on the middle row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYMIDROW - 2
+	sta PF1Left + ENEMYSTARTINGYMIDROW - 2
+	txa
+	and PF1Right + ENEMYSTARTINGYMIDROW - 2
+	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
+	;--and clear left and right blocks on low row where tanks enter when player is near top of screen
+	txa
+	and PF1Left + ENEMYSTARTINGYLOWROW - 2
+	sta PF1Left + ENEMYSTARTINGYLOWROW - 2
+	txa
+	and PF1Right + ENEMYSTARTINGYLOWROW - 2 
+	sta PF1Right + ENEMYSTARTINGYLOWROW - 2 
+	
+	
+	;--make base reappear
+	lda GameStatus
+	ora #DRAWBASE
+	sta GameStatus
+	
 	;--and clear GAMEOFF flag and turn off maze generation flag
 	lda GameStatus
 	and #~(GENERATINGMAZE|GAMEOFF)
@@ -4011,16 +4054,6 @@ SetNewLevelTankDelay
     sta TankStatus,X
     dex
     bpl SetNewLevelTankDelay
-; 	lda #15
-; 	sta TankStatus+1
-; 	lsr
-; 	sta TankStatus+2
-; 	lsr
-; 	sta TankStatus+3
-	
-	;--set speed for player tank
-; 	lda #TANKRIGHT|PLAYERTANKSPEED
-; 	sta TankStatus
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
@@ -4112,9 +4145,10 @@ TankOnScreen
     lda #1
     rts
 
+;****************************************************************************
+
 CollisionRotationTables
 	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
-			
 	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
 			
 	
@@ -4144,7 +4178,8 @@ TankCollisionBitEven
 	;Tank 3			M1 to P0		P0 to M0
 	
 	
-	
+;****************************************************************************
+
 CollisionsSubroutine
 
 
@@ -4229,12 +4264,20 @@ TankCollisionLoop
 	;--play tank explosion sound
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
+	;--turn off player movement sound
+	lda #0
+	sta AUDV0
 
 PlayerNotOnScreenCannotDie
     ;--remove enemy tank only if IT is fully onscreen
     jsr IsTankOnScreen ;returns 1 in A if onscreen, 0 in A if not
     and #$FF
     beq EnemyNotOnScreenCannotDie
+	;--add KILLTANKSCORE to score 
+	lda #>KILLTANKSCORE
+	sta Temp
+	lda #<KILLTANKSCORE
+	jsr IncreaseScoreSubroutine
 	jsr PlayerHitTank
 EnemyNotOnScreenCannotDie
 	;--to do: play a "you died" sound
@@ -4246,34 +4289,44 @@ NoTankToTankCollision
 
 
 	;--need to use software collision detection, at least for ball
-	ldx #3
-CheckBallCollisionsLoop
-	;--check for collision with wall
-	lda BulletX,X
-	cmp #BALLOFFSCREEN
-	beq BallHasNotHitBlock	;short circuit if the ball is offscreen
-	sta Temp
-	lda BulletY,X
-	sec
-	sbc #2
-	sta Temp+1
-	jsr IsBlockAtPositionBank2
-	;--result is in Temp
-	lda Temp
-	beq BallHasNotHitBlock
-	;--remove block from screen!
-	
-	jsr BulletHitBrickSubroutine
+ 	;--or do we?  if we use collision registers.... will that work?  
+    ;--testing seems to work.  be much faster.  will only check one bulllet per frame.  let's try.
 
+; 	ldx #3
+; CheckBallCollisionsLoop
+; 	;--check for collision with wall
+; 	lda BulletX,X
+; 	cmp #BALLOFFSCREEN
+; 	beq BallHasNotHitBlock	;short circuit if the ball is offscreen
+; 	sta Temp
+; 	lda BulletY,X
+; 	sec
+; 	sbc #2
+; 	sta Temp+1
+; 	jsr IsBlockAtPositionBank2
+; 	;--result is in Temp
+; 	lda Temp
+; 	beq BallHasNotHitBlock
+; 	;--remove block from screen!
 	
-	
+    ;--alternate collision routine for bullet-to-wall using collision registers
+    
+    bit CXBLPF
+    bpl BallHasNotHitBlock
+    ;--bullet hit the wall, now identify which bullet.
+    lda FrameCounter
+    and #3
+    tax
+	;--so problem is bullet is 2x2 block but brick subroutine below just checks 1x1 point.
+    jsr BulletHitBrickSubroutine
+
 BallHasNotHitBlock
-	dex
-	bpl CheckBallCollisionsLoop
-
+; 	dex
+; 	bpl CheckBallCollisionsLoop
 
 	;--now check if bullet has hit an enemy tank
-	
+	;   X is index into tank (outer loop)
+	;   Y is index into bullet (inner loop)
 	ldx #3
 CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
@@ -4283,15 +4336,15 @@ CheckBulletTankCollisionOuterLoop
 	jmp EnemyTankOffscreen
 EnemyTankOnScreen
 	;now compare ball location to tank location
-	;--only care about player bullets
 	ldy #3
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 	cmp #BALLOFFSCREEN
-	bne BulletOnScreen2
-	jmp BulletOffScreen2
+; 	bne BulletOnScreen2
+	beq BulletOffScreen2    
 BulletOnScreen2
 	;--compare X position
+	;----so... I think probably we can use the collision registers.  Is it faster though?
 	clc
 	adc #1
 	cmp TankX,X
@@ -4316,12 +4369,21 @@ BulletOnScreen2
 	sbc #TANKHEIGHT
 	cmp Temp
 	bcs BulletDidNotHitTank
-	
-	
+
+	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
+	txa ;set flags based on X
+	beq NoPointsForGettingShot
+	cpy #2
+	bcs NoPointsForEnemyOwnGoals
+	lda #>KILLTANKSCORE
+	sta Temp
+	lda #<KILLTANKSCORE
+	jsr IncreaseScoreSubroutine
+
+NoPointsForGettingShot		
+NoPointsForEnemyOwnGoals
 	jsr BulletHitTank
 
-	
-	
 BulletDidNotHitTank
 BulletOffScreen2
 	dey
@@ -4329,6 +4391,7 @@ BulletOffScreen2
 	jmp CheckBulletTankCollisionInnerLoop
 	
 EnemyTankOffscreen
+    
 	dex
 	bmi DoneWithCheckBulletTankCollisionOuterLoop
 	jmp CheckBulletTankCollisionOuterLoop
@@ -4343,9 +4406,9 @@ BulletHitBrickSubroutine
 	;--first, add to score ONLY if player bullet
 	cpx #2
 	bcs NoScoreForWallDestructionByEnemies
-	lda #0
+	lda #>WALLDESTRUCTIONSCORE
 	sta Temp
-	lda #5
+	lda #<WALLDESTRUCTIONSCORE
 	jsr IncreaseScoreSubroutine
 NoScoreForWallDestructionByEnemies	
 	;--get row of block into Y and column into Temp+1
@@ -4375,9 +4438,16 @@ BulletOnLeftLastRow
 	sta LastRowL
 	beq RemovedWallBlock
 BulletNotOnBottomRow
-	lda BulletX,X
-	sec
-	sbc #16
+    lda BulletDirection
+    and BulletDirectionMask,X
+    cmp BulletLeftBank2,X
+    beq BulletMovingLeft
+    lda #-16
+    .byte $2C   ;skip two bytes
+BulletMovingLeft
+    lda #-17
+    clc            
+    adc BulletX,X
 	lsr
 	lsr
 	lsr
@@ -4437,7 +4507,11 @@ PlayerHitTank
 	;--pick random tank and see if it is offscreen.  If so, use it.  
 	;   If not, use standard starting position of the tank we are respawning
 	txa
-	beq UseRegularRespawnPosition   ;--if player tank, use same respawn position
+	bne EnemyTankRespawnRoutine
+    ;--stop player tank sound and use regular respawn for player tank
+    sta AUDV0
+    beq UseRegularRespawnPosition
+EnemyTankRespawnRoutine
 	lda RandomNumber
 	and #3
 	beq UseRegularRespawnPosition
@@ -4485,13 +4559,8 @@ FinishedEnemyTankRespawn
 	
 	txa
 	beq PlayerTankHit
-	;--first, add 100 to score
-	lda #$01
-	sta Temp
-	lda #$00
-	jsr IncreaseScoreSubroutine
 	
-	;--and decrease tanks remaining ONLY if enemy tank hit
+	;--decrease tanks remaining ONLY if enemy tank hit
 
 	dec TanksRemaining
 	bne LevelNotComplete
