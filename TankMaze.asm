@@ -82,7 +82,7 @@ TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
 DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 
-;--TankStatus bits:
+;--TankStatus bits (upper four are direction.  lower four are speed when moving, are "delay" when waiting to come onscreen.)
 TANKRIGHT		=	J0RIGHT
 TANKLEFT		=	J0LEFT
 TANKDOWN		=	J0DOWN
@@ -4516,9 +4516,9 @@ EnemyTankRespawnRoutine
 	and #3
 	beq UseRegularRespawnPosition
 	tay
-	lda TankStatus,Y
+	lda TankStatus,Y    ;this is to see which tanks are offscreen.   In theory, if upper four bits of TankStatus are all zeroes than tank is offscreen.
 	and #$F0
-	beq FoundRespawnPosition
+	bne FoundRespawnPosition
 UseRegularRespawnPosition
     txa
     tay    
