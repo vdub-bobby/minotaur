@@ -1030,7 +1030,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #48
+	lda #52
 	sta TIM64T
 	
 	dec FrameCounter
@@ -1114,7 +1114,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #31
+	lda  #36
 	sta  TIM64T
 	
 	
@@ -1428,6 +1428,9 @@ NoVerticalTankMovement
 ;****************************************************************************	
 
 FireEnemyBulletRoutine
+
+    ;rts ;eliminate enemy firing for now
+
 	;--- only every ... variable # of frames
 	lda EnemyDebounce
 	beq FireEnemyBullet
@@ -1524,6 +1527,12 @@ SetNewEnemyTankSpeed
 	
 	rts
 	
+	
+;****************************************************************************
+	
+	
+
+
 	
 ;****************************************************************************
 
@@ -1678,18 +1687,8 @@ AtIntersectionX
 	jmp NotAtIntersection
 AtIntersectionY	
 	;--here is where we choose which way each tank will go
-	;
-	;--new routine: 
-	;--first set TankFractional so that they move immediately
-	;	If I do this, then when they don't change direction they kind of "jump" when they hit an intersection,
-	;		and it looks bad.
-	;		But if I don't do this, they occasionally reverse directions.  For now, leave it out and live with
-	;		the occasional reversals.  Maybe try to fix later.
-; 	lda #255
-; 	sta TankFractional,X
-	
+
 	;--if player tank, read joystick
-	
 	txa
 	bne EnemyTankDirectionRoutine
 	jmp ReadControllersSubroutine
@@ -1733,6 +1732,8 @@ TankInMaze
 	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 
+	jsr CheckForEnemyTankSubroutine ;--returns with allowable directions in A
+	
 	and #$F0	;clear bottom nibble
 	eor #$F0
 	
@@ -1845,6 +1846,13 @@ ChooseTankDirection
 	;--now compare to allowable directions
 	pla	;	--get allowable directions off stack
 	pha	;	but leave on stack
+	;--check if no allowed directions:
+	and #$F0
+	bne ThereAreAllowedDirections
+NoAllowedDirectionsTrap
+	nop
+	beq NoAllowedDirections ;if no allowed directions....
+ThereAreAllowedDirections
 	and TankStatus,X
 	bne DirectionIsFine
 	;--direction is not ok
@@ -1862,6 +1870,7 @@ TryAnotherDirection
 	ldy #3					;loop around
 	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction, that the tank can never be stuck and unable to move
 FoundGoodDirection
+NoAllowedDirections
 	sta Temp
 	lda TankStatus,X
 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
@@ -2537,6 +2546,162 @@ DoNotStartSound
 	
 ;****************************************************************************
 
+SUBROUTINE
+
+CheckForEnemyTankSubroutine
+    ;--come in with X pointing at current tank
+    ;   and A holds direction (mask against joystick constants)
+    ;   return A holding allowed directions
+
+    stx Temp+1  ;--save index into current tank
+    sta Temp ;save directions
+    and #J0LEFT
+    bne .NotMovingLeft
+    ;--moving left.
+    ldy #3
+.CheckForEnemyTankLeftLoop
+    cpy Temp+1  ;--don't bother comparing tank to itself
+    beq .NoCompareTankToItselfLeft
+    ;see if an enemy tank within 1.5 blocks (12 pix) to the left
+    lda TankX,X
+    clc
+    adc #1      ;--have to add one so equal values are ignored
+    sec
+    sbc TankX,Y
+    cmp #14
+    bcs .ThisTankNotToLeft
+    ;if so, see if that tank is between 1.5 blocks up and 1.5 blocks down 
+    lda TankY,X
+    clc
+    adc #10
+    sec
+    sbc TankY,Y
+    cmp #20
+    bcs .ThisTankNotToLeft
+    ;--there is a tank there!  can't move left!
+    lda Temp
+    ora #J0LEFT
+    sta Temp
+    bne .CheckMovingRight   ;branch always to the next check
+.ThisTankNotToLeft    
+.NoCompareTankToItselfLeft
+    dey
+    bne .CheckForEnemyTankLeftLoop
+.NotMovingLeft
+.CheckMovingRight
+    lda Temp
+    and #J0RIGHT
+    bne .NotMovingRight
+    ;--moving right.
+    ldy #3
+.CheckForEnemyTankRightLoop
+    cpy Temp+1  ;--don't bother comparing tank to itself
+    beq .NoCompareTankToItselfRight
+    ;see if an enemy tank is 
+    lda TankX,Y
+    clc
+    adc #1      ;--have to add one so equal values are ignored
+    sec
+    sbc TankX,X
+    cmp #14
+    bcs .ThisTankNotToRight
+    lda TankY,X
+    clc
+    adc #10
+    sec
+    sbc TankY,Y
+    cmp #20
+    bcs .ThisTankNotToRight
+    ;--there is a tank there!  can't move right!
+    lda Temp
+    ora #J0RIGHT
+    sta Temp
+    bne .CheckMovingUp  ;branch always to the next check
+.ThisTankNotToRight    
+.NoCompareTankToItselfRight
+    dey
+    bne .CheckForEnemyTankRightLoop
+.NotMovingRight
+.CheckMovingUp
+    lda Temp
+    and #J0UP
+    bne .NotMovingUp
+    ;--moving up.
+    ldy #3
+;     stx Temp+1
+.CheckForEnemyTankUpLoop
+    cpy Temp+1  ;--don't bother comparing tank to itself
+    beq .NoCompareTankToItselfUp
+    ;see if an enemy tank is above
+    lda TankY,Y
+    clc
+    adc #1      ;--have to add one so equal values are ignored
+    sec
+    sbc TankY,X
+    cmp #12
+    bcs .ThisTankNotToUp
+    lda TankX,X
+    clc
+    adc #12
+    sec
+    sbc TankX,Y
+    cmp #24
+    bcs .ThisTankNotToUp
+    ;--there is a tank there!  can't move up!
+    lda Temp
+    ora #J0UP
+    sta Temp
+    bne .CheckMovingDown  ;branch always to the next check
+.ThisTankNotToUp    
+.NoCompareTankToItselfUp
+    dey
+    bne .CheckForEnemyTankUpLoop
+.NotMovingUp
+
+.CheckMovingDown
+    lda Temp
+    and #J0DOWN
+    bne .NotMovingDown
+    ;--moving down.
+    ldy #3
+;     stx Temp+1
+.CheckForEnemyTankDownLoop
+    cpy Temp+1  ;--don't bother comparing tank to itself
+    beq .NoCompareTankToItselfDown
+    ;see if an enemy tank is below
+    lda TankY,X
+    clc
+    adc #1      ;--have to add one so equal values are ignored
+    sec
+    sbc TankY,Y
+    cmp #12
+    bcs .ThisTankNotToDown
+    lda TankX,X
+    clc
+    adc #12
+    sec
+    sbc TankX,Y
+    cmp #24
+    bcs .ThisTankNotToDown
+    ;--there is a tank there!  can't move up!
+    lda Temp
+    ora #J0UP
+    sta Temp
+    bne .DoneWithEnemyTankChecks  ;branch always to the next check
+.ThisTankNotToDown    
+.NoCompareTankToItselfDown
+    dey
+    bne .CheckForEnemyTankDownLoop
+.NotMovingDown
+.DoneWithEnemyTankChecks
+
+
+    lda Temp    ;restore allowed directions to Accumulator
+
+    rts
+
+
+;****************************************************************************
 
 CheckForWallSubroutine
 				;--X holds index into which tank, A holds direction (mask against joystick constants)
@@ -2561,21 +2726,6 @@ CheckForWallSubroutine
 	jsr IsBlockAtPosition
 	;result is in Temp
 	lda Temp
-	bne CannotMoveLeft
-	cpx #0
-	bne NoWallL
-; 	;--this check is only for player 0
-; 	lda TankX
-; 	sec
-; 	sbc #1
-; 	sta Temp
-; 	lda TankY
-; 	sec
-; 	sbc #8
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
  	beq NoWallL
 CannotMoveLeft
 	tya
@@ -2604,21 +2754,6 @@ NotMovingLeft
 	jsr IsBlockAtPosition
 	;result is in Temp
 	lda Temp
-	bne CannotMoveRight
-; 	;--this extra check is only for player 0
-; 	cpx #0
-; 	bne NoWallR
-; 	lda TankX
-; 	clc
-; 	adc #8
-; 	sta Temp
-; 	lda TankY
-; 	sec
-; 	sbc #8
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
  	beq NoWallR
 	
 CannotMoveRight
@@ -2640,24 +2775,12 @@ CheckVerticalMovement
 	lda TankX,X
 	sta Temp
 	lda TankY,X
-	sec
-	sbc #1
+; 	sec
+; 	sbc #1
 	sta Temp+1
 	jsr IsBlockAtPosition
 	;result is in Temp
 	lda Temp
-	bne CannotMoveUp
-; 	;--this is only for player 0
-; 	cpx #0
-; 	bne NoWallU
-; 	;--temp+1 is unchanged
-; 	lda TankX
-; 	clc
-; 	adc #7
-; 	sta Temp
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
  	beq NoWallU
 CannotMoveUp
 	tya
@@ -2685,18 +2808,6 @@ NotMovingUp
 	jsr IsBlockAtPosition
 	;result is in Temp
 	lda Temp
-	bne CannotMoveDown
-; 	;--following check only for player 0
-; 	cpx #0
-; 	bne NoWallD
-; 	;--temp+1 is unchanged
-; 	lda TankX
-; 	clc
-; 	adc #7
-; 	sta Temp
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
  	beq NoWallD
 CannotMoveDown
 	tya
@@ -4164,6 +4275,20 @@ TankCollisionBitEven
 	.byte $80, $40, $40 ; $40, $40	
 	
 	
+;byte holds
+;           CXM0P   CXM1P   CXPPMM	
+;           7  6    7  6    7  6
+;frame odd  12 1P   3P 32   2P 31
+;frame even P1 P3   23 21   13 2P
+
+TankCollisionRotationTables
+    .word TankCollisionBitsEven, TankCollisionBitsOdd
+
+TankCollisionBitsOdd
+    .byte %01101000, %11000100, %10011000, %00110100
+TankCollisionBitsEven
+    .byte %11000100, %10011000, %00110100, %01101000
+	
 	;Rotation:		Frame odd		Frame even
 	;Framecounter = xxxxxxx1        xxxxxxx0
 	;		P0		player			tank 3
@@ -4229,32 +4354,64 @@ NoBulletToBaseCollision
 	;Tank 1			M0 to P0		P1 to M0
 	;Tank 2			P1 to P0		M1 to M0
 	;Tank 3			M1 to P0		P0 to M0
-	lda FrameCounter
-	and #1
-	asl
-	tax
-	lda CollisionRotationTables,X
-	sta MiscPtr
-	lda CollisionRotationTables+1,X
-	sta MiscPtr+1
-	lda CollisionRotationTables+4,X
-	sta MiscPtr+2
-	lda CollisionRotationTables+5,X
-	sta MiscPtr+3
 	
-	ldy #3
+    lda CXM0P
+    and #$C0
+    sta Temp
+    lda CXM1P
+    and #$C0
+    lsr
+    lsr
+    ora Temp
+    sta Temp
+    lda CXPPMM
+    and #$C0
+    lsr
+    lsr
+    lsr
+    lsr
+    ora Temp
+    sta Temp	
+    
+    lda FrameCounter
+    and #1
+    asl
+    tax
+    lda TankCollisionRotationTables,X
+    sta MiscPtr
+    lda TankCollisionRotationTables+1,X
+    sta MiscPtr+1
+	
+; 	lda FrameCounter
+; 	and #1
+; 	asl
+; 	tax
+; 	lda CollisionRotationTables,X
+; 	sta MiscPtr
+; 	lda CollisionRotationTables+1,X
+; 	sta MiscPtr+1
+; 	lda CollisionRotationTables+4,X
+; 	sta MiscPtr+2
+; 	lda CollisionRotationTables+5,X
+; 	sta MiscPtr+3
+
+
+    ldy #3
 TankCollisionLoop
-	lda (MiscPtr),Y
-	tax
-	lda $00,X
-	and (MiscPtr+2),Y
-	beq NoTankToTankCollision
-	tya
-	tax
-	;--remove player tank ONLY if fully onscreen
-	lda TankX
-	cmp #16
-	bcc PlayerNotOnScreenCannotDie
+    lda Temp    ;get all collision registers
+    beq NoTankCollisionsAtAll
+YesTankCollisions
+    and (MiscPtr),Y
+    beq NoTankCollision
+    ;--remove tank only if fully onscreen
+    tya
+    tax
+    jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
+    and #$FF    ;--sets flags
+    beq TankNotOnScreenCannotDie
+    ;--tank is onscreen
+    tya ;--set flags based on which tank
+    bne EnemyTankDied
 	lda StartingTankYPosition+4
 	sta TankY
 	lda StartingTankXPosition+4
@@ -4262,30 +4419,28 @@ TankCollisionLoop
 	lda StartingTankStatus;+4
 	sta TankStatus
 	;--play tank explosion sound
+	sty Temp+1  ;save Y register
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
-	;--turn off player movement sound
-	lda #0
-	sta AUDV0
-
-PlayerNotOnScreenCannotDie
-    ;--remove enemy tank only if IT is fully onscreen
-    jsr IsTankOnScreen ;returns 1 in A if onscreen, 0 in A if not
-    and #$FF
-    beq EnemyNotOnScreenCannotDie
-	;--add KILLTANKSCORE to score 
+	ldy Temp+1  ;restore Y register
+ 	;--add KILLTANKSCORE to score 
 	lda #>KILLTANKSCORE
 	sta Temp
 	lda #<KILLTANKSCORE
 	jsr IncreaseScoreSubroutine
-	jsr PlayerHitTank
-EnemyNotOnScreenCannotDie
-	;--to do: play a "you died" sound
-	
-NoTankToTankCollision
-	dey
-	bne TankCollisionLoop
-	 
+	;--turn off player movement sound
+	lda #0
+	sta AUDV0
+    beq PlayerTankDead
+EnemyTankDied
+    ;--remove enemy tank    
+    jsr PlayerHitTank
+TankNotOnScreenCannotDie    
+NoTankCollision
+PlayerTankDead
+    dey
+    bpl TankCollisionLoop  
+NoTankCollisionsAtAll
 
 
 	;--need to use software collision detection, at least for ball
@@ -4489,6 +4644,11 @@ NoSoundForBrickExplosion
     rts
     
 ;****************************************************************************
+
+
+
+
+
 
 
 
