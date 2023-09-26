@@ -69,10 +69,26 @@
 
 
 
+DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
+DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
+
 	processor 6502
 	include vcs.h
 	include macro.h
 
+	
+;-----------------------MY MACROS-----------------------------------------
+
+
+;--this macro aligns at page boundary (only if needed) and echoes the bytes used
+    MAC PAGEALIGN
+        if <* != 0
+        	echo "---", ((* & $FF00) + $100) - *, "bytes left at location", *
+    	    align 256
+        endif
+    ENDM
+	
+	
 ;-------------------------Constants Below---------------------------------
 
 TANKHEIGHT	=	7
@@ -610,8 +626,11 @@ PositioningLoop	;--just players
 	jmp BeginMainMazeKernel
 
 
-	align 256
+; 	align 256
 	
+    PAGEALIGN
+
+
 	
 Switch0
 	lda Player0Bottom
@@ -725,7 +744,6 @@ DoDraw11
 	SLEEP 3
 	bne KernelLoop		;+6		35
 
-;	align 256
 	
 Switch0b
 	lda Player0Bottom
@@ -1379,7 +1397,7 @@ SetUpTankInitialValues
 	lda #WALLCOLOR
 	sta COLUPF
 	
-	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
+	lda #REFLECTEDPF|DOUBLEWIDTHBALL;|PRIORITYPF
 	sta CTRLPF
 	
 	rts
@@ -1429,8 +1447,12 @@ NoVerticalTankMovement
 
 FireEnemyBulletRoutine
 
-    ;rts ;eliminate enemy firing for now
+    if DEBUGNOENEMYBULLETS = 1
 
+    rts ;eliminate enemy firing for now
+
+    endif    
+    
 	;--- only every ... variable # of frames
 	lda EnemyDebounce
 	beq FireEnemyBullet
@@ -1493,6 +1515,7 @@ TanksRemainingSpeedBoost ;--just realized the first three values in this table h
     	
 SetInitialEnemyTankSpeedRoutine
     ;--come in here with X pointing to tank # (1-3)
+    ;--and A holding new direction (in upper four bits)
 	sta TankStatus,X	;--first write new direction
 	;--tank starting speed and add level, capped at 15-tank # (0, 1, 2)
 	lda NewTankSpeed,X
@@ -1559,7 +1582,7 @@ MoveAnEnemyTank
 	;--only bring tank onscreen if there are enemy tanks remaining
 	;--how many tanks onscreen?
 	;lda #0  ;---A is zero already following BNE above
-	sta Temp
+	sta Temp    ;using this to count how many tanks onscreen
 	ldy #3
 CountTanksOnScreenLoop
 	lda TankStatus,Y
@@ -2552,6 +2575,8 @@ CheckForEnemyTankSubroutine
     ;--come in with X pointing at current tank
     ;   and A holds direction (mask against joystick constants)
     ;   return A holding allowed directions
+    
+    ;TODO: ignore tanks that are off screen
 
     stx Temp+1  ;--save index into current tank
     sta Temp ;save directions
@@ -2562,6 +2587,10 @@ CheckForEnemyTankSubroutine
 .CheckForEnemyTankLeftLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
     beq .NoCompareTankToItselfLeft
+    ;--see if enemy tank is offscreen
+    lda TankStatus,Y
+    and #$F0
+    beq .TankOffScreenIgnoreLeft
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
     clc
@@ -2585,6 +2614,7 @@ CheckForEnemyTankSubroutine
     bne .CheckMovingRight   ;branch always to the next check
 .ThisTankNotToLeft    
 .NoCompareTankToItselfLeft
+.TankOffScreenIgnoreLeft
     dey
     bne .CheckForEnemyTankLeftLoop
 .NotMovingLeft
@@ -2597,6 +2627,10 @@ CheckForEnemyTankSubroutine
 .CheckForEnemyTankRightLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
     beq .NoCompareTankToItselfRight
+    ;--see if enemy tank is offscreen
+    lda TankStatus,Y
+    and #$F0
+    beq .TankOffScreenIgnoreRight
     ;see if an enemy tank is 
     lda TankX,Y
     clc
@@ -2619,6 +2653,7 @@ CheckForEnemyTankSubroutine
     bne .CheckMovingUp  ;branch always to the next check
 .ThisTankNotToRight    
 .NoCompareTankToItselfRight
+.TankOffScreenIgnoreRight
     dey
     bne .CheckForEnemyTankRightLoop
 .NotMovingRight
@@ -2632,6 +2667,10 @@ CheckForEnemyTankSubroutine
 .CheckForEnemyTankUpLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
     beq .NoCompareTankToItselfUp
+    ;--see if enemy tank is offscreen
+    lda TankStatus,Y
+    and #$F0
+    beq .TankOffScreenIgnoreUp
     ;see if an enemy tank is above
     lda TankY,Y
     clc
@@ -2654,6 +2693,7 @@ CheckForEnemyTankSubroutine
     bne .CheckMovingDown  ;branch always to the next check
 .ThisTankNotToUp    
 .NoCompareTankToItselfUp
+.TankOffScreenIgnoreUp
     dey
     bne .CheckForEnemyTankUpLoop
 .NotMovingUp
@@ -2668,6 +2708,10 @@ CheckForEnemyTankSubroutine
 .CheckForEnemyTankDownLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
     beq .NoCompareTankToItselfDown
+    ;--see if enemy tank is offscreen
+    lda TankStatus,Y
+    and #$F0
+    beq .TankOffScreenIgnoreDown
     ;see if an enemy tank is below
     lda TankY,X
     clc
@@ -2690,10 +2734,12 @@ CheckForEnemyTankSubroutine
     bne .DoneWithEnemyTankChecks  ;branch always to the next check
 .ThisTankNotToDown    
 .NoCompareTankToItselfDown
+.TankOffScreenIgnoreDown
     dey
     bne .CheckForEnemyTankDownLoop
 .NotMovingDown
 .DoneWithEnemyTankChecks
+
 
 
     lda Temp    ;restore allowed directions to Accumulator
@@ -2901,7 +2947,7 @@ DoneWithMovementChecks
 	
 
 	
-	align 256
+	PAGEALIGN
 	
 	
     
@@ -3220,7 +3266,7 @@ PFRegisterLookup
 
 
 
-		align 256
+		PAGEALIGN
 	
 DigitData
 Zero
@@ -3445,7 +3491,7 @@ PFMaskLookup
 	.byte $03, $0C, $30, $C0
 
 		
-	align 256
+	PAGEALIGN
 
 
 
@@ -3531,7 +3577,7 @@ RotationEvenBank1
 ; 	.byte 2, 1, 3	
 
 		
-    echo "----", ($1F00-*), " bytes left (ROM) in Bank 1"
+    echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
 
 	org $1F00
 	rorg $1F00
@@ -4089,9 +4135,23 @@ DoneWithFirstPass
 	sta LastRowR
 	
 	;	leave room for enemy tanks to enter:
+	IF DEBUGMAZE = 1
+	
+	ldx #0
+	stx PF1Left+MAZEROWS-2
+	stx PF1Right+MAZEROWS-2
+	stx PF2Left+MAZEROWS-2
+	stx PF2Right+MAZEROWS-2
+	ldx #$FF
+	stx PF1Left+MAZEROWS-3
+	stx PF1Right+MAZEROWS-3
+	stx PF2Left+MAZEROWS-3
+	stx PF2Right+MAZEROWS-3
+	ELSE
+	    
 	ldx #$CF
-	;clear upper L corner
 	txa
+	;clear upper L corner
 	and PF1Left+MAZEROWS-2
 	sta PF1Left+MAZEROWS-2
 	
@@ -4100,7 +4160,10 @@ DoneWithFirstPass
 	and PF1Right+MAZEROWS-2
 	sta PF1Right+MAZEROWS-2
 	
+	ENDIF
+	
 	;clear spot directly to L of center in top row
+	    
 	ldx #$3F
 	txa
 	and PF2Left+MAZEROWS-2
@@ -4257,22 +4320,22 @@ TankOnScreen
     rts
 
 ;****************************************************************************
-
-CollisionRotationTables
-	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
-	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
+; 
+; CollisionRotationTables
+; 	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
+; 	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
 			
 	
-TankCollisionRegisterOdd
-	.byte CXM0P, CXPPMM, CXM1P
-; 	.byte CXM0P, CXM1P, CXPPMM
-TankCollisionBitOdd
-	.byte $40, $80, $80
-TankCollisionRegisterEven
-	.byte CXM0P, CXPPMM, CXM0P
-; 	.byte CXM0P, CXM0P, CXPPMM
-TankCollisionBitEven
-	.byte $80, $40, $40 ; $40, $40	
+; TankCollisionRegisterOdd
+; 	.byte CXM0P, CXPPMM, CXM1P
+; ; 	.byte CXM0P, CXM1P, CXPPMM
+; TankCollisionBitOdd
+; 	.byte $40, $80, $80
+; TankCollisionRegisterEven
+; 	.byte CXM0P, CXPPMM, CXM0P
+; ; 	.byte CXM0P, CXM0P, CXPPMM
+; TankCollisionBitEven
+; 	.byte $80, $40, $40 ; $40, $40	
 	
 	
 ;byte holds
@@ -4309,8 +4372,8 @@ CollisionsSubroutine
 
 
     ;--first and most important collision check: has anything at all touched the base?
-    ;-check bullets first
-    ;--I think we can use the collision registers... maybe
+    ;-check bullets first (and only)
+    
     bit CXBLPF
     bpl NoBulletToBaseCollision
     ;--hit PF, now let's see if it is in the middle on the bottom row
@@ -4357,21 +4420,21 @@ NoBulletToBaseCollision
 	
     lda CXM0P
     and #$C0
-    sta Temp
+    sta Temp+1
     lda CXM1P
     and #$C0
     lsr
     lsr
-    ora Temp
-    sta Temp
+    ora Temp+1
+    sta Temp+1
     lda CXPPMM
     and #$C0
     lsr
     lsr
     lsr
     lsr
-    ora Temp
-    sta Temp	
+    ora Temp+1
+    sta Temp+1	
     
     lda FrameCounter
     and #1
@@ -4398,31 +4461,31 @@ NoBulletToBaseCollision
 
     ldy #3
 TankCollisionLoop
-    lda Temp    ;get all collision registers
-    beq NoTankCollisionsAtAll
-YesTankCollisions
+    lda Temp+1    ;get all collision registers
+;     beq NoTankCollisionsAtAll
+; YesTankCollisions
     and (MiscPtr),Y
     beq NoTankCollision
     ;--remove tank only if fully onscreen
     tya
-    tax
+    tax ;%%%%%
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
     and #$FF    ;--sets flags
     beq TankNotOnScreenCannotDie
     ;--tank is onscreen
     tya ;--set flags based on which tank
     bne EnemyTankDied
-	lda StartingTankYPosition+4
-	sta TankY
-	lda StartingTankXPosition+4
-	sta TankX
-	lda StartingTankStatus;+4
-	sta TankStatus
-	;--play tank explosion sound
-	sty Temp+1  ;save Y register
-	ldy #ENEMYTANKSOUND
-	jsr StartSoundSubroutineBank2
-	ldy Temp+1  ;restore Y register
+; 	lda StartingTankYPosition+4
+; 	sta TankY
+; 	lda StartingTankXPosition+4
+; 	sta TankX
+; 	lda StartingTankStatus;+4
+; 	sta TankStatus
+; 	;--play tank explosion sound
+; 	sty Temp+1  ;save Y register
+; 	ldy #ENEMYTANKSOUND
+; 	jsr StartSoundSubroutineBank2
+; 	ldy Temp+1  ;restore Y register
  	;--add KILLTANKSCORE to score 
 	lda #>KILLTANKSCORE
 	sta Temp
@@ -4431,10 +4494,12 @@ YesTankCollisions
 	;--turn off player movement sound
 	lda #0
 	sta AUDV0
-    beq PlayerTankDead
+;     beq PlayerTankDead
 EnemyTankDied
     ;--remove enemy tank    
-    jsr PlayerHitTank
+    tya
+    tax
+    jsr PlayerHitTank   ;this routine uses X to index into which tank got hit.
 TankNotOnScreenCannotDie    
 NoTankCollision
 PlayerTankDead
@@ -4472,13 +4537,9 @@ NoTankCollisionsAtAll
     lda FrameCounter
     and #3
     tax
-	;--so problem is bullet is 2x2 block but brick subroutine below just checks 1x1 point.
     jsr BulletHitBrickSubroutine
 
 BallHasNotHitBlock
-; 	dex
-; 	bpl CheckBallCollisionsLoop
-
 	;--now check if bullet has hit an enemy tank
 	;   X is index into tank (outer loop)
 	;   Y is index into bullet (inner loop)
@@ -4664,22 +4725,29 @@ PlayerHitTank
 	pha
 
 	;--find random tank that is offscreen and spawn from that location
-	;--pick random tank and see if it is offscreen.  If so, use it.  
+	;--pick random tank and see if it is offscreen.  If so, use it.  <---this is totally wrong.  we have to actually look to see which tanks are where.
 	;   If not, use standard starting position of the tank we are respawning
 	txa
 	bne EnemyTankRespawnRoutine
     ;--stop player tank sound and use regular respawn for player tank
     sta AUDV0
-    beq UseRegularRespawnPosition
+    beq UsePlayerRespawnPosition
 EnemyTankRespawnRoutine
 	lda RandomNumber
 	and #3
-	beq UseRegularRespawnPosition
+	ora #1
+;	beq UseRegularRespawnPosition       ;--problem is another tank could be in this spot.  hmmmm.  instead loop through?
 	tay
+FindEnemyTankRespawnLoop
 	lda TankStatus,Y    ;this is to see which tanks are offscreen.   In theory, if upper four bits of TankStatus are all zeroes than tank is offscreen.
 	and #$F0
 	bne FoundRespawnPosition
-UseRegularRespawnPosition
+	dey
+	bne FindEnemyTankRespawnLoop
+	ldy #3
+	bne FindEnemyTankRespawnLoop    ;endless loop, which should work...haha.  
+; UseRegularRespawnPosition
+UsePlayerRespawnPosition
     txa
     tay    
 FoundRespawnPosition
@@ -4709,7 +4777,6 @@ TopRowEnemyTankRespawn
 	lda StartingTankXPosition,Y
 	sta TankX,X
 	lda StartingTankStatus,X    ;%%%
-FinishedEnemyTankRespawn	
 	sta TankStatus,X
 ; 	lda #$FF
 ; 	sta TankFractional,X
@@ -4984,7 +5051,7 @@ SoundLengthBank2
 	
 ;****************************************************************************	
 
-    echo "----", ($3F00-*), " bytes left (ROM) in Bank 2"
+    echo "----", ($3F00-*), " bytes left (ROM) at end of Bank 2"
 
    	org $2F00
 	rorg $3F00
