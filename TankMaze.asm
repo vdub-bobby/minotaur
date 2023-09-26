@@ -71,6 +71,7 @@
 
 DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
+DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 
 	processor 6502
 	include vcs.h
@@ -126,9 +127,15 @@ FIRSTCOLUMNX    =   16
 PLAYERSTARTINGX	=	8
 PLAYERSTARTINGY =   TANKHEIGHT+1
 
-ENEMY0STARTINGX	=	24
-ENEMY1STARTINGX	=	72
-ENEMY2STARTINGX	=	128
+ENEMY01STARTINGX	=	24
+ENEMY02STARTINGX	=	112
+ENEMY11STARTINGX	=	64
+ENEMY12STARTINGX	=	88
+ENEMY21STARTINGX	=	128
+ENEMY22STARTINGX	=	40
+
+
+
 ENEMY0STARTINGX2	=	144
 ENEMY1STARTINGX2	=	144
 ENEMY2STARTINGX2	=	144
@@ -139,10 +146,16 @@ ENEMY2STARTINGX3	=	8
 TANKOFFSCREEN	=	127
 
 ENEMYSTARTINGYTOP = MAZEAREAHEIGHT+TANKHEIGHT
-ENEMYSTARTINGYHIGHROW = 7
+ENEMYSTARTINGYHIGHROW = 9
 ENEMYSTARTINGYHIGH = (BLOCKHEIGHT * ENEMYSTARTINGYHIGHROW) + 1
+ENEMYSTARTINGYHIGHMIDROW = 8
+ENEMYSTARTINGYHIGHMID = (BLOCKHEIGHT * ENEMYSTARTINGYHIGHMIDROW) + 1
+ENEMYSTARTINGYMIDHIGHROW = 7
+ENEMYSTARTINGYMIDHIGH = (BLOCKHEIGHT * ENEMYSTARTINGYMIDHIGHROW) + 1
 ENEMYSTARTINGYMIDROW = 5
 ENEMYSTARTINGYMID = (BLOCKHEIGHT * ENEMYSTARTINGYMIDROW) + 1
+ENEMYSTARTINGYMIDLOWROW = 4
+ENEMYSTARTINGYMIDLOW = (BLOCKHEIGHT * ENEMYSTARTINGYMIDLOWROW) + 1
 ENEMYSTARTINGYLOWROW = 3
 ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 
@@ -1397,7 +1410,10 @@ SetUpTankInitialValues
 	lda #WALLCOLOR
 	sta COLUPF
 	
-	lda #REFLECTEDPF|DOUBLEWIDTHBALL;|PRIORITYPF
+	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
+	if DEBUGPFPRIORITY = 1
+	    and #~PRIORITYPF
+	endif    
 	sta CTRLPF
 	
 	rts
@@ -4137,60 +4153,55 @@ DoneWithFirstPass
 	;	leave room for enemy tanks to enter:
 	IF DEBUGMAZE = 1
 	
-	ldx #0
-	stx PF1Left+MAZEROWS-2
-	stx PF1Right+MAZEROWS-2
-	stx PF2Left+MAZEROWS-2
-	stx PF2Right+MAZEROWS-2
-	ldx #$FF
-	stx PF1Left+MAZEROWS-3
-	stx PF1Right+MAZEROWS-3
-	stx PF2Left+MAZEROWS-3
-	stx PF2Right+MAZEROWS-3
-	ELSE
+    	ldx #0
+    	stx PF1Left+MAZEROWS-2
+    	stx PF1Right+MAZEROWS-2
+    	stx PF2Left+MAZEROWS-2
+    	stx PF2Right+MAZEROWS-2
+    	ldx #$FF
+    	stx PF1Left+MAZEROWS-3
+    	stx PF1Right+MAZEROWS-3
+    	stx PF2Left+MAZEROWS-3
+    	stx PF2Right+MAZEROWS-3
+
+   	ELSE
 	    
-	ldx #$CF
-	txa
-	;clear upper L corner
-	and PF1Left+MAZEROWS-2
-	sta PF1Left+MAZEROWS-2
+    	ldx #$0C
+    	txa
+    	;clear blocks in top row that are entry points
+    	and PF1Left+MAZEROWS-2
+    	sta PF1Left+MAZEROWS-2
+    	
+    	;clear upper R corner
+    	txa
+    	and PF1Right+MAZEROWS-2
+    	sta PF1Right+MAZEROWS-2
 	
-	;clear upper R corner
-	txa
-	and PF1Right+MAZEROWS-2
-	sta PF1Right+MAZEROWS-2
+;     	ldx #$0C
+    	txa
+    	and PF2Left+MAZEROWS-2
+    	sta PF2Left+MAZEROWS-2
+    	txa
+    	and PF2Right+MAZEROWS-2
+    	sta PF2Right+MAZEROWS-2
 	
-	ENDIF
-	
-	;clear spot directly to L of center in top row
-	    
-	ldx #$3F
-	txa
-	and PF2Left+MAZEROWS-2
-	sta PF2Left+MAZEROWS-2
-	
-	;--clear left and right blocks on the high row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYHIGHROW - 2
-	sta PF1Left + ENEMYSTARTINGYHIGHROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYHIGHROW - 2
-	sta PF1Right + ENEMYSTARTINGYHIGHROW - 2
-	;--clear left and right blocks on the middle row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYMIDROW - 2
-	sta PF1Left + ENEMYSTARTINGYMIDROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYMIDROW - 2
-	sta PF1Right + ENEMYSTARTINGYMIDROW - 2
-	;--and clear left and right blocks on low row where tanks enter when player is near top of screen
-	txa
-	and PF1Left + ENEMYSTARTINGYLOWROW - 2
-	sta PF1Left + ENEMYSTARTINGYLOWROW - 2
-	txa
-	and PF1Right + ENEMYSTARTINGYLOWROW - 2 
-	sta PF1Right + ENEMYSTARTINGYLOWROW - 2 
-	
+    ENDIF
+
+	;--clear left and right blocks on the rows where tanks enter when player is near top of screen
+	ldy #5
+ClearSideEntryPointsLoop
+    lda EntryPointRowOffsetTable,Y
+    tax
+    lda #$3F
+    and PF1Left,X
+    sta PF1Left,X
+    lda #$3F
+    and PF1Right,X
+    sta PF1Right,X
+	dey
+	bpl ClearSideEntryPointsLoop
+
+
 	
 	;--make base reappear
 	lda GameStatus
@@ -4241,6 +4252,11 @@ NotCompletelyDoneWithMaze
 		
 ;****************************************************************************
 
+EntryPointRowOffsetTable
+    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
+    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
+
+;****************************************************************************
 
 UpdateRandomNumberBank2
     lda RandomNumber
@@ -4259,13 +4275,16 @@ UpdateRandomNumberBank2
 MoveEnemyTanksOffScreen
 	sta Temp
 	ldx #3
+	ldy #6
 SetStartingEnemyTankLocationsLoop
-	lda StartingTankXPosition,X
+	lda StartingTankXPosition,Y
 	sta TankX,X
-	lda StartingTankYPosition,X
+	lda StartingTankYPosition,Y
 	sta TankY,X
+	dey
+	dey
 	dex
-	cpx Temp
+	cpx Temp                ;6, 4, 2, 0, 254
 	bne SetStartingEnemyTankLocationsLoop
 	
 	rts	
@@ -4788,29 +4807,36 @@ PlayerHitTank
 	tya
 	pha
 
-	;--find random tank that is offscreen and spawn from that location
-	;--pick random tank and see if it is offscreen.  If so, use it.  <---this is totally wrong.  we have to actually look to see which tanks are where.
-	;   If not, use standard starting position of the tank we are respawning
 	txa
 	bne EnemyTankRespawnRoutine
     ;--stop player tank sound and use regular respawn for player tank
     sta AUDV0
     beq UsePlayerRespawnPosition
 EnemyTankRespawnRoutine
+	;--new respawn routine: randomly pick between 2 respawn spots for each tank
+	;   formula is tank # times 2 + rand(0, 1)
 	lda RandomNumber
-	and #3
-	ora #1
-;	beq UseRegularRespawnPosition       ;--problem is another tank could be in this spot.  hmmmm.  instead loop through?
-	tay
-FindEnemyTankRespawnLoop
-	lda TankStatus,Y    ;this is to see which tanks are offscreen.   In theory, if upper four bits of TankStatus are all zeroes than tank is offscreen.
-	and #$F0
-	bne FoundRespawnPosition
-	dey
-	bne FindEnemyTankRespawnLoop
-	ldy #3
-	bne FindEnemyTankRespawnLoop    ;endless loop, which should work...haha.  
-; UseRegularRespawnPosition
+	lsr
+	txa
+	rol
+	tay	
+	jmp FoundRespawnPosition
+
+; 	lda RandomNumber
+; 	and #3
+; 	ora #1
+; ;	beq UseRegularRespawnPosition       ;--problem is another tank could be in this spot.  hmmmm.  instead loop through?
+; 	tay
+; FindEnemyTankRespawnLoop
+; 	lda TankStatus,Y    ;this is to see which tanks are offscreen.   In theory, if upper four bits of TankStatus are all zeroes than tank is offscreen.
+; 	and #$F0
+; 	bne FoundRespawnPosition
+; 	dey
+; 	bne FindEnemyTankRespawnLoop
+; 	ldy #3
+; 	bne FindEnemyTankRespawnLoop    ;endless loop, which should work...haha.  
+; 	                                ;besides this not working as intended, can be endless if all four tanks were stuck (blocked by other tanks) and so couldn't move.
+; ; UseRegularRespawnPosition
 UsePlayerRespawnPosition
     txa
     tay    
@@ -4828,12 +4854,12 @@ FoundRespawnPosition
     ;--else left side
     tya
     clc
-    adc #4
+    adc #8
     tay
 RightSideEnemyTankRespawn
     tya
 ;     clc   ;not needed since carry clear after addition above and BCC branch that took us directly here
-    adc #4
+    adc #8
     tay
 TopRowEnemyTankRespawn
     lda StartingTankYPosition,Y
@@ -5089,14 +5115,14 @@ PFMaskLookupBank2
 	
 	
 StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX, ENEMY1STARTINGX, ENEMY2STARTINGX
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2
-	.byte PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY01STARTINGX, ENEMY02STARTINGX, ENEMY11STARTINGX, ENEMY12STARTINGX, ENEMY21STARTINGX, ENEMY22STARTINGX
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2, ENEMY2STARTINGX2
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3, ENEMY2STARTINGX3
 
 StartingTankYPosition 
-	.byte PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	.byte PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 StartingTankStatus
 	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
