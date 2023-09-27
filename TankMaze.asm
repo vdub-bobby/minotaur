@@ -233,8 +233,8 @@ BULLETSPEEDVER		=		1
 
 BASECOLOR		=		GOLD
 SCORECOLOR      =       GRAY|$C
-WALLCOLOR			=		RED+6
-TANKSREMAININGCOLOR =   (TURQUOISE)|$A
+WALLCOLOR			=		RED|$6
+TANKSREMAININGCOLOR =   TURQUOISE|$A
 
 
 MAZEPATHCUTOFF	=	100
@@ -891,26 +891,32 @@ DoneWithKernelLastRowLoop
 	stx ENAM1
 ;	sta PF0
 	
+;     sta HMCLR
 	lda #104
-	jsr PositionASpriteSubroutine
-	
+; 	jsr PositionASpriteNoHMOVESubroutine
+    jsr PositionASpriteSubroutine	
+
 	lda #112
 	inx
-	jsr PositionASpriteSubroutine
-
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutine	
+    
 	lda #60
 	inx
-	jsr PositionASpriteSubroutine
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutine	
 
 	lda #66
 	inx
-	jsr PositionASpriteSubroutine
-	
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutine	
+
 	
 	;--done displaying maze
 	;--set up score, tanks remaining, lives remaining etc
 
 	sta WSYNC
+; 	sta HMOVE
 	ldy #0
 	sty PF0
 	sty PF1
@@ -928,7 +934,7 @@ DoneWithKernelLastRowLoop
 	lda #TANKSREMAININGCOLOR
 	sta COLUP0
 	sta COLUP1
-	
+	sta HMCLR
 	
 
 	lda #>DigitDataMissile
@@ -1061,7 +1067,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #52
+	lda #53
 	sta TIM64T
 	
 	dec FrameCounter
@@ -1145,8 +1151,8 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda  #36
-	sta  TIM64T
+	lda #37
+	sta TIM64T
 	
 	
 	lda GameStatus
@@ -1477,29 +1483,30 @@ FireEnemyBulletRoutine
 FireEnemyBullet
 	ldx #1
 FindAvailableEnemyBallLoop
-	lda BulletX+2,X
-	cmp #BALLOFFSCREEN
+	lda BulletX+2,X             ;enemy bullets are indexed at 2 & 3 (player bullets are indexed at 0 and 1)
+; 	cmp #BALLOFFSCREEN          ;<--as of 9/27 this value is zero so we can skip the comparison
 	beq FoundAvailableEnemyBall
 	dex
 	bpl FindAvailableEnemyBallLoop
-	bmi NoAvailableEnemyBalls
+	;bmi NoAvailableEnemyBalls  ;<--remove since we just exit immediately.  save 3 cycles (and 1 byte)
+	rts
 FoundAvailableEnemyBall
 	inx
 	inx
 	;--shoot more often as levels increase
 	ldy MazeNumber
-	dey
-	tya
-	and #$0F
-	tay
-	lda EnemyBulletDebounce,Y
+    cpy #16
+    bcc MazeNumberSixteenOrLess
+    ldy #16
+MazeNumberSixteenOrLess    
+	lda EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
 	;lda #ENEMYDEBOUNCE
 	sta EnemyDebounce
 	;--find random tank 
 	lda RandomNumber
 	and #3
 	tay
-	bne ShootFromTank
+	bne ShootFromTank   ;zero is player, so if non-zero we are fine, otherwise shoot from tank 1
 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
     ;--if tank offscreen, don't shoot from it
@@ -1508,7 +1515,6 @@ ShootFromTank
 	beq TankOffscreenCannotShoot
 	jsr FireBulletRoutine
 TankOffscreenCannotShoot
-DoNotFireEnemyBullet	
 NoAvailableEnemyBalls
 	;--then we're done
 	rts	
@@ -1965,11 +1971,12 @@ DoNotUpdateChannel1Decay
 
     ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
     if ((* + 5) & $FF00) != ((* + 8) & $FF00)
+        echo $FF - ((* + 4) & $FF), "bytes left at location", *
         ds $FF - ((* + 4) & $FF)
     endif
 
 PositionASpriteSubroutine
-	sec
+    sec
 	sta HMCLR
 	sta WSYNC
 DivideLoop			;				this loop can't cross a page boundary!!!
@@ -1988,7 +1995,24 @@ Return					;label for cycle-burning code
 	rts
 
 	
-	
+PositionASpriteNoHMOVESubroutine
+	sta HMCLR
+PositionASpriteNoHMOVEOrHMCLRSubroutine
+    sec
+	sta WSYNC
+DivideLoop2			;				this loop can't cross a page boundary!!!
+	sbc #15
+	bcs DivideLoop2	;+4		 4
+	eor #7
+	asl
+	asl
+	asl
+	asl				;+10	14
+	sta.wx HMP0,X	;+5		19
+	sta RESP0,X		;+4		23
+; 	sta WSYNC
+; 	sta HMOVE
+	rts
 	
 ;****************************************************************************
 
@@ -3683,8 +3707,7 @@ RotationLoop
 	sta PlayerY,X
 	txa
 	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
-	beq PlayerNotMissile 
-	jmp MissileNotPlayer    ;--can use BNE here if the routine in between isn't too long.
+	bne MissileNotPlayer   
 PlayerNotMissile
 	;--get correct tank gfx ptr set up
 	txa
@@ -3710,7 +3733,6 @@ NotPlayerTankSkipNotMovingCheck
 	and #%00000110
 	tax
 
-	;--what would it take to make the player tank static if not moving? 
 
 	lda TankStatus,Y
 	and #TANKUP
@@ -3745,8 +3767,6 @@ SetTankGfxPtr
 	sta Player0Ptr+1,X
 	sta Player0Ptr+3,X
 	pla
-	clc
-	adc #TANKHEIGHT
 	sec
 	sbc TankY,Y
 	sta Player0Ptr,X
@@ -3818,7 +3838,7 @@ PreKernelSetupLoop2
 AdjustMissileYLoop
 	lda MissileYTemp,X
 	cmp #TANKHEIGHT-2
-	bcs NoAdjustMissileY
+	bcs NoAdjustMissileY 
 	adc #1
 	sta MissileYTemp,X
 NoAdjustMissileY
@@ -3826,8 +3846,10 @@ NoAdjustMissileY
 	bpl AdjustMissileYLoop
 	
 	
-	;bullet flicker rotation:
 	lda FrameCounter
+	and #$0F
+	sta Temp        ;used below for cycling base color
+	;bullet flicker rotation:
 	and #3
 	tax
 	lda BulletX,X
@@ -3837,11 +3859,7 @@ NoAdjustMissileY
 
 
 	;--cycle BaseColor
-	lda FrameCounter
-	and #$0F
-	sta Temp
-	lda #BASECOLOR
-	and #$F0
+	lda #(BASECOLOR)&($F0)
 	ora Temp
 	sta Temp+1
 	
@@ -3887,53 +3905,63 @@ SetupScorePtrsLoop
 
 	
 MoveBulletSubroutine
-
+    ;--if used only hardware collision registers, could just move one bullet every 4 frames.
+    ;   but would probably need to redesign tank graphic for that to work.
 	ldx #3
 MoveBulletsLoop
-	lda BulletX,X
-	cmp #BALLOFFSCREEN
-	beq NoBulletMovement
+	lda BulletY,X
+	;cmp #BALLOFFSCREEN
+	beq BulletOffScreen;NoBulletMovement
 	lda BulletDirection
 	and BulletDirectionMask,X
 	tay							;save value
 	cmp BulletUpBank2,X
 	bne BulletNotUp
+	;--move bullet up
 	lda BulletY,X
 	clc
 	adc #BULLETSPEEDVER
 	sta BulletY,X
+	bcc CheckBulletIsOffScreenVertical
 BulletNotUp
 	tya
 	cmp BulletDownBank2,X
 	bne BulletNotDown
+	;--move bullet down
 	lda BulletY,X
 	sec
 	sbc #BULLETSPEEDVER
 	sta BulletY,X
+	bcs BulletOnScreen
 BulletNotDown
 	tya	
 	cmp BulletRightBank2,X
 	bne BulletNotRight
+	;--move bullet right
 	lda BulletX,X
 	clc
 	adc #BULLETSPEEDHOR
 	sta BulletX,X
+	bcc CheckBulletIsOffScreenHorizontal
 BulletNotRight	
 	tya
 	cmp BulletLeftBank2,X
 	bne NoBulletMovement
+	;--move bullet left
 	lda BulletX,X
 	sec
 	sbc #BULLETSPEEDHOR
 	sta BulletX,X
-NoBulletMovement
 
 	;--check for off screen:
+CheckBulletIsOffScreenHorizontal
 	lda BulletX,X
-	cmp #16
+	cmp #17
 	bcc BulletOffScreen
 	cmp #144
 	bcs BulletOffScreen
+	bcc BulletOnScreen
+CheckBulletIsOffScreenVertical
 	lda BulletY,X
 	cmp #(MAZEAREAHEIGHT)+4
 	bcc BulletOnScreen	
@@ -3941,6 +3969,7 @@ BulletOffScreen
 	lda #BALLOFFSCREEN
 	sta BulletX,X
 	sta BulletY,X	
+NoBulletMovement
 BulletOnScreen
 	dex
 	bpl MoveBulletsLoop
@@ -4567,113 +4596,50 @@ NoTankCollisionsAtAll
 
 BallHasNotHitBlock
 	;--now check if bullet has hit an enemy tank
-	;--new routine using collision registers instead of loop.
+	;--new routine using collision registers instead of loop.  <--actually, reject this because occasionally bullets pass through tanks
 	
-	lda FrameCounter
-	and #1
-	tay
-	
-	bit CXP0FB
-	bvs BulletCollisionP0
-	bit CXP1FB
-	bvs BulletCollisionP1
-	bit CXM0FB
-	bvs BulletCollisionM0
-	bit CXM1FB
-	bvs BulletCollisionM1
-	bvc NoBulletToTankCollision
-	
-BulletCollisionP0
-    lda P0CollisionTable,Y
-    tax ;index into which tank is hit
-    bvs FoundDeadTankNowKill    ;branch always following bvs branch above
-BulletCollisionP1
-    lda P1CollisionTable,Y
-    tax
-    bvs FoundDeadTankNowKill
-BulletCollisionM0
-    lda M0CollisionTable,Y
-    tax
-    bvs FoundDeadTankNowKill
-BulletCollisionM1
-    lda M1CollisionTable,Y
-    tax
-FoundDeadTankNowKill
-;     ;--if tank offscreen, cannot be killed <--bullets are removed before they go off the maze area, so this is unnecessary
-;     lda TankStatus,X
-;     and #$F0
-;     beq TankOffScreenCannotBeKilled
-	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
-	lda FrameCounter
-	and #3
-	tay ;get bullet # into Y so it will be removed appropriately below
-	cmp #2
-	bcs NoPointsForEnemyOwnGoals
-	txa ;set flags based on X
-	beq NoPointsForGettingShot
-	lda #>KILLTANKSCORE
-	sta Temp
-	lda #<KILLTANKSCORE
-	jsr IncreaseScoreSubroutine
-
-NoPointsForGettingShot		
-NoPointsForEnemyOwnGoals
-	jsr BulletHitTank
-
-TankOffScreenCannotBeKilled
-NoBulletToTankCollision	
-	
-	
-; 	;   X is index into tank (outer loop)
-; 	;   Y is index into bullet (inner loop)
-; 	ldx #3
-; CheckBulletTankCollisionOuterLoop
-; 	;first check if tank is offscreen
-; 	jsr IsTankOnScreen
-; 	and #$FF
-; 	bne EnemyTankOnScreen
-; 	jmp EnemyTankOffscreen
-; EnemyTankOnScreen
-; 	;now compare ball location to tank location
-; 	ldy #3
-; CheckBulletTankCollisionInnerLoop
-; 	lda BulletX,Y
-; 	cmp #BALLOFFSCREEN
-; ; 	bne BulletOnScreen2
-; 	beq BulletOffScreen2    
-; BulletOnScreen2
-; 	;--compare X position
-; 	;----so... I think probably we can use the collision registers.  Is it faster though?
-; 	clc
-; 	adc #1
-; 	cmp TankX,X
-; 	bcc BulletDidNotHitTank 
-; 	sbc #1
-; 	sta Temp
-; 	lda TankX,X
-; 	clc
-; 	adc #8
-; 	cmp Temp
-; 	bcc BulletDidNotHitTank
-; 	;--compare Y position
-; 	lda BulletY,Y
-; 	sec
-; 	sbc #1
-; 	cmp TankY,X
-; 	bcs BulletDidNotHitTank
-; 	adc #1
-; 	sta Temp
-; 	lda TankY,X
-; 	sec
-; 	sbc #TANKHEIGHT
-; 	cmp Temp
-; 	bcs BulletDidNotHitTank
-; 
+; 	lda FrameCounter
+; 	and #1
+; 	tay
+; 	
+; 	bit CXP0FB
+; 	bvs BulletCollisionP0
+; 	bit CXP1FB
+; 	bvs BulletCollisionP1
+; 	bit CXM0FB
+; 	bvs BulletCollisionM0
+; 	bit CXM1FB
+; 	bvs BulletCollisionM1
+; 	bvc NoBulletToTankCollision
+; 	
+; BulletCollisionP0
+;     lda P0CollisionTable,Y
+;     tax ;index into which tank is hit
+;     bvs FoundDeadTankNowKill    ;branch always following bvs branch above
+; BulletCollisionP1
+;     lda P1CollisionTable,Y
+;     tax
+;     bvs FoundDeadTankNowKill
+; BulletCollisionM0
+;     lda M0CollisionTable,Y
+;     tax
+;     bvs FoundDeadTankNowKill
+; BulletCollisionM1
+;     lda M1CollisionTable,Y
+;     tax
+; FoundDeadTankNowKill
+; ;     ;--if tank offscreen, cannot be killed <--bullets are removed before they go off the maze area, so this is unnecessary
+; ;     lda TankStatus,X
+; ;     and #$F0
+; ;     beq TankOffScreenCannotBeKilled
 ; 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
+; 	lda FrameCounter
+; 	and #3
+; 	tay ;get bullet # into Y so it will be removed appropriately below
+; 	cmp #2
+; 	bcs NoPointsForEnemyOwnGoals
 ; 	txa ;set flags based on X
 ; 	beq NoPointsForGettingShot
-; 	cpy #2
-; 	bcs NoPointsForEnemyOwnGoals
 ; 	lda #>KILLTANKSCORE
 ; 	sta Temp
 ; 	lda #<KILLTANKSCORE
@@ -4683,18 +4649,81 @@ NoBulletToTankCollision
 ; NoPointsForEnemyOwnGoals
 ; 	jsr BulletHitTank
 ; 
-; BulletDidNotHitTank
-; BulletOffScreen2
-; 	dey
-; 	bmi EnemyTankOffscreen
-; 	jmp CheckBulletTankCollisionInnerLoop
-; 	
-; EnemyTankOffscreen
-;     
-; 	dex
-; 	bmi DoneWithCheckBulletTankCollisionOuterLoop
-; 	jmp CheckBulletTankCollisionOuterLoop
-; DoneWithCheckBulletTankCollisionOuterLoop
+; TankOffScreenCannotBeKilled
+; NoBulletToTankCollision	
+	
+	
+	;   X is index into tank (outer loop)
+	;   Y is index into bullet (inner loop)
+	ldx #3
+CheckBulletTankCollisionOuterLoop
+	;first check if tank is offscreen
+	jsr IsTankOnScreen
+	and #$FF
+	bne EnemyTankOnScreen
+	jmp EnemyTankOffscreen
+EnemyTankOnScreen
+	;now compare ball location to tank location
+	ldy #3
+CheckBulletTankCollisionInnerLoop
+	lda BulletX,Y
+	cmp #BALLOFFSCREEN
+; 	bne BulletOnScreen2
+	beq BulletOffScreen2    
+BulletOnScreen2
+	;--compare X position
+	;----so... I think probably we can use the collision registers.  Is it faster though?
+	clc
+	adc #1
+	cmp TankX,X
+	bcc BulletDidNotHitTank 
+	sbc #1
+	sta Temp
+	lda TankX,X
+	clc
+	adc #8
+	cmp Temp
+	bcc BulletDidNotHitTank
+	;--compare Y position
+	lda BulletY,Y
+	sec
+	sbc #1
+	cmp TankY,X
+	bcs BulletDidNotHitTank
+	adc #1
+	sta Temp
+	lda TankY,X
+	sec
+	sbc #TANKHEIGHT
+	cmp Temp
+	bcs BulletDidNotHitTank
+
+	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
+	txa ;set flags based on X
+	beq NoPointsForGettingShot
+	cpy #2
+	bcs NoPointsForEnemyOwnGoals
+	lda #>KILLTANKSCORE
+	sta Temp
+	lda #<KILLTANKSCORE
+	jsr IncreaseScoreSubroutine
+
+NoPointsForGettingShot		
+NoPointsForEnemyOwnGoals
+	jsr BulletHitTank
+
+BulletDidNotHitTank
+BulletOffScreen2
+	dey
+	bmi EnemyTankOffscreen
+	jmp CheckBulletTankCollisionInnerLoop
+	
+EnemyTankOffscreen
+    
+	dex
+	bmi DoneWithCheckBulletTankCollisionOuterLoop
+	jmp CheckBulletTankCollisionOuterLoop
+DoneWithCheckBulletTankCollisionOuterLoop
 	
 	jmp ReturnFromBSSubroutine2
 
@@ -5077,11 +5106,11 @@ RotationEven
 ; 	.byte 2, 1, 3	
 
 TankUpFrame
-	.word TankUpAnimated4, TankUpAnimated3, TankUpAnimated2, TankUpAnimated1
+	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
 TankDownFrame
-	.word TankDownAnimated4, TankDownAnimated3, TankDownAnimated2, TankDownAnimated1
+	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
 TankRightFrame
-	.word TankRightAnimated4, TankRightAnimated3, TankRightAnimated2, TankRightAnimated1
+	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
 
 	
 BulletDirectionMask
