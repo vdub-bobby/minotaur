@@ -235,6 +235,8 @@ BASECOLOR		=		GOLD
 SCORECOLOR      =       GRAY|$C
 WALLCOLOR			=		RED|$6
 TANKSREMAININGCOLOR =   TURQUOISE|$A
+TANKCOLOR1 =    GOLD|$A
+TANKCOLOR2 =    BLUE2|$C
 
 
 MAZEPATHCUTOFF	=	100
@@ -424,8 +426,8 @@ PF1Right ds MAZEROWS-1
 LastRowL ds 1
 LastRowR ds 1
 Temp ds 3
-ScorePtr
-MiscPtr ds 2
+MiscPtr 
+ScorePtr ds 6
 
    ; Display Remaining RAM
    echo "----",($100 - *) , "bytes left (ZP RAM)"
@@ -445,8 +447,6 @@ Start
 
 	jsr InitialSetupSubroutine
 
-	lda #TitleGraphicsEnd-TitleGraphics-1
-	sta MazeGenerationPass
 		
 	
 ;	lda #BASECOLOR
@@ -509,6 +509,7 @@ KernelRoutineGame
 	sta WSYNC
 	sta HMOVE	
 	;--waste time efficiently:
+	SUBROUTINE
 	ldy #10		; 2
 .wait
 	dey			 ; 2
@@ -552,19 +553,10 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sta NUSIZ1
 	
 	;--tank colors
-	lda #GOLD+10
+	lda #TANKCOLOR1 ;GOLD+10
 	sta COLUP0
-	lda #BLUE2+12
+	lda #TANKCOLOR2 ;BLUE2+12
 	sta COLUP1
-	
-	ldx #4
-PositioningLoopVBLANK	;--excluding players
-	lda PlayerX,X
-	jsr PositionASpriteSubroutine
-	dex
-	cpx #2
-	bne PositioningLoopVBLANK
-
 	
 	;--reflect P0 or P1 as necessary.   prep for flip loop below
 	lda FrameCounter
@@ -575,16 +567,26 @@ PositioningLoopVBLANK	;--excluding players
 	sta MiscPtr
 	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
-
-	
 	lda #WALLCOLOR
 	sta COLUPF
+	;--do this above...the rest we do during the wall below.  
+	ldx #4
+; PositioningLoopVBLANK	;--excluding players (and M1)
+	lda PlayerX,X
+	jsr PositionASpriteSubroutine   ;        9
+; 	dex
+; 	cpx #3
+; 	bne PositioningLoopVBLANK
+	
+
+	
 	ldx #$C0
-	lda #$FF
-	sta WSYNC
+	lda #$FF                        ;+4     13
+; 	sta WSYNC
+; 	sta HMCLR
 	stx PF0
 	sta PF1
-	sta PF2
+	sta PF2                         ;+9     22
 	
 	;---reflect P0/P1
 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
@@ -601,49 +603,42 @@ SetREFPLoop
 EndREFPLoop
 	dey
 	bpl SetREFPLoop
+
 	
+	sty VDELP0  ;Y is 255 following loop above
+	sty VDELBL    
 
+	iny         ;Y = 0
+	sty VDELP1
+	
+	tsx
+	stx Temp       ;save stack pointer
+		
 
-	ldx #2
+	ldx #3
 PositioningLoop	;--just players
 	lda PlayerX,X
 	jsr PositionASpriteSubroutine
 	dex
-	bpl PositioningLoop
-
-		;--clear collision registers
-	sta CXCLR
-
-	sta WSYNC
-	lda #0
-	sta PF1
-	sta PF2					;+8		 8
-	
-	sta VDELP1
-	
-	lda #$FF
-	sta VDELP0
-	sta VDELBL
-
-	nop
+	bpl PositioningLoop     ;       13 cycles last time through
+    
+	sty PF1                 ; Y is zero
+	sty PF2					;
+	sta CXCLR               ;+9     22
 
 	;--use stack pointer to hit ENABL
-	tsx
-	stx Temp
 	ldx #<ENABL
-	txs						;+9		31
-
-	ldy #TANKAREAHEIGHT		;+2		35
+	txs						;+4		26
+	
+	nop
+    nop
+    
+	ldy #TANKAREAHEIGHT		;+2		30
 
 		
-	jmp BeginMainMazeKernel
+	jmp BeginMainMazeKernel ;+3     33
 
-
-; 	align 256
-	
     PAGEALIGN
-
-
 	
 Switch0
 	lda Player0Bottom
@@ -1422,6 +1417,10 @@ SetUpTankInitialValues
 	endif    
 	sta CTRLPF
 	
+	lda #TitleGraphicsEnd-TitleGraphics-1
+	sta MazeGenerationPass
+	
+	
 	rts
 	
 ;****************************************************************************
@@ -1991,8 +1990,8 @@ DivideLoop			;				this loop can't cross a page boundary!!!
 	sta RESP0,X		;+4		23
 	sta WSYNC
 	sta HMOVE
-Return					;label for cycle-burning code
-	rts
+Return					;label for cycle-burning code   
+	rts                 ;+9      9
 
 	
 PositionASpriteNoHMOVESubroutine
