@@ -1062,7 +1062,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #52
+	lda #50
 	sta TIM64T
 	
 	dec FrameCounter
@@ -4031,7 +4031,9 @@ NotFirstPass
 	jsr UpdateRandomNumberBank2
 	and #1
 	eor #15
+	;--start on random number between 14 and 15
 	tax
+	dex ;--now start on random number between 13 and 14 
 	
 MakeMazeLoopOuter	
 	stx Temp
@@ -4063,7 +4065,9 @@ MakeMazeLoopInner
 	;--not at the end of the run, so loop around
 	dec Temp+1
 	dex
-	bpl MakeMazeLoopInner
+; 	bpl MakeMazeLoopInner
+    bne MakeMazeLoopInner  ;<--don't go all the way to the left edge
+    
 
 	;--need to carve a passage downward if we reach this spot:
 EndOfRun
@@ -4079,9 +4083,7 @@ EndOfRun
 	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
  	beq OnlyOnePlaceToCarve
 	;--this routine tries to find a random place in our new passage to carve downwards
-	;--picks a random number, then subtracts the length of the passage
-	;	until we cross zero, then adds length back for spot to add downward passage
- 	jsr UpdateRandomNumberBank2
+;  	jsr UpdateRandomNumberBank2
 	;--new routine:
 	;	decrease length by 1, then remove random bits
 	dec Temp+1
@@ -4095,6 +4097,10 @@ OnlyOnePlaceToCarve
 	txa
 	pha
 	ldx Temp+1
+	cpx #1
+	beq NoCarveDownInColumn1
+	cpx #14
+	beq NoCarveDownInColumn14
 	lda PFMaskLookupBank2,X
 	eor #$FF
 	pha
@@ -4115,6 +4121,8 @@ OnlyOnePlaceToCarve
 AtBottomRow
 	iny	
 	iny		;restore Y to current row index
+NoCarveDownInColumn1
+NoCarveDownInColumn14
 	pla		;get block index back into X
 	tax
 	dex
@@ -4124,13 +4132,14 @@ AtBottomRow
 	sta MiscPtr
 	dex
 	bmi DoneWithRow
-	bpl MakeMazeLoopOuter
+; 	bpl MakeMazeLoopOuter
+    bne MakeMazeLoopOuter ;<--don't carve all the way to the left edge
 EndRunBeginNextRun
 	dex
 	stx Temp
 	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
+; 	lda #<PF1Left
+; 	sta MiscPtr         ;<--is this necessary?
 
 	
 DoneWithRow
