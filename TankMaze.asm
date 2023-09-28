@@ -1115,7 +1115,6 @@ InBetweenLevels
 	brk
 	.word KernelSetupSubroutine
 
-;	nop	;placeholder for debugging scanline counts
 
 WaitForVblankEnd
 	lda INTIM
@@ -1146,7 +1145,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda #37
+	lda #36
 	sta TIM64T
 	
 	
