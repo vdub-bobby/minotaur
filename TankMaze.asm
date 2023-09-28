@@ -1062,7 +1062,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #53
+	lda #52
 	sta TIM64T
 	
 	dec FrameCounter
@@ -1682,7 +1682,7 @@ DoneWaitingBringPlayerTankOnScreen
 TankOnscreenMoveIt
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
-	
+	;--intersection means X mod 8 = 0 and Y mod 7 = 0
 	lda TankX,X
 	and #$07
 	beq AtIntersectionX
@@ -1733,12 +1733,12 @@ AtIntersectionY
 	;--here is where we choose which way each tank will go
 
 	;--if player tank, read joystick
-	txa
+	txa             ;quick test to see if X = 0 (i.e., player tank we are moving)
 	bne EnemyTankDirectionRoutine
 	jmp ReadControllersSubroutine
 EnemyTankDirectionRoutine
 	;--new thought.  if tank is turning, wait until it is actually going to move (fractional overflow) before calculating new direction.
-	;--should fix reversals and also should prvent tanks from turning through solid barriers (oops)
+	;--should fix reversals and also should prevent tanks from turning through solid barriers (oops)
 	
 	lda TankStatus,X
 	asl
@@ -1753,7 +1753,7 @@ EnemyTankDirectionRoutine
 	rts
 TimeForEnemyTankToTurn
 	
-	
+	;--check if tank is offscreen (respawned and waiting to move)
 	lda TankY,X
 	cmp #MAZEAREAHEIGHT+2
 	bcc TankNotAboveMaze
@@ -1772,10 +1772,14 @@ TankNotLeftOfMaze
 	bne SetNewTankDirection
 TankInMaze
 
-	;	get allowable directions
-	lda #0;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)
-	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 
+    ;--overall routine:
+    ;   get allowable directions.
+    ;       if there is only one, turn in that direction.
+    ;       if there is more than one allowable direction:
+    ;           save those directions, then push a target (X and Y) onto the stack, and then turn towards the direction that best goes to the target.
+	lda #0      ;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)  = all directions
+	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 	jsr CheckForEnemyTankSubroutine ;--returns with allowable directions in A
 	
 	and #$F0	;clear bottom nibble
@@ -1783,7 +1787,10 @@ TankInMaze
 	
 	;--if single direction, then move that direction
 	pha			;--save direction
-
+  	bne ThereAreSomeAllowedDirections ;if no allowed directions, skip all the nonsense below
+	jmp NoAllowedDirections
+  	
+ThereAreSomeAllowedDirections
 	lsr
 	lsr
 	lsr
@@ -1802,24 +1809,25 @@ SetNewTankDirection
 	sta TankStatus,X
 	jmp DirectionChosen
 MoreThanOneAllowedDirection
-	;--if can only move in two directions, go whichever ISN'T back the way we came from
-	cmp #2
-	bne MoreThanTwoAllowedDirections
-	;--find current direction, clear it's opposite, and then move the one remaining direction
-	lda TankStatus,X
-	lsr
-	lsr
-	lsr
-	lsr			;index into table with opposite directions
-	tay
-	pla
-	and PreventReverses,Y
-	sta Temp
-	lda TankStatus,X
-	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
-	ora Temp
-	sta TankStatus,X
-	jmp DirectionChosen
+;----cannot use this any longer, since directions can be eliminated by the presence of another tank, so the two directions may *not* include reversing back where the tank came from
+; 	;--if can only move in two directions, go whichever ISN'T back the way we came from
+; 	cmp #2
+; 	bne MoreThanTwoAllowedDirections
+; 	;--find current direction, clear it's opposite, and then move the one remaining direction
+; 	lda TankStatus,X
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr			;index into table with opposite directions
+; 	tay
+; 	pla
+; 	and PreventReverses,Y
+; 	sta Temp
+; 	lda TankStatus,X
+; 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+; 	ora Temp
+; 	sta TankStatus,X
+; 	jmp DirectionChosen
 
 			
 	
@@ -1836,7 +1844,7 @@ MoreThanTwoAllowedDirections
 	pha
 	
 	;--TANK AI ROUTINE ... such as it is
-	;--if TankMovementCounter < TANKAISWITCH, then move tanks towards various corners, otherwise, follow regular pattern
+	;--if TankMovementCounter < TANKAISWITCH, then move tanks towards static location(s), otherwise, follow regular pattern
 	;--TankMovementCounter updates every 4 frames, so goes from 0 to 255 every ... 16-ish seconds (1024 frames)
 	;--at fastest tank speed it is moving ....a pixel every 4 frames.  At slowest tank speed a pixel every 32 frames.
 	;--and each block is approx 8x8, so - at fastest speed, tanks will choose a new direction every 32 frames, at slowest speed will
@@ -1844,21 +1852,22 @@ MoreThanTwoAllowedDirections
 	lda TankMovementCounter
 	cmp #TANKAISWITCH
 	bcs RegularMovement
-	; move to upper left corner
+	; move to static location
 	lda SwitchMovementX,X
 	pha
 	lda SwitchMovementY,X
 	pha
-	jmp ChooseTankDirection
+	bcc ChooseTankDirection ;branch always
 RegularMovement
 	;routine: 
-	; pick two targets, then take the midpoint between them
+	; pick two targets, then take the midpoint between them.
+	;   each target is a ZP variable.  Have to update random number in between in case both targets are random numbers (like in the case of tank 3)
 	ldy TankTargetX,X
 	lda $00,Y
 	ldy TankTargetAdjustX,X
 	sec
 	sbc $00,Y
-	jsr DivideByTwoSubroutine
+	jsr DivideByTwoSubroutine   ;can't just LSR since we need to account for negative numbers
 	clc
 	adc $00,Y
 	pha
@@ -1873,11 +1882,8 @@ RegularMovement
 	adc $00,Y
 	pha
 
-
-	jmp ChooseTankDirection	;--why this?
-	
-	
 ChooseTankDirection
+    ;have allowable directions in stack and target X and Y values in stack
 	jsr ChooseTankDirectionSubroutine	;returns with new direction in accumulator
 	sta Temp
 	lda TankStatus,X
@@ -1888,15 +1894,10 @@ ChooseTankDirection
 	pla									;pull target for tank off stack and discard
 
 	;--now compare to allowable directions
+	;   if desired direction is one of the allowable directions, then go that way.
+	;       if not, pick random direction from allowable and move that way.
 	pla	;	--get allowable directions off stack
 	pha	;	but leave on stack
-	;--check if no allowed directions:
-	and #$F0
-	bne ThereAreAllowedDirections
-NoAllowedDirectionsTrap
-	nop
-	beq NoAllowedDirections ;if no allowed directions....
-ThereAreAllowedDirections
 	and TankStatus,X
 	bne DirectionIsFine
 	;--direction is not ok
@@ -1912,7 +1913,7 @@ TryAnotherDirection
 	dey
 	bpl TryAnotherDirection
 	ldy #3					;loop around
-	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction, that the tank can never be stuck and unable to move
+	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction
 FoundGoodDirection
 NoAllowedDirections
 	sta Temp
@@ -2097,17 +2098,15 @@ EliminatePlayerDiagonal
 	
 	;--moving at a diagonal.
 	;.....not sure what to do.
-	lda TankStatus
-	and #$F0
-	tsx
-	and ($00,X)
-	beq CompleteChangeOfDirection
+; 	lda TankStatus
+; 	and #$F0
+; 	tsx
+; 	and ($00,X)     ;<--I'm pretty sure this is the wrong addressing mode here oops.
+; 	beq CompleteChangeOfDirection
+; 	
+; 	ldx #0
+; 	txa
 	
-	ldx #0
-	txa
-	
-	
-RegularDiagonalHandling
 CompleteChangeOfDirection
 	ldx #0
 	lda TankStatus
@@ -2209,7 +2208,7 @@ MovementAllowed
 	pla			;pull allowed directions off (of original desired directions)
 ProcessDirections
 	pla			;pulls allowed directions off (of original desired directions)
-	jsr EliminateDiagonalSubroutine		;tanks cannot move diagonally
+; 	jsr EliminateDiagonalSubroutine		;tanks cannot move diagonally  is this necessary?
 
 	tay	;--save direction in Y
 	
@@ -2462,13 +2461,10 @@ DoneFiring
 	lda Temp+1
 	sta BulletY,X
 
-
 NotFiring
 NoAvailableBalls	
-
 TriggerNotDebounced
 
-	
 	rts
 	
 
@@ -2528,24 +2524,6 @@ LastRowNoHit
 	beq FoundWhetherBlockExists
 NotOnBottomRow	
 	;--divide by blockheight
-	;maximum Y value is 77 (TANKAREAHEIGHT=77)
-	;	we subtract BLOCKHEIGHT above to see if we are on the bottom row
-	;	so maximum once we are here is 70
-	;	BLOCKHEIGHT = 7
-	; 	so maximum loops is 10
-
-
-;	ldx #0
-;	sec
-;DivideLoop2
-;	sbc #BLOCKHEIGHT		;--this is division by 7
-;	bcc DoneDividing
-;	inx
-;	bcs DivideLoop2	;branch always		
-	;		each loop is 8 cycles, last is 9
-	;			so max cycles is 65
-	;			don't think this can be improved much
-;DoneDividing
 
 	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
 	;	post gives credit to December '84 Apple Assembly Line
