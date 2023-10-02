@@ -3070,139 +3070,139 @@ TankGfxVertical
      ;--animation for upward facing tank:   
 TankUpAnimated1
 		.byte 0
-        .byte #%11100111;--
+        .byte #%11011011;--
+        .byte #%00111100;--
+        .byte #%11111111;--
         .byte #%00011000;--
         .byte #%11011011;--
-        .byte #%00100100;--
-        .byte #%11100111;--
-        .byte #%00111100;--
+        .byte #%00011000;--
 TankUpAnimated1b
 		.byte 0
+        .byte #%00000011;--
+        .byte #%11111100;--
         .byte #%00111111;--
-        .byte #%11011000;--
+        .byte #%11111100;--
         .byte #%00011011;--
-        .byte #%11100100;--
-        .byte #%00100111;--
-        .byte #%11100100;--
+        .byte #%11011000;--
         .byte 0
 TankUpAnimated2
 		.byte 0
-		.byte #%11100100;--
+		.byte #%11011000;--
+		.byte #%00111111;--
+		.byte #%11111100;--
 		.byte #%00011011;--
 		.byte #%11011000;--
-		.byte #%00100111;--
-		.byte #%11100100;--
-		.byte #%00111111;--
+		.byte #%00011011;--
 TankUpAnimated2b
 		.byte 0
+        .byte #%11000011;--
+        .byte #%00111100;--
         .byte #%11111111;--
         .byte #%00011000;--
         .byte #%11011011;--
-        .byte #%00100100;--
-        .byte #%11100111;--
-        .byte #%00100100;--
+        .byte #%00011000;--
 		.byte 0
 TankUpAnimated3
 		.byte 0
-		.byte #%00100100;--
+		.byte #%00011000;--
+		.byte #%11111111;--
+		.byte #%00111100;--
 		.byte #%11011011;--
 		.byte #%00011000;--
-		.byte #%11100111;--
-		.byte #%00100100;--
-		.byte #%11111111;--
+		.byte #%11011011;--
 TankUpAnimated3b
 		.byte 0
+        .byte #%11000000;--
+        .byte #%00111111;--
         .byte #%11111100;--
         .byte #%00011011;--
         .byte #%11011000;--
-        .byte #%00100111;--
-        .byte #%11100100;--
-        .byte #%00100111;--
+        .byte #%00011011;--
 		.byte 0
 TankUpAnimated4
 		.byte 0
-		.byte #%00100111;--
+		.byte #%00011011;--
+		.byte #%11111100;--
+		.byte #%00111111;--
 		.byte #%11011000;--
 		.byte #%00011011;--
-		.byte #%11100100;--
-		.byte #%00100111;--
-		.byte #%11111100;--
+		.byte #%11011000;--
 TankUpAnimated4b
 		.byte 0
+        .byte #%00000000;--
+        .byte #%11111111;--
         .byte #%00111100;--
         .byte #%11011011;--
         .byte #%00011000;--
-        .byte #%11100111;--
-        .byte #%00100100;--
-        .byte #%11100111;--
+        .byte #%11011011;--
 		.byte 0
 TankDownAnimated1
         .byte 0
-        .byte #%11100100;--
-        .byte #%00100111;--
-        .byte #%11100100;--
+        .byte #%11011000;--
         .byte #%00011011;--
         .byte #%11011000;--
         .byte #%00111111;--
+        .byte #%11111100;--
+        .byte #%00000011;--
 TankDownAnimated1b
 		.byte 0
-		.byte #%00111100;--
-		.byte #%11100111;--
-		.byte #%00100100;--
+		.byte #%00011000;--
 		.byte #%11011011;--
 		.byte #%00011000;--
-		.byte #%11100111;--
+		.byte #%11111111;--
+		.byte #%00111100;--
+		.byte #%11011011;--
 		.byte 0
 TankDownAnimated2
         .byte 0
-        .byte #%00100100;--
-        .byte #%11100111;--
-        .byte #%00100100;--
+        .byte #%00011000;--
         .byte #%11011011;--
         .byte #%00011000;--
         .byte #%11111111;--
+        .byte #%00111100;--
+        .byte #%11000011;--
 TankDownAnimated2b
 		.byte 0
-		.byte #%00111111;--
-		.byte #%11100100;--
-		.byte #%00100111;--
+		.byte #%00011011;--
 		.byte #%11011000;--
 		.byte #%00011011;--
-		.byte #%11100100;--
+		.byte #%11111100;--
+		.byte #%00111111;--
+		.byte #%11011000;--
 		.byte 0
 TankDownAnimated3
         .byte 0
-        .byte #%00100111;--
-        .byte #%11100100;--
-        .byte #%00100111;--
+        .byte #%00011011;--
         .byte #%11011000;--
         .byte #%00011011;--
         .byte #%11111100;--
+        .byte #%00111111;--
+        .byte #%11000000;--
 TankDownAnimated3b
 		.byte 0
-		.byte #%11111111;--
-		.byte #%00100100;--
-		.byte #%11100111;--
+		.byte #%11011011;--
 		.byte #%00011000;--
 		.byte #%11011011;--
-		.byte #%00100100;--
+		.byte #%00111100;--
+		.byte #%11111111;--
+		.byte #%00011000;--
 		.byte 0
 TankDownAnimated4
         .byte 0
-        .byte #%11100111;--
-        .byte #%00100100;--
-        .byte #%11100111;--
+        .byte #%11011011;--
         .byte #%00011000;--
         .byte #%11011011;--
-        .byte #%00111100;--       	
+        .byte #%00111100;--
+        .byte #%11111111;--
+        .byte #%00000000;--       	
 TankDownAnimated4b
 		.byte 0
-		.byte #%11111100;--
-		.byte #%00100111;--
-		.byte #%11100100;--
+		.byte #%11011000;--
 		.byte #%00011011;--
 		.byte #%11011000;--
-		.byte #%00100111;--
+		.byte #%00111111;--
+		.byte #%11111100;--
+		.byte #%00011011;--
 		.byte 0
 		
 TitleGraphics
@@ -3333,69 +3333,69 @@ TankGfxHorizontal
 TankRightAnimated1
         .byte 0
         .byte #%01100110;--
-        .byte #%11001111;--
-        .byte #%10110001;--
-        .byte #%10110111;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
         .byte #%11001100;--
         .byte #%11001100;--
 TankRightAnimated1b
 		.byte 0
 		.byte #%01100110;--
 		.byte #%01100110;--
-		.byte #%10110111;--
-		.byte #%10110001;--
-		.byte #%11001111;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
 		.byte #%11001100;--
 		.byte 0
 TankRightAnimated2
         .byte 0
         .byte #%11001100;--
-        .byte #%11001111;--
-        .byte #%10110001;--
-        .byte #%10110111;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
         .byte #%10011001;--
         .byte #%10011001;--
 TankRightAnimated2b
 		.byte 0
 		.byte #%11001100;--
 		.byte #%11001100;--
-		.byte #%10110111;--
-		.byte #%10110001;--
-		.byte #%11001111;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
 		.byte #%10011001;--
 		.byte 0
 TankRightAnimated3
         .byte 0
         .byte #%10011001;--
-        .byte #%11001111;--
-        .byte #%10110001;--
-        .byte #%10110111;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
         .byte #%00110011;--
         .byte #%00110011;--
 TankRightAnimated3b
 		.byte 0
 		.byte #%10011001;--
 		.byte #%10011001;--
-		.byte #%10110111;--
-		.byte #%10110001;--
-		.byte #%11001111;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
 		.byte #%00110011;--
 		.byte 0
 TankRightAnimated4
        	.byte 0
         .byte #%00110011;--
-        .byte #%11001111;--
-        .byte #%10110001;--
-        .byte #%10110111;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
         .byte #%01100110;--
         .byte #%01100110;--
 TankRightAnimated4b
 		.byte 0
 		.byte #%00110011;--
 		.byte #%00110011;--
-		.byte #%10110111;--
-		.byte #%10110001;--
-		.byte #%11001111;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
 		.byte #%01100110;--
 		.byte 0
 
@@ -4541,111 +4541,48 @@ BallHasNotHitBlock
 	;--now check if bullet has hit an enemy tank
 	;--new routine using collision registers instead of loop.  <--actually, reject this because occasionally bullets pass through tanks
 	
-; 	lda FrameCounter
-; 	and #1
-; 	tay
-; 	
-; 	bit CXP0FB
-; 	bvs BulletCollisionP0
-; 	bit CXP1FB
-; 	bvs BulletCollisionP1
-; 	bit CXM0FB
-; 	bvs BulletCollisionM0
-; 	bit CXM1FB
-; 	bvs BulletCollisionM1
-; 	bvc NoBulletToTankCollision
-; 	
-; BulletCollisionP0
-;     lda P0CollisionTable,Y
-;     tax ;index into which tank is hit
-;     bvs FoundDeadTankNowKill    ;branch always following bvs branch above
-; BulletCollisionP1
-;     lda P1CollisionTable,Y
-;     tax
-;     bvs FoundDeadTankNowKill
-; BulletCollisionM0
-;     lda M0CollisionTable,Y
-;     tax
-;     bvs FoundDeadTankNowKill
-; BulletCollisionM1
-;     lda M1CollisionTable,Y
-;     tax
-; FoundDeadTankNowKill
-; ;     ;--if tank offscreen, cannot be killed <--bullets are removed before they go off the maze area, so this is unnecessary
-; ;     lda TankStatus,X
-; ;     and #$F0
-; ;     beq TankOffScreenCannotBeKilled
-; 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
-; 	lda FrameCounter
-; 	and #3
-; 	tay ;get bullet # into Y so it will be removed appropriately below
-; 	cmp #2
-; 	bcs NoPointsForEnemyOwnGoals
-; 	txa ;set flags based on X
-; 	beq NoPointsForGettingShot
-; 	lda #>KILLTANKSCORE
-; 	sta Temp
-; 	lda #<KILLTANKSCORE
-; 	jsr IncreaseScoreSubroutine
-; 
-; NoPointsForGettingShot		
-; NoPointsForEnemyOwnGoals
-; 	jsr BulletHitTank
-; 
-; TankOffScreenCannotBeKilled
-; NoBulletToTankCollision	
+	lda FrameCounter
+	and #1
+	tay
 	
+	bit CXP0FB
+	bvs BulletCollisionP0
+	bit CXP1FB
+	bvs BulletCollisionP1
+	bit CXM0FB
+	bvs BulletCollisionM0
+	bit CXM1FB
+	bvs BulletCollisionM1
+	bvc NoBulletToTankCollision
 	
-	;   X is index into tank (outer loop)
-	;   Y is index into bullet (inner loop)
-	ldx #3
-CheckBulletTankCollisionOuterLoop
-	;first check if tank is offscreen
-	jsr IsTankOnScreen
-	and #$FF
-	bne EnemyTankOnScreen
-	jmp EnemyTankOffscreen
-EnemyTankOnScreen
-	;now compare ball location to tank location
-	ldy #3
-CheckBulletTankCollisionInnerLoop
-	lda BulletX,Y
-	cmp #BALLOFFSCREEN
-; 	bne BulletOnScreen2
-	beq BulletOffScreen2    
-BulletOnScreen2
-	;--compare X position
-	;----so... I think probably we can use the collision registers.  Is it faster though?
-	clc
-	adc #1
-	cmp TankX,X
-	bcc BulletDidNotHitTank 
-	sbc #1
-	sta Temp
-	lda TankX,X
-	clc
-	adc #8
-	cmp Temp
-	bcc BulletDidNotHitTank
-	;--compare Y position
-	lda BulletY,Y
-	sec
-	sbc #1
-	cmp TankY,X
-	bcs BulletDidNotHitTank
-	adc #1
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #TANKHEIGHT
-	cmp Temp
-	bcs BulletDidNotHitTank
-
+BulletCollisionP0
+    lda P0CollisionTable,Y
+    tax ;index into which tank is hit
+    bvs FoundDeadTankNowKill    ;branch always following bvs branch above
+BulletCollisionP1
+    lda P1CollisionTable,Y
+    tax
+    bvs FoundDeadTankNowKill
+BulletCollisionM0
+    lda M0CollisionTable,Y
+    tax
+    bvs FoundDeadTankNowKill
+BulletCollisionM1
+    lda M1CollisionTable,Y
+    tax
+FoundDeadTankNowKill
+;     ;--if tank offscreen, cannot be killed <--bullets are removed before they go off the maze area, so this is unnecessary
+;     lda TankStatus,X
+;     and #$F0
+;     beq TankOffScreenCannotBeKilled
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
+	lda FrameCounter
+	and #3
+	tay ;get bullet # into Y so it will be removed appropriately below
+	cmp #2
+	bcs NoPointsForEnemyOwnGoals
 	txa ;set flags based on X
 	beq NoPointsForGettingShot
-	cpy #2
-	bcs NoPointsForEnemyOwnGoals
 	lda #>KILLTANKSCORE
 	sta Temp
 	lda #<KILLTANKSCORE
@@ -4655,18 +4592,81 @@ NoPointsForGettingShot
 NoPointsForEnemyOwnGoals
 	jsr BulletHitTank
 
-BulletDidNotHitTank
-BulletOffScreen2
-	dey
-	bmi EnemyTankOffscreen
-	jmp CheckBulletTankCollisionInnerLoop
+TankOffScreenCannotBeKilled
+NoBulletToTankCollision	
 	
-EnemyTankOffscreen
-    
-	dex
-	bmi DoneWithCheckBulletTankCollisionOuterLoop
-	jmp CheckBulletTankCollisionOuterLoop
-DoneWithCheckBulletTankCollisionOuterLoop
+	
+; 	;   X is index into tank (outer loop)
+; 	;   Y is index into bullet (inner loop)
+; 	ldx #3
+; CheckBulletTankCollisionOuterLoop
+; 	;first check if tank is offscreen
+; 	jsr IsTankOnScreen
+; 	and #$FF
+; 	bne EnemyTankOnScreen
+; 	jmp EnemyTankOffscreen
+; EnemyTankOnScreen
+; 	;now compare ball location to tank location
+; 	ldy #3
+; CheckBulletTankCollisionInnerLoop
+; 	lda BulletX,Y
+; 	cmp #BALLOFFSCREEN
+; ; 	bne BulletOnScreen2
+; 	beq BulletOffScreen2    
+; BulletOnScreen2
+; 	;--compare X position
+; 	;----so... I think probably we can use the collision registers.  Is it faster though?
+; 	clc
+; 	adc #1
+; 	cmp TankX,X
+; 	bcc BulletDidNotHitTank 
+; 	sbc #1
+; 	sta Temp
+; 	lda TankX,X
+; 	clc
+; 	adc #8
+; 	cmp Temp
+; 	bcc BulletDidNotHitTank
+; 	;--compare Y position
+; 	lda BulletY,Y
+; 	sec
+; 	sbc #1
+; 	cmp TankY,X
+; 	bcs BulletDidNotHitTank
+; 	adc #1
+; 	sta Temp
+; 	lda TankY,X
+; 	sec
+; 	sbc #TANKHEIGHT
+; 	cmp Temp
+; 	bcs BulletDidNotHitTank
+; 
+; 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
+; 	txa ;set flags based on X
+; 	beq NoPointsForGettingShot
+; 	cpy #2
+; 	bcs NoPointsForEnemyOwnGoals
+; 	lda #>KILLTANKSCORE
+; 	sta Temp
+; 	lda #<KILLTANKSCORE
+; 	jsr IncreaseScoreSubroutine
+; 
+; NoPointsForGettingShot		
+; NoPointsForEnemyOwnGoals
+; 	jsr BulletHitTank
+; 
+; BulletDidNotHitTank
+; BulletOffScreen2
+; 	dey
+; 	bmi EnemyTankOffscreen
+; 	jmp CheckBulletTankCollisionInnerLoop
+; 	
+; EnemyTankOffscreen
+;     
+; 	dex
+; 	bmi DoneWithCheckBulletTankCollisionOuterLoop
+; 	jmp CheckBulletTankCollisionOuterLoop
+; DoneWithCheckBulletTankCollisionOuterLoop
 	
 	jmp ReturnFromBSSubroutine2
 
