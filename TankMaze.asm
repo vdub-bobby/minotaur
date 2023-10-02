@@ -229,9 +229,10 @@ BULLETUP		=	3
 BULLETCLEAR		=	3
 
 TRIGGERDEBOUNCEVALUE = 15
-TRIGGERDEBOUNCEFLAG =   %00100000
-CONSOLEDEBOUNCEFLAG	=	%00010000
-ENEMYDEBOUNCE = 32
+TRIGGERDEBOUNCEFLAG =   %10000000
+CONSOLEDEBOUNCEFLAG	=	%01000000
+ENEMYDEBOUNCEBITS =     %00011111
+
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
@@ -391,7 +392,7 @@ Channel1Decay ds 1
 
 Debounce ds 1
 
-EnemyDebounce ds 1
+;EnemyDebounce ds 1
 
 TankX ds 4
 TankY ds 4
@@ -1479,10 +1480,12 @@ FireEnemyBulletRoutine
 
     endif    
     
-	;--- only every ... variable # of frames
-	lda EnemyDebounce
+; 	;--- only every ... variable # of frames
+	lda Debounce    ;was EnemyDebounce
+	and #ENEMYDEBOUNCEBITS
 	beq FireEnemyBullet
-	dec EnemyDebounce
+	dec Debounce    ;was EnemyDebounce
+	
 	rts					;--and we're done
 FireEnemyBullet
 	ldx #1
@@ -1503,9 +1506,10 @@ FoundAvailableEnemyBall
     bcc MazeNumberSixteenOrLess
     ldy #16
 MazeNumberSixteenOrLess    
-	lda EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
-	;lda #ENEMYDEBOUNCE
-	sta EnemyDebounce
+	lda Debounce    ;was EnemyDebounce
+	and #~ENEMYDEBOUNCEBITS ;this probably isn't necessary, but being safe for now
+    ora EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
+	sta Debounce    ;was EnemyDebounce
 	;--find random tank 
 	lda RandomNumber
 	and #3
@@ -2310,12 +2314,12 @@ FoundAvailableBall
 	bpl TriggerHit
 	;--if trigger not hit, set debounce to zero
 	lda Debounce
-	and #$F0
+	and #~TRIGGERDEBOUNCEFLAG
 	sta Debounce
 	jmp NotFiring
 TriggerHit
 	lda Debounce
-	and #$0F
+	and #TRIGGERDEBOUNCEFLAG
 	beq TriggerDebounced
 	jmp TriggerNotDebounced
 	
@@ -2334,7 +2338,7 @@ NoBulletSound
 	
 	;set trigger debounce
 	lda Debounce
-	ora #TRIGGERDEBOUNCEVALUE
+	ora #TRIGGERDEBOUNCEFLAG
 	sta Debounce
 	
 	ldy #0		;set index into which tank 
