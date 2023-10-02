@@ -1740,7 +1740,6 @@ AtIntersectionY
 EnemyTankDirectionRoutine
 	;--new thought.  if tank is turning, wait until it is actually going to move (fractional overflow) before calculating new direction.
 	;--should fix reversals and also should prevent tanks from turning through solid barriers (oops)
-	
 	lda TankStatus,X
 	asl
 	asl
@@ -2044,13 +2043,8 @@ SkipEOR
     sta RandomNumber
     rts
     
-
-	
-	
-	
-
-
 ;****************************************************************************
+
 EliminateDiagonalSubroutine
 	;--trashes Y.
 	;--X is index into which tank
@@ -2063,9 +2057,7 @@ EliminateDiagonalSubroutine
 	txa
 	pha						;save X index on stack
 	tsx
-	inx
-	inx
-	lda $00,X				;get allowed directions off of stack
+	lda $02,X				;get allowed directions off of stack
 	
 	lsr
 	lsr
@@ -2090,41 +2082,25 @@ EliminateDiagonalSubroutine
 	pha	;save desired directions on the stack
 	; for Enemy Tanks=randomly eliminate either horizontal or vertical movement
 	; for Player Tank=do previous routine which allowed tank to slide along
-	txa
+	txa ;set zero flag based on value in X (zero = player tank, non-zero = enemy tanks)
 	bne EnemyTankEliminateDiagonal
-EliminatePlayerDiagonal
-	;--otherwise, back to the drawing board:
-	;-- assumption for player tank is if holding at a diagonal and we come to 
-	;	an intersection, player always wants to turn
-	;--so if moving up/down, start by eliminating those directions
-
-	
-	;--moving at a diagonal.
-	;.....not sure what to do.
-; 	lda TankStatus
-; 	and #$F0
-; 	tsx
-; 	and ($00,X)     ;<--I'm pretty sure this is the wrong addressing mode here oops.
-; 	beq CompleteChangeOfDirection
-; 	
-; 	ldx #0
-; 	txa
-	
+    ;--player tank.  routine here basically tries to pick which direction to move in.
+    ;   routine is basically, if we were moving horizontally, have tank move vertically, and vice versa.	
 CompleteChangeOfDirection
-	ldx #0
+; 	ldx #0      ;X is already zero
 	lda TankStatus
 	and #J0LEFT|J0RIGHT
 	beq EliminateUpDown
 	;--else eliminate left and right
 	pla
 	ora #J0LEFT|J0RIGHT
-	bne DirectionsFine
-	
+; 	bne DirectionsFine
+	rts
 EliminateUpDown
 	pla						;restore directions 
 	ora #J0UP|J0DOWN		;eliminate up and down
-	bne DirectionsFine		;branch always
-
+; 	bne DirectionsFine		;branch always
+    rts
 EnemyTankEliminateDiagonal
 	lda RandomNumber
 	lsr				;random bit
@@ -2132,15 +2108,29 @@ EnemyTankEliminateDiagonal
 	bcs EliminateHorizontal
 	;--else eliminate vertial
 	ora #J0RIGHT|J0LEFT
-	bne DirectionsFine
+; 	bne DirectionsFine
+    rts
 EliminateHorizontal
 	ora #J0UP|J0DOWN
-
-	
 DirectionsFine
 
 	rts
 
+;****************************************************************************
+
+TankFractionalAddition	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$0F
+    clc
+    adc TankFractional,X
+	sta TankFractional,X
+    rts
+	
+	
 ;****************************************************************************
 
 ReadControllersSubroutine
@@ -2158,7 +2148,7 @@ ReadControllersSubroutine
     and #$F0
     sta TankStatus
     ;--stop engine sound
-    pla ;--pop movement flag (0) off stack
+    pla ;--pop movement flag (=0) off stack
     sta AUDV0
     rts
 TryingToMove
@@ -2240,15 +2230,7 @@ TankNotTurning
 	and #J0UP
 	bne NoUp
 	bcs TurnUpward			;carry holds movement flag (carry clear=no movement)
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$0F
-	clc
-	adc TankFractional,X
-	sta TankFractional,X
+	jsr TankFractionalAddition
 	lda TankY,X
 	adc #0
 	sta TankY,X
@@ -2264,15 +2246,7 @@ NoUp
 	and #J0DOWN
 	bne NoDown
 	bcs TurnDownward		;carry holds movement flag (carry clear=no movement)
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$0F
-    clc
-    adc TankFractional,X
-	sta TankFractional,X
+	jsr TankFractionalAddition
 	bcc TurnDownward	;but don't move down
 	dec TankY,X
 TurnDownward
@@ -2286,15 +2260,7 @@ NoDown
 	and #J0RIGHT
 	bne NoRight
 	bcs TurnRightward		;carry holds movement flag (carry clear=no movement)
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$0F
-	clc
-	adc TankFractional,X
-	sta TankFractional,X
+	jsr TankFractionalAddition
 	lda TankX,X
 	adc #0
 	sta TankX,X
@@ -2309,15 +2275,7 @@ NoRight
 	and #J0LEFT
 	bne NoLeft
 	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$0F
-    clc
-    adc TankFractional,X
-	sta TankFractional,X
+	jsr TankFractionalAddition
 	bcc TurnLeftward	;but don't move
 	dec TankX,X
 TurnLeftward
@@ -3898,7 +3856,7 @@ MoveBulletsLoop
 	clc
 	adc #BULLETSPEEDVER
 	sta BulletY,X
-	bcc CheckBulletIsOffScreenVertical
+	bcc CheckBulletIsOffScreenVertical      ;branch always
 BulletNotUp
 	tya
 	cmp BulletDownBank2,X
@@ -3908,7 +3866,7 @@ BulletNotUp
 	sec
 	sbc #BULLETSPEEDVER
 	sta BulletY,X
-	bcs BulletOnScreen
+	bcs BulletOnScreen                      ;branch always
 BulletNotDown
 	tya	
 	cmp BulletRightBank2,X
@@ -3918,7 +3876,7 @@ BulletNotDown
 	clc
 	adc #BULLETSPEEDHOR
 	sta BulletX,X
-	bcc CheckBulletIsOffScreenHorizontal
+	bcc CheckBulletIsOffScreenHorizontal    ;branch always
 BulletNotRight	
 	tya
 	cmp BulletLeftBank2,X
@@ -3943,7 +3901,7 @@ CheckBulletIsOffScreenVertical
 	bcc BulletOnScreen	
 BulletOffScreen
 	lda #BALLOFFSCREEN
-	sta BulletX,X
+	sta BulletX,X       ;<--is this necessary?
 	sta BulletY,X	
 NoBulletMovement
 BulletOnScreen
