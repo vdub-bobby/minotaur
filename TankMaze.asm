@@ -92,6 +92,11 @@ DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can 
 	
 ;-------------------------Constants Below---------------------------------
 
+
+VBLANK_TIMER = 50
+OVERSCAN_TIMER = 36
+
+
 TANKHEIGHT	=	7
 BLOCKHEIGHT = 	7
 MAZEROWS	=	11
@@ -1062,7 +1067,7 @@ VSYNCWaitLoop
 	lsr
 	bcs VSYNCWaitLoop
 
-	lda #50
+	lda #VBLANK_TIMER
 	sta TIM64T
 	
 	dec FrameCounter
@@ -1145,7 +1150,7 @@ OverscanRoutine
 	ldy #2
 	sty WSYNC
 	sty VBLANK
-	lda #36
+	lda #OVERSCAN_TIMER
 	sta TIM64T
 	
 	
@@ -1645,11 +1650,10 @@ DoNotBringTankOnscreenYet
 	rts
 
 PlayerTankMovementRoutine
-	ldx #0
 	;--if tank off left edge of screen, we don't read joystick, we just wait (??) and then move it on to the maze from the left
 	lda TankX
 	cmp #16
-	bcs TankOnscreenMoveIt
+	bcs PlayerTankOnscreenMoveIt
 	;--wait only if TankX == 8
 	cmp #8
 	bne DoneWaitingBringPlayerTankOnScreen
@@ -1672,12 +1676,12 @@ AllFinishedWaitingStartPlayerRespawn
 	ora TankStatus
 	sta TankStatus
 DoneWaitingBringPlayerTankOnScreen
-	ldx #PLAYERTANKENGINEVOLUME
  	lda #0		
 	pha			;movement flag
 	lda #~J0RIGHT
 	jmp SkipReadingControllers
-	
+PlayerTankOnscreenMoveIt
+    ldx #0	
 TankOnscreenMoveIt
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
@@ -1697,7 +1701,7 @@ AtIntersectionX
 	;	post gives credit to December '84 Apple Assembly Line
 	;--constant cycle count divide by 7 !!!!
 	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-	sta Temp+1 ;save for below --- necessary?
+	sta Temp+1 ;save for below --- necessary?  yes.
 	sta Temp
 	lsr
 	lsr
@@ -1713,16 +1717,14 @@ AtIntersectionX
 	
 	;--need modulo BLOCKHEIGHT (=7)
 	;	so now multiply by 7 
-	;		x * 7 = x * 4 + x * 2 + x
-	sta Temp
-	asl
-	asl
-	sta Temp+2
-	lda Temp
-	asl
-	adc Temp+2
-	adc Temp
-	sta Temp
+    ;       new routine x * 7 = x * 4 + x + x + x
+    sta Temp
+    asl
+    asl
+    adc Temp
+    adc Temp
+    adc Temp
+    sta Temp    ;+19 uses one byte RAM
 	;--now subtract from original number (all we care is if modulo = 0 or not)
 	sec
 	sbc Temp+1
@@ -1786,7 +1788,7 @@ TankInMaze
 	
 	;--if single direction, then move that direction
 	pha			;--save direction
-  	bne ThereAreSomeAllowedDirections ;if no allowed directions, skip all the nonsense below
+	bne ThereAreSomeAllowedDirections ;if no allowed directions, skip all the nonsense below
 	jmp NoAllowedDirections
   	
 ThereAreSomeAllowedDirections
@@ -1795,7 +1797,7 @@ ThereAreSomeAllowedDirections
 	lsr
 	lsr			;--get in bottom nibble
 	tay
-	lda NumberOfBitsSet,Y
+	lda NumberOfBitsSet,Y   ;+14 cycles
 	;--if can only move a single direction, go that direction
 	cmp #1
 	bne MoreThanOneAllowedDirection
@@ -1840,7 +1842,9 @@ MoreThanTwoAllowedDirections
 	tay
 	pla
 	and PreventReverses,Y
-	pha
+	pha                         ;25-25 cycles
+
+
 	
 	;--TANK AI ROUTINE ... such as it is
 	;--if TankMovementCounter < TANKAISWITCH, then move tanks towards static location(s), otherwise, follow regular pattern
@@ -2158,8 +2162,8 @@ ReadControllersSubroutine
     sta AUDV0
     rts
 TryingToMove
-	ldx #PLAYERTANKENGINEVOLUME
 SkipReadingControllers
+	ldx #PLAYERTANKENGINEVOLUME
 ; NotTryingToMove
 	stx AUDV0	
 	ldx #0		;index into which tank	
@@ -2266,10 +2270,8 @@ NoUp
 	asl
 	asl
 	ora #$0F
-	sta Temp
-	lda TankFractional,X
-	clc
-	adc Temp
+    clc
+    adc TankFractional,X
 	sta TankFractional,X
 	bcc TurnDownward	;but don't move down
 	dec TankY,X
@@ -2313,10 +2315,8 @@ NoRight
 	asl
 	asl
 	ora #$0F
-	sta Temp
-	lda TankFractional,X
-	clc
-	adc Temp
+    clc
+    adc TankFractional,X
 	sta TankFractional,X
 	bcc TurnLeftward	;but don't move
 	dec TankX,X
