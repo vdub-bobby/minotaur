@@ -236,8 +236,9 @@ ENEMYDEBOUNCEBITS =     %00011111
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
-BULLETFRACTIONALSPEED   =   256/100*85  ;slowing bullets down slightly so the collision detection works better
-
+BULLETFRACTIONALPERCENT =   85
+BULLETFRACTIONALSPEED   =   (256/100*BULLETFRACTIONALPERCENT)  ;slowing bullets down slightly so the collision detection works better
+                                            ; Formula is: 256 is theorically moving every frame.  multiplying by percentage
 BASECOLOR		=		GOLD
 SCORECOLOR      =       GRAY|$C
 WALLCOLOR			=		RED|$6
@@ -3541,7 +3542,10 @@ SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH
 	
 NumberOfBitsSet
-	.byte 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+	.byte 0, 1, 1, 2
+	.byte 1, 2, 2, 3
+	.byte 1, 2, 2, 3
+	.byte 2, 3, 3, 4
 MovementMask
 	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 	
@@ -3846,15 +3850,40 @@ SetupScorePtrsLoop
 MoveBulletSubroutine
     ;--if used only hardware collision registers, could just move one bullet every 4 frames.
     ;   but would probably need to redesign tank graphic for that to work.
+
+;     lda #BULLETFRACTIONALSPEED
+;     clc
+;     adc BulletFractional
+;     sta BulletFractional
+;     bcs MoveBulletsThisFrame
+;     jmp ReturnFromBSSubroutine2
+; MoveBulletsThisFrame    
+; 	ldx #3
+    lda FrameCounter
+    and #3
+    tax
+MoveBulletsLoop
+    lda #0
+    sta Temp
     lda BulletFractional
     clc
+    ;--apply update four times (because only once every four frames)
     adc #BULLETFRACTIONALSPEED
+    rol Temp    ;get carry into Temp
+    adc #BULLETFRACTIONALSPEED
+    rol Temp    ;get carry into Temp
+    adc #BULLETFRACTIONALSPEED
+    rol Temp    ;get carry into Temp
+    adc #BULLETFRACTIONALSPEED
+    rol Temp    ;get carry into Temp
     sta BulletFractional
-    bcs MoveBulletsThisFrame
+    ldy Temp
+    bne MoveBulletsThisFrame    ;this is in effect a branch always....unless we make bullets really really slow (<1 pixel per FOUR frames)
     jmp ReturnFromBSSubroutine2
-MoveBulletsThisFrame    
-	ldx #3
-MoveBulletsLoop
+MoveBulletsThisFrame
+;     ldy Temp
+    lda NumberOfBitsSetBank2,Y       ;this is how many pixels to move
+    sta Temp
 	lda BulletY,X
 	;cmp #BALLOFFSCREEN
 	beq BulletOffScreen;NoBulletMovement
@@ -3866,7 +3895,7 @@ MoveBulletsLoop
 	;--move bullet up
 	lda BulletY,X
 	clc
-	adc #BULLETSPEEDVER
+	adc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
 	bcc CheckBulletIsOffScreenVertical      ;branch always
 BulletNotUp
@@ -3876,7 +3905,7 @@ BulletNotUp
 	;--move bullet down
 	lda BulletY,X
 	sec
-	sbc #BULLETSPEEDVER
+	sbc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
 	bcs BulletOnScreen                      ;branch always
 BulletNotDown
@@ -3886,7 +3915,7 @@ BulletNotDown
 	;--move bullet right
 	lda BulletX,X
 	clc
-	adc #BULLETSPEEDHOR
+	adc Temp    ;was #BULLETSPEEDHOR
 	sta BulletX,X
 	bcc CheckBulletIsOffScreenHorizontal    ;branch always
 BulletNotRight	
@@ -3896,7 +3925,7 @@ BulletNotRight
 	;--move bullet left
 	lda BulletX,X
 	sec
-	sbc #BULLETSPEEDHOR
+	sbc Temp    ;was #BULLETSPEEDHOR
 	sta BulletX,X
 
 	;--check for off screen:
@@ -3917,8 +3946,8 @@ BulletOffScreen
 	sta BulletY,X	
 NoBulletMovement
 BulletOnScreen
-	dex
-	bpl MoveBulletsLoop
+; 	dex
+; 	bpl MoveBulletsLoop
 
 	jmp ReturnFromBSSubroutine2
 
@@ -5101,6 +5130,14 @@ FrequencyBank2
 
 SoundLengthBank2
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
+	
+	
+NumberOfBitsSetBank2
+	.byte 0, 1, 1, 2
+	.byte 1, 2, 2, 3
+	.byte 1, 2, 2, 3
+	.byte 2, 3, 3, 4
+
 	
 ;****************************************************************************	
 
