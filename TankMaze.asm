@@ -235,6 +235,7 @@ ENEMYDEBOUNCE = 32
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
+BULLETFRACTIONALSPEED   =   256/100*85  ;slowing bullets down slightly so the collision detection works better
 
 BASECOLOR		=		GOLD
 SCORECOLOR      =       GRAY|$C
@@ -401,7 +402,7 @@ TankFractional ds 4
 BulletX ds 4
 BulletY ds 4
 BulletDirection ds 1
-
+BulletFractional ds 1
 
 PlayerX ds 2
 MissileX ds 2
@@ -3841,6 +3842,13 @@ SetupScorePtrsLoop
 MoveBulletSubroutine
     ;--if used only hardware collision registers, could just move one bullet every 4 frames.
     ;   but would probably need to redesign tank graphic for that to work.
+    lda BulletFractional
+    clc
+    adc #BULLETFRACTIONALSPEED
+    sta BulletFractional
+    bcs MoveBulletsThisFrame
+    jmp ReturnFromBSSubroutine2
+MoveBulletsThisFrame    
 	ldx #3
 MoveBulletsLoop
 	lda BulletY,X
@@ -4506,27 +4514,6 @@ PlayerTankDead
 NoTankCollisionsAtAll
 
 
-	;--need to use software collision detection, at least for ball
- 	;--or do we?  if we use collision registers.... will that work?  
-    ;--testing seems to work.  be much faster.  will only check one bulllet per frame.  let's try.
-
-; 	ldx #3
-; CheckBallCollisionsLoop
-; 	;--check for collision with wall
-; 	lda BulletX,X
-; 	cmp #BALLOFFSCREEN
-; 	beq BallHasNotHitBlock	;short circuit if the ball is offscreen
-; 	sta Temp
-; 	lda BulletY,X
-; 	sec
-; 	sbc #2
-; 	sta Temp+1
-; 	jsr IsBlockAtPositionBank2
-; 	;--result is in Temp
-; 	lda Temp
-; 	beq BallHasNotHitBlock
-; 	;--remove block from screen!
-	
     ;--alternate collision routine for bullet-to-wall using collision registers
     
     bit CXBLPF
@@ -4540,6 +4527,7 @@ NoTankCollisionsAtAll
 BallHasNotHitBlock
 	;--now check if bullet has hit an enemy tank
 	;--new routine using collision registers instead of loop.  <--actually, reject this because occasionally bullets pass through tanks
+	;   works better with redesigned tank graphics but shots occasionally miss still when on the edge of the tank.  not sure if acceptable or not.
 	
 	lda FrameCounter
 	and #1
@@ -4595,7 +4583,7 @@ NoPointsForEnemyOwnGoals
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
 	
-	
+	;--OLD ROUTINE that uses software collision detection (checks every bullet every frame)
 ; 	;   X is index into tank (outer loop)
 ; 	;   Y is index into bullet (inner loop)
 ; 	ldx #3
@@ -4615,7 +4603,6 @@ NoBulletToTankCollision
 ; 	beq BulletOffScreen2    
 ; BulletOnScreen2
 ; 	;--compare X position
-; 	;----so... I think probably we can use the collision registers.  Is it faster though?
 ; 	clc
 ; 	adc #1
 ; 	cmp TankX,X
