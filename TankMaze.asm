@@ -94,7 +94,7 @@ DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can 
 
 
 VBLANK_TIMER = 48       ;--this jitters a bit
-OVERSCAN_TIMER = 32     ;--this seems to be fine except during maze generation, on the last pass it takes too long
+OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
 
@@ -1550,7 +1550,7 @@ SetInitialEnemyTankSpeedRoutine
     ;--come in here with X pointing to tank # (1-3)
     ;--and A holding new direction (in upper four bits)
 	sta TankStatus,X	;--first write new direction
-	;--tank starting speed and add level, capped at 15-tank # (0, 1, 2)
+	;--tank starting speed and add level, add speed boost based on how many tanks are left, then subtract tank number (0-2).  Whole thing is capped at 15
 	lda NewTankSpeed,X
 	clc
 	adc MazeNumber
@@ -1634,6 +1634,7 @@ TankNotOnscreen
 	bne DoNotBringTankOnscreenYet
 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
+	;--wait counter has expired, so bring this tank on screen
 	; if tank off left edge of screen, move right.  if off right edge of screen, move left.  otherwise, move down
 	lda TankX,X
 	cmp #16
@@ -1709,34 +1710,48 @@ AtIntersectionX
 	;	post gives credit to December '84 Apple Assembly Line
 	;--constant cycle count divide by 7 !!!!
 	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-	sta Temp+1 ;save for below --- necessary?  yes.
-	sta Temp
-	lsr
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	
-	;--need modulo BLOCKHEIGHT (=7)
-	;	so now multiply by 7 
-    ;       new routine x * 7 = x * 4 + x + x + x
-    sta Temp
-    asl
-    asl
-    adc Temp
-    adc Temp
-    adc Temp
-    sta Temp    ;+19 uses one byte RAM
-	;--now subtract from original number (all we care is if modulo = 0 or not)
-	sec
-	sbc Temp+1
+; 	sta Temp+1 ;save for below --- necessary?  yes.
+; 	sta Temp
+; 	lsr
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr         ;+30
+; 	
+; 	;--need modulo BLOCKHEIGHT (=7)
+; 	;	so now multiply by 7 
+;     ;       new routine x * 7 = x * 4 + x + x + x
+;     sta Temp
+;     asl
+;     asl
+;     adc Temp
+;     adc Temp
+;     adc Temp
+;     sta Temp    ;+19 uses one byte RAM
+; 	;--now subtract from original number (all we care is if modulo = 0 or not)
+; 	sec
+; 	sbc Temp+1  ;+5
+
+    ;--old routine (above) takes a flat 54 cycles.  
+       ;    30 cycles to divide by 7 (throwing away remainder)
+       ;    19 cycles to multiply by 7, 
+       ;     5 cycles to subtract the original number, then test for zero (=evenly divisible by seven)
+    ;--new routine is varying but I think worst case is 52 (when Tank Y = 81).  And mostly is much less.
+
+EvenlyDivisibleBySevenLoop
+    lsr
+    bcc EvenlyDivisibleBySevenLoop 
+    sbc #3
+    bcc NotEvenlyDivisibleBySeven
+    bne EvenlyDivisibleBySevenLoop
 	beq AtIntersectionY
+NotEvenlyDivisibleBySeven
 	jmp NotAtIntersection
 AtIntersectionY	
 	;--here is where we choose which way each tank will go
@@ -4821,7 +4836,7 @@ EnemyTankRespawnRoutine
 	txa
 	rol
 	tay	
-	jmp FoundRespawnPosition
+	bne FoundRespawnPosition    ;branch always, since enemy tank = 1, 2, or 3.  so Y holds either 2, 3, 4, 5, 6, 7 (but not 0 or 1)
 
 ; 	lda RandomNumber
 ; 	and #3
