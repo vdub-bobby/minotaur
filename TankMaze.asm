@@ -93,8 +93,9 @@ DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can 
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 50
-OVERSCAN_TIMER = 36
+VBLANK_TIMER = 48       ;--this jitters a bit
+OVERSCAN_TIMER = 32     ;--this seems to be fine except during maze generation, on the last pass it takes too long
+                        ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
 
 TANKHEIGHT	=	7
@@ -237,16 +238,16 @@ ENEMYDEBOUNCEBITS =     %00011111
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
 BULLETFRACTIONALPERCENT =   85
-BULLETFRACTIONALSPEED   =   (256/100*BULLETFRACTIONALPERCENT)  ;slowing bullets down slightly so the collision detection works better
-                                            ; Formula is: 256 is theorically moving every frame.  multiplying by percentage
-BASECOLOR		=		GOLD
-SCORECOLOR      =       GRAY|$C
+BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets down slightly so the collision detection works better
+
+BASECOLOR		    =		GOLD
+SCORECOLOR          =       GRAY|$C
 WALLCOLOR			=		RED|$6
 TANKSREMAININGCOLOR =   TURQUOISE|$A
-TANKCOLOR1 =    GOLD|$A
-TANKCOLOR2 =    BLUE2|$C
+TANKCOLOR1          =    GOLD|$A
+TANKCOLOR2          =    BLUE2|$C
 
-
+;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	100
 
 TANKSPEED1	=	1
@@ -3876,11 +3877,14 @@ MoveBulletsLoop
     rol Temp    ;get carry into Temp
     adc #BULLETFRACTIONALSPEED
     rol Temp    ;get carry into Temp
+    cpx #0
+    bne NoUpdateBulletFractionalThisFrame
     sta BulletFractional
+NoUpdateBulletFractionalThisFrame
     ldy Temp
-    bne MoveBulletsThisFrame    ;this is in effect a branch always....unless we make bullets really really slow (<1 pixel per FOUR frames)
-    jmp ReturnFromBSSubroutine2
-MoveBulletsThisFrame
+;     bne MoveBulletsThisFrame    ;this is in effect a branch always....unless we make bullets really really slow (<1 pixel per FOUR frames)
+;     jmp ReturnFromBSSubroutine2
+; MoveBulletsThisFrame
 ;     ldy Temp
     lda NumberOfBitsSetBank2,Y       ;this is how many pixels to move
     sta Temp
