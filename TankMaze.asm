@@ -1213,6 +1213,7 @@ NotGeneratingMaze
 	lda GameStatus
 	and #TITLESCREEN
 	beq NotOnTitleScreen
+	;--on title screen
 	lda MazeGenerationPass
 	bmi GameNotOnVBLANK
 	lda FrameCounter
@@ -3970,7 +3971,7 @@ GenerateMazeSubroutine
 	;--let's try splitting it 
 	ldy MazeGenerationPass
 	bpl NotFirstPass
-	ldy #MAZEGENERATIONPASSES+1
+	ldy #MAZEGENERATIONPASSES+1+1
 	sty MazeGenerationPass
 	;--on first pass, make base disappear and fill all with walls
 	lda GameStatus
@@ -4024,7 +4025,10 @@ NotFirstPass
 	;	random-length horizontal path
 	;	once done with a row, we move two rows down and repeat the whole process
 	;	Y holds row, X holds block within the row
-	
+	dey
+	bpl GenerateMazePasses
+	jmp LastPassThroughMazeGeneration
+GenerateMazePasses
 	tya
 	asl
 	clc
@@ -4149,8 +4153,9 @@ DoneWithRow
 DoneWithFirstPass
 	dec MazeGenerationPass
 
-	bpl NotCompletelyDoneWithMaze
-
+; 	bpl NotCompletelyDoneWithMaze
+    jmp NotCompletelyDoneWithMaze
+LastPassThroughMazeGeneration
 
 	;--final touchup:
 	;	open up area directly above base:
