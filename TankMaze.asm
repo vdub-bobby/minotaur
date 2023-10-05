@@ -93,7 +93,7 @@ DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can 
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 48       ;--this jitters a bit
+VBLANK_TIMER = 50       ;--this jitters a bit
 OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
@@ -104,6 +104,9 @@ MAZEROWS	=	11
 TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
 DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
+
+
+
 
 ;--TankStatus bits (upper four are direction.  lower four are speed when moving, are "delay" when waiting to come onscreen.)
 TANKRIGHT		=	J0RIGHT
@@ -1081,7 +1084,10 @@ VSYNCWaitLoop
 	beq GameOnVBLANK	
 	and #GAMEOFF
 	beq InBetweenLevels
-	;--if game not on (and ONLY IF) read joystick button to start game
+	lda GameStatus
+	and #GENERATINGMAZE
+	bne GameAlreadyStarted
+	;--if game not on and NOT generating a level already read joystick button to start game
 	lda INPT4
 	bmi NoTriggerToStartGameClearTriggerDebounce
 	;--trigger IS pressed, now check debounce
@@ -1109,7 +1115,7 @@ GameOnVBLANK
 	jsr MoveEnemyTanksSubroutine
 	brk
 	.word MoveBulletSubroutine
-	
+GameAlreadyStarted
 GameNotOnVBLANK
 InBetweenLevels
 	;--keep playing sound even when game not on
@@ -1118,9 +1124,11 @@ InBetweenLevels
 	jsr UpdateRandomNumber
 	
 
-
+    lda GameStatus
+    and #GENERATINGMAZE
+    bne DoNotReadConsoleSwitchesWhileGeneratingMaze
 	jsr ReadConsoleSwitchesSubroutine
-
+DoNotReadConsoleSwitchesWhileGeneratingMaze
 	brk
 	.word KernelSetupSubroutine
 
@@ -1215,14 +1223,14 @@ NotGeneratingMaze
 	beq NotOnTitleScreen
 	;--on title screen
 	lda MazeGenerationPass
-	bmi GameNotOnVBLANK
+	bmi GameNotOnOverscan
 	lda FrameCounter
 	and #$7
 	bne WaitToDrawTitleScreen
 	jsr DrawTitleScreen
 WaitToDrawTitleScreen
 NotOnTitleScreen
-
+GameNotOnOverscan
 
 WaitForOverscanEnd
 	lda INTIM
@@ -1521,9 +1529,18 @@ MazeNumberSixteenOrLess
 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
     ;--if tank offscreen, don't shoot from it
-	lda TankStatus,Y
-	and #$F0
-	beq TankOffscreenCannotShoot
+; 	lda TankStatus,Y
+; 	and #$F0
+; 	beq TankOffscreenCannotShoot
+    ;--make sure tank is fully on screen before shooting
+    lda TankY,Y
+    cmp #MAZEAREAHEIGHT+2
+    bcs TankOffscreenCannotShoot
+    lda TankX,Y
+    cmp #16
+    bcc TankOffscreenCannotShoot
+    cmp #137
+    bcs TankOffscreenCannotShoot
 	jsr FireBulletRoutine
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
@@ -1742,15 +1759,26 @@ AtIntersectionX
        ;    30 cycles to divide by 7 (throwing away remainder)
        ;    19 cycles to multiply by 7, 
        ;     5 cycles to subtract the original number, then test for zero (=evenly divisible by seven)
-    ;--new routine is varying but I think worst case is 52 (when Tank Y = 81).  And mostly is much less.
+    ;--new routine is varying but worst case for the range we have (1-84) is 52 (when Tank Y = 81).  And mostly is much less.
+    ;---if enter this with A = 0 it will get stuck in an endless loop
+    ;   created this routine myself based on the top answer here: https://math.stackexchange.com/questions/2228122/general-rule-to-determine-if-a-binary-number-is-divisible-by-a-generic-number 
+    ;       basic outline is:
+    ;       say our starting number is n
+    ;       write n as 2k + j (where j is the final binary digit), so n=2k+j
+    ;       subtract 7j from both sides: n-7j=2k-6j  
+    ;       if we assume n is divisible by 7, and obviously 7j is divisible by 7, then the right side is also divisible by 7, or
+    ;       2k-6j is divisible by seven
+    ;       this simplifies to 2(k-3j), since 2 and 7 are relative primes, we now know that k-3j is divisible by seven IF n is divisible by seven.
+    ;       so test this repeatedly:
+    ;           k = n>>1 and 3j = 0 (if n is even) or 3 (if n is odd)
 
 EvenlyDivisibleBySevenLoop
-    lsr
-    bcc EvenlyDivisibleBySevenLoop 
-    sbc #3
-    bcc NotEvenlyDivisibleBySeven
-    bne EvenlyDivisibleBySevenLoop
-	beq AtIntersectionY
+    lsr                             ;k=n>>1
+    bcc EvenlyDivisibleBySevenLoop  ;if n was odd (carry clear) we subtract zero
+    sbc #3                          ;if n was even (carry set) we subtract three
+    bcc NotEvenlyDivisibleBySeven   ;if we end up with a negative number, then it is not evenly divisible by 7
+    bne EvenlyDivisibleBySevenLoop  ;if we end up with a positive non-zero number, then repeat
+	beq AtIntersectionY             ;if we end up with zero, then it is evenly divisible by 7
 NotEvenlyDivisibleBySeven
 	jmp NotAtIntersection
 AtIntersectionY	
