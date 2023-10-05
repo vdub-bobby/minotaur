@@ -29,7 +29,6 @@
 ;			more aggressive tank movement routines IN PROGRESS
 ;			smarter shooting by enemy tanks HMM
 ;
-
 ;	Figure out better AI for tank movement/firing routines 
 ;	Add explosion graphics  or ????
 ;	Title/splash screen?  STARTED... still needs work.
