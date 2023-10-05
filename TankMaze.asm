@@ -31,7 +31,7 @@
 ;
 
 ;	Figure out better AI for tank movement/firing routines 
-;	Add explosion graphics
+;	Add explosion graphics  or ????
 ;	Title/splash screen?  STARTED... still needs work.
 ;	Power-Ups - ???
 ;		keep this simple: 
