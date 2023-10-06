@@ -42,21 +42,26 @@
 ;
 ;	Other TODOs:
 ;       fix scanline count
-;		tank:tank collisions	
-;		OR NOT?  display player lives remaining
+;		DONE: tank:tank collisions	
+;		DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
 ;		DONE: don't give points for enemy tank actions
 ;		DONE replace placeholder font
-;		Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+;		IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 ;		PAL60 version
 ;		2-player?  (unlikely but...)
 ;		Other...?
 ;		sound tweaking/improvements
+;       Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
+;       Tank movement algorithm could use tweaking, tanks still run into each other too often.
 ;	
 ;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 ;
 ;	BUG KILLING!
 ;		scanline count is wonky, need to tighten up various subroutines that take too long
 ;		FIXED: remove bullets from screen during level transitions
+;       Tanks still firing when offscreen.
+;       Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
+;           but when other tank dies, movement doesn't happen as quickly as it seems like it should.
 ;	
 ;   Notes from ZeroPage livestream on 9/1:
 ;       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
