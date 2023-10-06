@@ -73,7 +73,7 @@
 
 
 	To do:
-	Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
+	DONE: Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
 		could free up some space by going through things with a fine-toothed comb, but ...
 		it would be a big stretch even to get the bare minimum for a game in there.
 		anything extra, like music, or a fancier title screen, or a more-complicated enemy-tank AI routine
@@ -137,19 +137,24 @@ DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can 
 	include vcs.h
 	include macro.h
 
-	
 ;-----------------------MY MACROS-----------------------------------------
 
 
 ;--this macro aligns at page boundary (only if needed) and echoes the bytes used
     MAC PAGEALIGN
         if <* != 0
-        	echo "---", ((* & $FF00) + $100) - *, "bytes left at location", *
+        	echo "---Page aligned", ((* & $FF00) + $100) - *, "bytes left at PAGEALIGN", [{1}]d, "at location", *
     	    align 256
         endif
     ENDM
 	
-	
+    SUBROUTINE
+    MAC ALIGNGFXDATA
+.marker set *
+        ds DATASPACEBEFOREGFX - (* & $FF)
+        ECHO "---Aligned graphics data.", (*-.marker), "bytes left at ALIGNGFXDATA", [{1}]d, "at location", .marker
+    ENDM
+        
 ;-------------------------Constants Below---------------------------------
 
 
@@ -435,7 +440,7 @@ TANKAISWITCH	=	64
 		REPEND
 	ENDM
 	
-
+	
 
 ;--------Variables To Follow-------------
 
@@ -710,7 +715,7 @@ PositioningLoop	;--just players
 		
 	jmp BeginMainMazeKernel ;+3     33
 
-    PAGEALIGN
+    PAGEALIGN 1
 	
 Switch0
 	lda Player0Bottom
@@ -1383,8 +1388,6 @@ SkipDrawingTitleScreenThisFrame
 	rts
 
 	
-PFPointer
-	.word PF1Left, PF2Left, PF2Right, PF1Right
 	
 	
 ;----------------------------------------------------------------------------
@@ -1547,7 +1550,7 @@ FireEnemyBulletRoutine
 
     if DEBUGNOENEMYBULLETS = 1
 
-    rts ;eliminate enemy firing for now
+        rts ;eliminate enemy firing for now
 
     endif    
     
@@ -1601,6 +1604,7 @@ ShootFromTank
     bcc TankOffscreenCannotShoot
     cmp #137
     bcs TankOffscreenCannotShoot
+FireEnemyBulletNow
 	jsr FireBulletRoutine
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
@@ -1609,19 +1613,6 @@ NoAvailableEnemyBalls
 	
 ;****************************************************************************
 
-EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 30, 28, 25, 22
-    .byte 20, 19, 18, 17
-    .byte 15, 13, 12, 11
-    .byte 10, 7, 2, 1	
-
-    
-;****************************************************************************
-
-TanksRemainingSpeedBoost ;--just realized the first three values in this table have no effect.  not sure
-                        ;   yet if I want to shift the values or not.
-    .byte 15, 10, 8, 6, 4, 2, 1, 0, 0, 0
-    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
     	
 SetInitialEnemyTankSpeedRoutine
     ;--come in here with X pointing to tank # (1-3)
@@ -2453,16 +2444,14 @@ NoBulletSound
 FireBulletRoutine
 	
 	
-	;--set position:
+	;--set initial position (will be adjusted below depending on which way the tank is facing)
 	lda TankX,Y
 	clc
 	adc #4
-	;sta BulletX,X
 	sta Temp
 	lda TankY,Y
 	sec
 	sbc #3
-	;sta BulletY,X
 	sta Temp+1
 	
 	;--clear old direction
@@ -2474,7 +2463,7 @@ FireBulletRoutine
 	
 	;--then set new direction:
 	lda TankStatus,Y
-	tay	
+	tay	;--save this value
 	and #TANKUP
 	beq NotFiringUp
 	;--shooting up
@@ -2500,7 +2489,7 @@ NotFiringUp
 	sta Temp+1
 	jmp DoneFiring
 NotFiringDown	
-	tya
+	tya ;--restore value
 	and #TANKLEFT
 	beq NotFiringLeft
 	;--shooting left
@@ -3246,7 +3235,7 @@ SetupScorePtrsLoop
 	
 
 	
-	PAGEALIGN
+	PAGEALIGN 2
 	
 	
     
@@ -3379,14 +3368,8 @@ MissileTwo
 
 	
 
-	
 
-
-
-
-	
-	
-	ds DATASPACEBEFOREGFX - (* & $FF)
+    ALIGNGFXDATA 1
 	
 TankGfxVertical
    
@@ -3531,16 +3514,6 @@ TankDownAnimated4b
 		.byte 0
 		
 TitleGraphics
-; 	.byte %00001100, %11001100, %00111111, %11001100	
-; 	.byte %00001100, %11111100, %00110011, %00111100
-; 	.byte %00001100, %11001100, %00110011, %11001100
-; 	.byte %11111111, %11111100, %00110011, %11111100
-; 	.byte %11000000, %00000000, %00000000, %00000000
-; 	.byte %11000000, %00110011, %11001100, %00111111
-; 	.byte %11000000, %00110011, %11001100, %00110011
-; 	.byte %11001100, %00110011, %11001100, %00110011
-; 	.byte %11001100, %00110011, %11111100, %00111111
-; 	.byte %11111111, %00000011, %00000000, %00000000
     ;-----PF1--------PF2--------PF2--------PF1
     .byte %00001000, %11111100, %11111100, %00001000
     .byte %00001000, %10001100, %10001100, %00001000
@@ -3565,7 +3538,7 @@ PFRegisterLookup
 
 
 
-		PAGEALIGN
+		PAGEALIGN 3
 	
 DigitData
 Zero
@@ -3651,8 +3624,7 @@ Nine
 
 	
 
-
-		ds DATASPACEBEFOREGFX - (* & $FF)
+    ALIGNGFXDATA 2
 		
 TankGfxHorizontal
 TankRightAnimated1
@@ -3792,8 +3764,28 @@ PFMaskLookup
 DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
+	
+PFPointer
+	.word PF1Left, PF2Left, PF2Right, PF1Right
+
 		
-	PAGEALIGN
+EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
+    .byte 30, 28, 25, 22
+    .byte 20, 19, 18, 17
+    .byte 15, 13, 12, 11
+    .byte 10, 7, 2, 1	
+
+    
+
+TanksRemainingSpeedBoost = * - 3 
+                        ;--just realized the first three values in this table have no effect.  not sure
+                        ;   yet if I want to shift the values or not.
+;     .byte 15, 10, 8
+    .byte 6, 4, 2, 1, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
+	
+	PAGEALIGN 4
 
 
 
@@ -3878,8 +3870,6 @@ RotationOddBank1
 	.byte 0	;and first 3 bytes of next table
 RotationEvenBank1
 	.byte 2, 1, 3, 0
-; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
-; 	.byte 2, 1, 3	
 
 TankUpFrame
 	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
@@ -3888,6 +3878,9 @@ TankDownFrame
 TankRightFrame
 	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
 
+	
+;------------------------------------------------------------------------------------------
+	
     echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
 
 	org $1F00
