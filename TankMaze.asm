@@ -24,7 +24,14 @@
         main game loop
         kernel routine
         VBLANK routine
+            if game over: checks trigger to see if we should start a new game
+            move enemy tanks
+            move bullets (bank 2)
+            kernel setup
         Overscan routine
+            checks collisions (bank 2)
+            move player tank
+            if game not playing: draw title screen or draw maze for next level
         various subroutines: 
             DrawTitleScreen
             ReadConsoleSwitchesSubroutine
