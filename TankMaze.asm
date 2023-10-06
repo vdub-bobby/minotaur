@@ -1,77 +1,133 @@
-;-------------------------------------------------------------------------
-;---------Tank Battalion Atari 2600 port----------------------------------
-;-------------------------------------------------------------------------
-;	Bob Montgomery
-;	(c) 2012-2023
-;
-;	VERY loose port of Tank Battalion
-;		objective: destroy enemy tanks while protecting base in a destroyable maze
-;		arcade game - play for high score
-;			earn points by destroying tanks and advancing levels
-;		have finite # of tanks to destroy each level 
-;		once destroyed, level is won and advance to new level
-;		destroy walls by shooting them
-;		enemy tanks also shoot and also can destroy walls
-;		enemy tanks shoot you, when you are shot, lose one life
-;		if enemy tanks shoot base, game over (or?)
-;		open question: what about tank:tank collisions?
-;
-;	To do:
-;	Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
-;		could free up some space by going through things with a fine-toothed comb, but ...
-;		it would be a big stretch even to get the bare minimum for a game in there.
-;		anything extra, like music, or a fancier title screen, or a more-complicated enemy-tank AI routine
-;		is going to require more space.  
-;	Biggest thing at this point is figure out ramping difficulty
-;		IDEAS:
-;			faster tanks at higher levels  DONE
-;			more frequent shooting by enemy tanks DONE
-;			more aggressive tank movement routines IN PROGRESS
-;			smarter shooting by enemy tanks HMM
-;
-;	Figure out better AI for tank movement/firing routines 
-;	Add explosion graphics  or ????
-;	Title/splash screen?  STARTED... still needs work.
-;	Power-Ups - ???
-;		keep this simple: 
-;			speed
-;			extra life
-;			"bomb" that destroys all tanks on screen (and all walls?)
-;			something that slows all enemies down?
-;			other?
-;
-;	Other TODOs:
-;       fix scanline count
-;		DONE: tank:tank collisions	
-;		DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
-;		DONE: don't give points for enemy tank actions
-;		DONE replace placeholder font
-;		IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
-;		PAL60 version
-;		2-player?  (unlikely but...)
-;		Other...?
-;		sound tweaking/improvements
-;       Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
-;       Tank movement algorithm could use tweaking, tanks still run into each other too often.
-;	
-;	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
-;
-;	BUG KILLING!
-;		scanline count is wonky, need to tighten up various subroutines that take too long
-;		FIXED: remove bullets from screen during level transitions
-;       Tanks still firing when offscreen.
-;       Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
-;           but when other tank dies, movement doesn't happen as quickly as it seems like it should.
-;	
-;   Notes from ZeroPage livestream on 9/1:
-;       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
-;       if possible would like to speed up game play.
-;       FIXED: update spawn points to force player to move from bottom of screen ...
-;       FIXED: found bug that you can shoot tanks before they are on the screen (!)
-;       need to make AI more aggressively chasing "base"
-;       IN PROGRESS: probably need to finally implement the "game over" logic for when a tank gets the base	
+/*************************************************************************
+-------------------------------------------------------------------------
+---------Tank Battalion Atari 2600 port----------------------------------
+-------------------------------------------------------------------------
+	Bob Montgomery
+	(c) 2012-2023
+
+	VERY loose port of Tank Battalion
+		objective: destroy enemy tanks while protecting base in a destroyable maze
+		arcade game - play for high score
+			earn points by destroying tanks and advancing levels
+		have finite # of tanks to destroy each level 
+		once destroyed, level is won and advance to new level
+		destroy walls by shooting them
+		enemy tanks also shoot and also can destroy walls
+		enemy tanks shoot you, when you are shot, lose one life
+		if enemy tanks shoot base, game over (or?)
+		open question: what about tank:tank collisions?
+  
+
+    Overall program structure:
+    Bank 1:
+        startup routine
+        main game loop
+        kernel routine
+        VBLANK routine
+        Overscan routine
+        various subroutines: 
+            DrawTitleScreen
+            ReadConsoleSwitchesSubroutine
+            InitialSetupSubroutine
+            ChooseTankDirectionSubroutine
+            FireEnemyBulletRoutine
+            SetInitialEnemyTankSpeedRoutine
+            MoveEnemyTanksSubroutine
+            SoundSubroutine
+            PositionASpriteSubroutine
+            PositionASpriteNoHMOVESubroutine
+            DivideByTwoSubroutine
+            UpdateRandomNumber
+            EliminateDiagonalSubroutine
+            TankFractionalAddition
+            ReadControllersSubroutine
+            IsBlockAtPosition
+            StartSoundSubroutine
+            CheckForEnemyTankSubroutine
+            CheckForWallSubroutine
+            KernelSetupSubroutine
+        data
+        bank switching logic
+    Bank 2:
+        various subroutines:
+            MoveBulletSubroutine
+            GenerateMazeSubroutine
+            UpdateRandomNumberBank2
+            MoveEnemyTanksOffScreen
+            MoveBulletsOffScreen
+            IncreaseScoreSubroutine
+            IsTankOnScreen
+            CollisionsSubroutine
+            BulletHitBrickSubroutine
+            BulletHitTank / PlayerHitTank
+            StartSoundSubroutineBank2
+            IsBlockAtPositionBank2
+        data
+        bank switching logic
+
+    Note:
+        I used the bankswitching schema I came up with many moons ago, which uses the BRK vector and is super easy to use and allows 
+        subroutines to be moved from one bank to another without having to go fiddle with jump tables or whatever.  ON THE OTHER HAND
+        it is extremely slow:  it uses 64 cycles to jump to a routine in another bank and then it takes 32 cycles to return.
+        It also trashes the X and A registers.
 
 
+	To do:
+	Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
+		could free up some space by going through things with a fine-toothed comb, but ...
+		it would be a big stretch even to get the bare minimum for a game in there.
+		anything extra, like music, or a fancier title screen, or a more-complicated enemy-tank AI routine
+		is going to require more space.  
+	Biggest thing at this point is figure out ramping difficulty
+		IDEAS:
+			faster tanks at higher levels  DONE
+			more frequent shooting by enemy tanks DONE
+			more aggressive tank movement routines IN PROGRESS
+			smarter shooting by enemy tanks HMM
+
+	Figure out better AI for tank movement/firing routines 
+	Add explosion graphics  or ????
+	Title/splash screen?  STARTED... still needs work.
+	Power-Ups - ???
+		keep this simple: 
+			speed
+			extra life
+			"bomb" that destroys all tanks on screen (and all walls?)
+			something that slows all enemies down?
+			other?
+
+	Other TODOs:
+      fix scanline count
+		DONE: tank:tank collisions	
+		DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
+		DONE: don't give points for enemy tank actions
+		DONE replace placeholder font
+		IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+		PAL60 version
+		2-player?  (unlikely but...)
+		Other...?
+		sound tweaking/improvements
+      Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
+      Tank movement algorithm could use tweaking, tanks still run into each other too often.
+	
+	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
+
+	BUG KILLING!
+		scanline count is wonky, need to tighten up various subroutines that take too long
+		FIXED: remove bullets from screen during level transitions
+      Tanks still firing when offscreen.
+      Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
+          but when other tank dies, movement doesn't happen as quickly as it seems like it should.
+	
+  Notes from ZeroPage livestream on 9/1:
+      FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
+      if possible would like to speed up game play.
+      FIXED: update spawn points to force player to move from bottom of screen ...
+      FIXED: found bug that you can shoot tanks before they are on the screen (!)
+      need to make AI more aggressively chasing "base"
+      IN PROGRESS: probably need to finally implement the "game over" logic for when a tank gets the base	
+
+*/
 
 DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
@@ -1133,9 +1189,9 @@ InBetweenLevels
     bne DoNotReadConsoleSwitchesWhileGeneratingMaze
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
-	brk
-	.word KernelSetupSubroutine
-
+; 	brk
+; 	.word KernelSetupSubroutine
+    jsr KernelSetupSubroutine
 
 WaitForVblankEnd
 	lda INTIM
@@ -2052,6 +2108,7 @@ Return					;label for cycle-burning code
 	rts                 ;+9      9
 
 	
+/*	
 PositionASpriteNoHMOVESubroutine
 	sta HMCLR
 PositionASpriteNoHMOVEOrHMCLRSubroutine
@@ -2070,7 +2127,7 @@ DivideLoop2			;				this loop can't cross a page boundary!!!
 ; 	sta WSYNC
 ; 	sta HMOVE
 	rts
-	
+*/	
 ;****************************************************************************
 
 
@@ -2898,8 +2955,221 @@ DoneWithMovementChecks
 
 	rts
 
+;----------------------------------------------------------------------------
 
 
+KernelSetupSubroutine
+
+
+	;rotate Tanks through Players and Missiles
+	
+	lda FrameCounter
+	and #1
+	asl
+	tax
+	lda RotationTablesBank1,X   ;"RotationTables" if we move back to bank 2
+	sta MiscPtr
+	lda RotationTablesBank1+1,X
+	sta MiscPtr+1
+	ldy #3
+RotationLoop
+	lax (MiscPtr),Y
+	lda TankX,Y
+	sta PlayerX,X
+	lda TankY,Y
+	sta PlayerY,X
+	txa
+	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
+	bne MissileNotPlayer   
+PlayerNotMissile
+	;--get correct tank gfx ptr set up
+	txa
+	asl
+	asl
+; 	tax		;we need X * 4
+	sta Temp		;save X index
+	;--if Y = 0 then we are doing player tank.  Check if not moving.
+	tya ;set flags based on Y
+	bne NotPlayerTankSkipNotMovingCheck
+	;--how do we know if tank is not moving?  
+	lda TankStatus
+	and #$0F
+	bne PlayerTankMovingSetRegularGraphicsPointers
+; 	lda #0
+	.byte $2C   ;--skip two bytes 
+	;--end
+PlayerTankMovingSetRegularGraphicsPointers
+NotPlayerTankSkipNotMovingCheck
+	;--get index into tank graphics image
+	lda FrameCounter
+	lsr
+	and #%00000110
+	tax
+
+
+	lda TankStatus,Y
+	and #TANKUP
+	beq TankNotFacingUp
+	
+	lda TankUpFrame,X
+	pha
+	lda TankUpFrame+1,X
+	jmp SetTankGfxPtr
+TankNotFacingUp
+	lda TankStatus,Y
+	and #TANKDOWN
+	beq TankNotFacingDown
+	lda TankDownFrame,X
+	pha
+	lda TankDownFrame+1,X
+	jmp SetTankGfxPtr
+TankNotFacingDown
+	lda TankStatus,Y
+	and #TANKRIGHT
+	beq TankNotFacingRight
+	lda TankRightFrame,X
+	pha
+	lda TankRightFrame+1,X
+	jmp SetTankGfxPtr
+TankNotFacingRight
+	lda TankRightFrame,X
+	pha
+	lda TankRightFrame+1,X
+SetTankGfxPtr
+    ldx Temp
+	sta Player0Ptr+1,X
+	sta Player0Ptr+3,X
+	pla
+	sec
+	sbc TankY,Y
+	sta Player0Ptr,X
+	clc
+	adc #TANKHEIGHT
+	sta Player0Ptr+2,X
+	jmp EndRotationLoop
+MissileNotPlayer	
+	;--adjust missile width and position
+	txa
+	and #1
+	tax		;get correct index
+	lda MissileX,X
+	sec
+	sbc #2
+	sta MissileX,X
+	lda #OCTWIDTHMISSILE
+	sta NUSIZ0,X
+	lda #TANKHEIGHT-2
+	sta MissileHeight,X
+EndRotationLoop
+	dey
+	bmi DoneWithRotationLoop
+	jmp RotationLoop
+DoneWithRotationLoop
+	
+	
+	lda #TANKAREAHEIGHT
+	sec
+	sbc PlayerY+1
+	adc #TANKHEIGHT
+	asl
+	sta PlayerYTemp
+
+	lda PlayerY
+	sta Player0Top
+	sec
+	sbc #TANKHEIGHT	
+	ora #$80
+	sta Player0Bottom
+	lda PlayerY
+	cmp #TANKAREAHEIGHT
+	bcc NoSpecialAdjustmentToPlayer0Top
+	lda Player0Bottom
+	sta Player0Top	
+
+NoSpecialAdjustmentToPlayer0Top
+
+
+
+	ldx #1
+PreKernelSetupLoop2
+	lda #TANKAREAHEIGHT+1
+	sec
+	sbc MissileY,X
+	adc MissileHeight,X
+	sta MissileYTemp,X
+	
+	lda MissileX,X
+	clc
+	adc #3
+	sta MissileX,X
+	dex
+	bpl PreKernelSetupLoop2
+	
+	
+	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
+	ldx #1
+AdjustMissileYLoop
+	lda MissileYTemp,X
+	cmp #TANKHEIGHT-2
+	bcs NoAdjustMissileY 
+	adc #1
+	sta MissileYTemp,X
+NoAdjustMissileY
+	dex
+	bpl AdjustMissileYLoop
+	
+	
+	lda FrameCounter
+	and #$0F
+	sta Temp        ;used below for cycling base color
+	;bullet flicker rotation:
+	and #3
+	tax
+	lda BulletX,X
+	sta BallX
+	lda BulletY,X
+	sta BallY
+
+
+	;--cycle BaseColor
+	lda #(BASECOLOR)&($F0)
+	ora Temp
+	sta Temp+1
+	
+	;--set up score pointers
+	
+	ldx #10
+SetupScorePtrsLoop
+	txa
+	lsr
+	lsr
+	tay
+	lda Score,Y
+	pha
+	and #$0F
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr,X
+	pla
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda DigitDataLo,Y
+	sta ScorePtr-2,X
+	lda #>DigitData
+	sta ScorePtr+1,X
+	sta ScorePtr-1,X
+	dex
+	dex
+	dex
+	dex
+	bpl SetupScorePtrsLoop
+	
+	
+	
+	rts
 
 
 ;----------------------------------------------------------------------------
@@ -3519,6 +3789,9 @@ PFMaskLookup
 	.byte $C0, $30, $0C, $03
 	.byte $03, $0C, $30, $C0
 
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 		
 	PAGEALIGN
 
@@ -3608,7 +3881,13 @@ RotationEvenBank1
 ; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
 ; 	.byte 2, 1, 3	
 
-		
+TankUpFrame
+	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
+TankDownFrame
+	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
+TankRightFrame
+	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
+
     echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
 
 	org $1F00
@@ -3677,218 +3956,7 @@ Start2
 	
 ;****************************************************************************	
 
-KernelSetupSubroutine
 
-
-	;rotate Tanks through Players and Missiles
-	
-	lda FrameCounter
-	and #1
-	asl
-	tax
-	lda RotationTables,X
-	sta MiscPtr
-	lda RotationTables+1,X
-	sta MiscPtr+1
-	ldy #3
-RotationLoop
-	lax (MiscPtr),Y
-	lda TankX,Y
-	sta PlayerX,X
-	lda TankY,Y
-	sta PlayerY,X
-	txa
-	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
-	bne MissileNotPlayer   
-PlayerNotMissile
-	;--get correct tank gfx ptr set up
-	txa
-	asl
-	asl
-; 	tax		;we need X * 4
-	sta Temp		;save X index
-	;--if Y = 0 then we are doing player tank.  Check if not moving.
-	tya ;set flags based on Y
-	bne NotPlayerTankSkipNotMovingCheck
-	;--how do we know if tank is not moving?  
-	lda TankStatus
-	and #$0F
-	bne PlayerTankMovingSetRegularGraphicsPointers
-; 	lda #0
-	.byte $2C   ;--skip two bytes 
-	;--end
-PlayerTankMovingSetRegularGraphicsPointers
-NotPlayerTankSkipNotMovingCheck
-	;--get index into tank graphics image
-	lda FrameCounter
-	lsr
-	and #%00000110
-	tax
-
-
-	lda TankStatus,Y
-	and #TANKUP
-	beq TankNotFacingUp
-	
-	lda TankUpFrame,X
-	pha
-	lda TankUpFrame+1,X
-	jmp SetTankGfxPtr
-TankNotFacingUp
-	lda TankStatus,Y
-	and #TANKDOWN
-	beq TankNotFacingDown
-	lda TankDownFrame,X
-	pha
-	lda TankDownFrame+1,X
-	jmp SetTankGfxPtr
-TankNotFacingDown
-	lda TankStatus,Y
-	and #TANKRIGHT
-	beq TankNotFacingRight
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-	jmp SetTankGfxPtr
-TankNotFacingRight
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-SetTankGfxPtr
-    ldx Temp
-	sta Player0Ptr+1,X
-	sta Player0Ptr+3,X
-	pla
-	sec
-	sbc TankY,Y
-	sta Player0Ptr,X
-	clc
-	adc #TANKHEIGHT
-	sta Player0Ptr+2,X
-	jmp EndRotationLoop
-MissileNotPlayer	
-	;--adjust missile width and position
-	txa
-	and #1
-	tax		;get correct index
-	lda MissileX,X
-	sec
-	sbc #2
-	sta MissileX,X
-	lda #OCTWIDTHMISSILE
-	sta NUSIZ0,X
-	lda #TANKHEIGHT-2
-	sta MissileHeight,X
-EndRotationLoop
-	dey
-	bmi DoneWithRotationLoop
-	jmp RotationLoop
-DoneWithRotationLoop
-	
-	
-	lda #TANKAREAHEIGHT
-	sec
-	sbc PlayerY+1
-	adc #TANKHEIGHT
-	asl
-	sta PlayerYTemp
-
-	lda PlayerY
-	sta Player0Top
-	sec
-	sbc #TANKHEIGHT	
-	ora #$80
-	sta Player0Bottom
-	lda PlayerY
-	cmp #TANKAREAHEIGHT
-	bcc NoSpecialAdjustmentToPlayer0Top
-	lda Player0Bottom
-	sta Player0Top	
-
-NoSpecialAdjustmentToPlayer0Top
-
-
-
-	ldx #1
-PreKernelSetupLoop2
-	lda #TANKAREAHEIGHT+1
-	sec
-	sbc MissileY,X
-	adc MissileHeight,X
-	sta MissileYTemp,X
-	
-	lda MissileX,X
-	clc
-	adc #3
-	sta MissileX,X
-	dex
-	bpl PreKernelSetupLoop2
-	
-	
-	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
-	ldx #1
-AdjustMissileYLoop
-	lda MissileYTemp,X
-	cmp #TANKHEIGHT-2
-	bcs NoAdjustMissileY 
-	adc #1
-	sta MissileYTemp,X
-NoAdjustMissileY
-	dex
-	bpl AdjustMissileYLoop
-	
-	
-	lda FrameCounter
-	and #$0F
-	sta Temp        ;used below for cycling base color
-	;bullet flicker rotation:
-	and #3
-	tax
-	lda BulletX,X
-	sta BallX
-	lda BulletY,X
-	sta BallY
-
-
-	;--cycle BaseColor
-	lda #(BASECOLOR)&($F0)
-	ora Temp
-	sta Temp+1
-	
-	;--set up score pointers
-	
-	ldx #10
-SetupScorePtrsLoop
-	txa
-	lsr
-	lsr
-	tay
-	lda Score,Y
-	pha
-	and #$0F
-	tay
-	lda DigitDataLo,Y
-	sta ScorePtr,X
-	pla
-	lsr
-	lsr
-	lsr
-	lsr
-	tay
-	lda DigitDataLo,Y
-	sta ScorePtr-2,X
-	lda #>DigitData
-	sta ScorePtr+1,X
-	sta ScorePtr-1,X
-	dex
-	dex
-	dex
-	dex
-	bpl SetupScorePtrsLoop
-	
-	
-	
-	jmp ReturnFromBSSubroutine2
 
 	
 	
@@ -5110,9 +5178,9 @@ IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
 ;------------------------------------------------------
 ;---------------------DATA-----------------------------
 ;------------------------------------------------------
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+; DigitDataLo
+; 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+; 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
 RotationTables
 	.word RotationEven, RotationOdd	
@@ -5124,12 +5192,6 @@ RotationEven
 ; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
 ; 	.byte 2, 1, 3	
 
-TankUpFrame
-	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
-TankDownFrame
-	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
-TankRightFrame
-	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
 
 	
 BulletDirectionMask
@@ -5203,38 +5265,38 @@ NumberOfBitsSetBank2
 	rorg $3F00
 	
 BankSwitchSubroutine2
-	plp
-	tsx
-	dec $01,X
-	lda ($01,X)
-	sta MiscPtr
-	inc $01,X
-	lda ($01,X)
-	sta MiscPtr+1
+	plp             ;+4
+	tsx             ;+2
+	dec $01,X       ;+6
+	lda ($01,X)     ;+6
+	sta MiscPtr     ;+3
+	inc $01,X       ;+6
+	lda ($01,X)     ;+6
+	sta MiscPtr+1   ;+3
+	lsr             
 	lsr
 	lsr
 	lsr
-	lsr
-	lsr
-	tax
-	nop $1FF8,X
+	lsr             ;+10
+	tax             ;+2
+	nop $1FF8,X     ;+4
 	
-	jmp (MiscPtr)
+	jmp (MiscPtr)   ;+5     57
 	
 ReturnFromBSSubroutine2
-	tsx
-	inx
-	inx
-	lda $00,X      ;get high byte of return address
+	tsx             ;+2
+	inx                 
+	inx             ;+4
+	lda $00,X       ;+4     get high byte of return address
 	lsr
 	lsr
 	lsr
 	lsr
-	lsr
-	tax
-	nop $1FF8,X
+	lsr             ;+10
+	tax             ;+2
+	nop $1FF8,X     ;+4
 	
-	rts
+	rts             ;+6     32
 
 
 ;****************************************************************************	
