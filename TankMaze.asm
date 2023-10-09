@@ -33,7 +33,6 @@
             move player tank
             if game not playing: draw title screen or draw maze for next level
         various subroutines: 
-            DrawTitleScreen
             ReadConsoleSwitchesSubroutine
             InitialSetupSubroutine
             ChooseTankDirectionSubroutine
@@ -57,6 +56,7 @@
         bank switching logic
     Bank 2:
         various subroutines:
+            DrawTitleScreenSubroutine
             MoveBulletSubroutine
             GenerateMazeSubroutine
             UpdateRandomNumberBank2
@@ -1299,7 +1299,8 @@ NotGeneratingMaze
 	lda FrameCounter
 	and #$7
 	bne WaitToDrawTitleScreen
-	jsr DrawTitleScreen
+	brk
+	.word DrawTitleScreenSubroutine       ;moved this to bank 2
 WaitToDrawTitleScreen
 NotOnTitleScreen
 GameNotOnOverscan
@@ -1331,68 +1332,7 @@ EndOverscan
 ;----------------------------------------------------------------------------
 
 
-DrawTitleScreen
 
-	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
-	ldx MazeGenerationPass
-PutTitleGraphicsInPlayfieldLoop
-	txa
-	and #3
-	asl
-	tay
-	lda PFPointer,Y
-	sta MiscPtr
-	lda PFPointer+1,Y
-	sta MiscPtr+1
-	
-	txa
-	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)
-	bcc DrawTitleScreenModerately
-	;--else slower
-	lda FrameCounter
-	and #$1F
-	bne SkipDrawingTitleScreenThisFrame
-DrawTitleScreenModerately	
-	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)
-	bcc DrawTitleScreenFast
-	lda FrameCounter
-	and #$F
-	bne SkipDrawingTitleScreenThisFrame
-DrawTitleScreenFast
-	txa
-	lsr
-	lsr
-	tay
-	lda TitleGraphics,X
-	
-	sta (MiscPtr),Y
-
-	
-	dex
-	stx MazeGenerationPass
-	bmi DoneDrawingTitleScreen
-	tay	;set flags based on what we wrote
-	beq PutTitleGraphicsInPlayfieldLoop	;--this only works if last value is NOT zero
-DoneDrawingTitleScreen
-	;--play sound
-	txa	;reset flags
-	bmi PlayLongSound
-	ldy #SHORTBRICKSOUND
-	bne PlayShortSound      ;branch always
-PlayLongSound
-	lda #%11111100
-	sta LastRowL
-	sta LastRowR	
-	lda GameStatus
-	ora #DRAWBASE
-	sta GameStatus
-	ldy #LONGEXPLOSIONSOUND
-PlayShortSound
-	jsr StartSoundSubroutine
-
-SkipDrawingTitleScreenThisFrame	
-	
-	rts
 
 	
 	
@@ -3520,22 +3460,6 @@ TankDownAnimated4b
 		.byte #%00011011;--
 		.byte 0
 		
-TitleGraphics
-    ;-----PF1--------PF2--------PF2--------PF1
-    .byte %00001000, %11111100, %11111100, %00001000
-    .byte %00001000, %10001100, %10001100, %00001000
-    .byte %00001111, %11101111, %11101111, %00001111
-    .byte %00000111, %11111111, %11111111, %00000111
-    .byte %00000000, %00000000, %00000000, %00000000
-    .byte %10101010, %01110101, %01001010, %01010111
-    .byte %10101010, %01010101, %01001110, %00110101
-    .byte %10101010, %01010101, %01001010, %01010101
-    .byte %11111010, %01110111, %11101110, %01110101
-    .byte %11011010, %01110111, %11101110, %01110101
-
-
-TitleGraphicsEnd				
-
 
 PFRegisterLookup
 	.byte 0, 0, 0, 0
@@ -3773,8 +3697,6 @@ DigitDataLo
 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
 	
-PFPointer
-	.word PF1Left, PF2Left, PF2Right, PF1Right
 
 		
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
@@ -5080,6 +5002,72 @@ StartSoundSubroutineBank2
 	
 ;****************************************************************************
 
+DrawTitleScreenSubroutine
+
+	;--TODO: interleave the gfx data so this loop can be cleaned up.... maybe.
+	ldx MazeGenerationPass
+PutTitleGraphicsInPlayfieldLoop
+	txa
+	and #3
+	asl
+	tay
+	lda PFPointer,Y
+	sta MiscPtr
+	lda PFPointer+1,Y
+	sta MiscPtr+1
+	
+	txa
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)
+	bcc DrawTitleScreenModerately
+	;--else slower
+	lda FrameCounter
+	and #$1F
+	bne SkipDrawingTitleScreenThisFrame
+DrawTitleScreenModerately	
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)
+	bcc DrawTitleScreenFast
+	lda FrameCounter
+	and #$F
+	bne SkipDrawingTitleScreenThisFrame
+DrawTitleScreenFast
+	txa
+	lsr
+	lsr
+	tay
+	lda TitleGraphics,X
+	
+	sta (MiscPtr),Y
+
+	
+	dex
+	stx MazeGenerationPass
+	bmi DoneDrawingTitleScreen
+	tay	;set flags based on what we wrote
+	beq PutTitleGraphicsInPlayfieldLoop	;--this only works if last value is NOT zero
+DoneDrawingTitleScreen
+	;--play sound
+	txa	;reset flags
+	bmi PlayLongSound
+	ldy #SHORTBRICKSOUND
+	bne PlayShortSound      ;branch always
+PlayLongSound
+	lda #%11111100
+	sta LastRowL
+	sta LastRowR	
+	lda GameStatus
+	ora #DRAWBASE
+	sta GameStatus
+	ldy #LONGEXPLOSIONSOUND
+PlayShortSound
+	jsr StartSoundSubroutineBank2
+
+SkipDrawingTitleScreenThisFrame	
+	
+; 	rts
+    jmp ReturnFromBSSubroutine2
+
+;****************************************************************************
+
 
 IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
@@ -5241,20 +5229,40 @@ StartingTankStatus
 	
 	
 ToneBank2
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE
 
 FrequencyBank2
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ
-
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ
 SoundLengthBank2
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH
-	
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH
+
 	
 NumberOfBitsSetBank2
 	.byte 0, 1, 1, 2
 	.byte 1, 2, 2, 3
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
+
+	
+	
+TitleGraphics
+    ;-----PF1--------PF2--------PF2--------PF1
+    .byte %00001000, %11111100, %11111100, %00001000
+    .byte %00001000, %10001100, %10001100, %00001000
+    .byte %00001111, %11101111, %11101111, %00001111
+    .byte %00000111, %11111111, %11111111, %00000111
+    .byte %00000000, %00000000, %00000000, %00000000
+    .byte %10101010, %01110101, %01001010, %01010111
+    .byte %10101010, %01010101, %01001110, %00110101
+    .byte %10101010, %01010101, %01001010, %01010101
+    .byte %11111010, %01110111, %11101110, %01110101
+    .byte %11011010, %01110111, %11101110, %01110101
+
+
+TitleGraphicsEnd				
+
+PFPointer
+	.word PF1Left, PF2Left, PF2Right, PF1Right
 
 	
 ;****************************************************************************	
