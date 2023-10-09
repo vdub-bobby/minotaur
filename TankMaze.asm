@@ -92,7 +92,9 @@
 			more aggressive tank movement routines IN PROGRESS
 			smarter shooting by enemy tanks HMM
 
-	Figure out better AI for tank movement/firing routines 
+	IN PROGRESS: Figure out better AI for tank movement/firing routines 
+        Stole routines from Pac-Man.  Seems to work pretty well, want to make the player respawn delay longer, but counter bits are already maxed so may need to fiddle with code.
+        Reason I have this here is because when player is dead the enemy tanks head for the base.  Maybe it's ok, at higher levels maybe they move fast enough that it will make a difference?
 	Add explosion graphics  or ????
 	Title/splash screen?  STARTED... still needs work.
 	Power-Ups - ???
