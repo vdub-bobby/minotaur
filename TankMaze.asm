@@ -98,7 +98,7 @@
 	Power-Ups - ???
 		keep this simple: 
 			speed
-			extra life
+			NIX - extra life
 			"bomb" that destroys all tanks on screen (and all walls?)
 			something that slows all enemies down?
 			other?
@@ -205,6 +205,13 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 FIRSTCOLUMNX    =   16
 
 
+    
+
+TANKAISWITCH	=	0;64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
+                                ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
+CLYDEDISTANCE   =   30            ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
+PINKYADJUSTMENTX    =   16          ;4 tiles in Pac-Man, equivalent in Minotaur is 2 tiles... I think.  In pixels X = 16.
+PINKYADJUSTMENTY    =   14          ; in pixels Y = 14
 PLAYERSTARTINGX	=	8
 PLAYERSTARTINGY =   TANKHEIGHT+1
 
@@ -434,7 +441,6 @@ SELECT		=	%00000010
 RESET		=	%00000001
 
 
-TANKAISWITCH	=	64
 
 
 ;-------------------------End Constants-----------------------------------
@@ -462,7 +468,6 @@ MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
 Score ds 3
-Lives ds 1
 TanksRemaining ds 1
 
 Channel1Decay ds 1
@@ -1616,7 +1621,7 @@ MoveEnemyTanksSubroutine
 	lda FrameCounter
 	and #3
 	bne MoveAnEnemyTank
-	dec TankMovementCounter     ;tank movement counter decremented every four frames
+	inc TankMovementCounter     ;tank movement counter incremented every four frames
 	;--if we ain't moving a tank, let's shoot a bullet
 	jmp FireEnemyBulletRoutine
 
@@ -1713,6 +1718,24 @@ TankOnscreenMoveIt
 	lda TankX,X
 	and #$07
 	beq AtIntersectionX
+	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
+	lda TankMovementCounter
+	beq TankReverseDirection
+	jmp NotAtIntersection
+TankReverseDirection
+	lda TankStatus,X
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda PreventReverses,Y
+	eor #$FF
+	sta Temp
+	lda TankStatus,X
+	and #$0F
+	eor Temp
+	sta TankStatus,X	
 	jmp NotAtIntersection
 AtIntersectionX
 	lda TankY,X
@@ -1913,25 +1936,101 @@ RegularMovement
 	;routine: 
 	; pick two targets, then take the midpoint between them.
 	;   each target is a ZP variable.  Have to update random number in between in case both targets are random numbers (like in the case of tank 3)
-	ldy TankTargetX,X
-	lda $00,Y
-	ldy TankTargetAdjustX,X
-	sec
-	sbc $00,Y
-	jsr DivideByTwoSubroutine   ;can't just LSR since we need to account for negative numbers
-	clc
-	adc $00,Y
-	pha
-	jsr UpdateRandomNumber
-	ldy TankTargetY,X
-	lda $00,Y
-	ldy TankTargetAdjustY,X
-	sec
-	sbc $00,Y
-	jsr DivideByTwoSubroutine
-	clc
-	adc $00,Y
-	pha
+	;---revamp this with three separate routines, "borrowing" from Pac-Man routines (steal from the best, I guess)
+	;       Tank 1 uses the Blinky chase routine (always aiming at player position)
+	;       Tank 2 uses the Pinky chase routine (always aiming 3 "tiles" in front of player)
+	;       Tank 3 uses the Clyde chase routine (aiming for player if 7 tiles away or more, but when close aiming for base)
+	;--if player is dead, aim for base.
+	lda TankX
+	cmp #16
+	bcs PlayerOnScreen
+    lda #80
+    pha
+    lda #0
+    pha
+    beq ChooseTankDirection
+	
+PlayerOnScreen
+	cpx #1
+	beq EnemyTank1Routine
+	cpx #2
+	beq EnemyTank2Routine
+EnemyTank3Routine
+    ;--if further than N tank-lengths from player (using Manhattan distance formula)
+    ;   then aim for player
+    ;   else aim for base
+    lda TankX
+    sec
+    sbc TankX,X
+    bcs FoundAbsoluteXDifference
+    ;--negative, so multiply by -1
+    eor #$FF
+    adc #1
+FoundAbsoluteXDifference
+    sta Temp
+    lda TankY
+    sec
+    sbc TankY,X
+    bcs FoundAbsoluteYDifference
+    ;--negative, so multiply by -1
+    eor #$FF
+    adc #1    
+FoundAbsoluteYDifference
+    clc
+    adc Temp
+    cmp #CLYDEDISTANCE ;tanks are 8 pixels wide by 7-pixels tall (sort of).  7-tank lengths, using 7.5 pixels as a tank length = 53 pixels
+    bcs EnemyTankIsFarAimForPlayer
+    ;--else aim for base
+    lda #80
+    pha
+    lda #0
+    pha
+    beq ChooseTankDirection ;branch always
+EnemyTank2Routine
+    ;--aims for spot three tank-lengths in front of player tank
+    lda TankStatus
+    lsr
+    lsr
+    lsr
+    lsr
+    tay
+    lda TankX
+    clc
+    adc TankTargetAdjustmentX,Y
+    pha
+    lda TankY
+    clc
+    adc TankTargetAdjustmentY,Y
+    pha
+    jmp ChooseTankDirection
+    
+    
+EnemyTankIsFarAimForPlayer
+EnemyTank1Routine
+    ;tank 1 aims for player tank
+    lda TankX
+    pha
+    lda TankY
+    pha
+; 	ldy TankTargetX,X
+; 	lda $00,Y
+; 	ldy TankTargetAdjustX,X
+; 	sec
+; 	sbc $00,Y
+; 	jsr DivideByTwoSubroutine   ;can't just LSR since we need to account for negative numbers
+; 	clc
+; 	adc $00,Y
+; 	pha
+; 	jsr UpdateRandomNumber
+; 	ldy TankTargetY,X
+; 	lda $00,Y
+; 	ldy TankTargetAdjustY,X
+; 	sec
+; 	sbc $00,Y
+; 	jsr DivideByTwoSubroutine
+; 	clc
+; 	adc $00,Y
+; 	pha
 
 ChooseTankDirection
     ;have allowable directions in stack and target X and Y values in stack
@@ -1988,6 +2087,7 @@ NotAtIntersection
 	;push movementflag (zero) onto stack
 	lda #0
 	pha
+	
 	lda TankStatus,X			;this holds new, desired direction for tank.
 	eor #$FF					;flip all bits so that is interchangeable with reading from joystick
 								;and can use same routine for both.
@@ -3658,21 +3758,29 @@ TanksRemainingGfx
 	;tank 2 target = random position
 	;tank 3 target = player position
 TankTargetX = *-1
-	.byte TankX, RandomNumber, TankX
+	.byte TankX, TankX, TankX
 TankTargetY = *-1
-	.byte TankY, RandomNumber, TankY
+	.byte TankY, TankY, TankY
 	
 	;--following is combined with target above (see routine for details)
 	;tank 0 = player, so don't need entry for that
 	;tank 1 target = player position
-	;tank 2 target = itself
+	;tank 2 target = tank 1?  or switched to player
 	;tank 3 target = tank 1
 TankTargetAdjustX = *-1
-	.byte TankX, TankX+1, TankX+1
+	.byte TankX, RandomNumber, TankX+1
 TankTargetAdjustY = *-1
-	.byte TankY, TankY+1, TankY+1
+	.byte TankY, RandomNumber, TankY+1
 	
-
+;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
+TankTargetAdjustmentX 
+    .byte 0, 0, 0, 0
+    .byte -PINKYADJUSTMENTX, 0, 0, 0
+    .byte PINKYADJUSTMENTX
+TankTargetAdjustmentY 
+    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
+    .byte 0, 0, 0, 0
+    .byte 0
 	
 BulletDirectionClear
 BulletUp
@@ -4553,7 +4661,7 @@ TankCollisionLoop
     beq NoTankCollision
     ;--remove tank only if fully onscreen
     tya
-    tax ;%%%%%
+    tax ;
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
     and #$FF    ;--sets flags
     beq TankNotOnScreenCannotDie
@@ -4904,7 +5012,7 @@ TopRowEnemyTankRespawn
 	sta TankY,X
 	lda StartingTankXPosition,Y
 	sta TankX,X
-	lda StartingTankStatus,X    ;%%%
+	lda StartingTankStatus,X    ;
 	sta TankStatus,X
 ; 	lda #$FF
 ; 	sta TankFractional,X
