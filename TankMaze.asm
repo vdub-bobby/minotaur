@@ -658,7 +658,14 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sta MiscPtr
 	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
-	lda #WALLCOLOR
+	
+    lda TankMovementCounter
+	lsr
+	lsr
+	lsr
+	lsr
+	ora #WALLCOLOR&$F0
+
 	sta COLUPF
 	;--do this above...the rest we do during the wall below.  
 	ldx #4
@@ -1492,9 +1499,9 @@ NoVerticalTankMovement
 	tax						;get tank index back into X
 	pla						;pull new tank direction off stack into A
 	
-	eor #$FF	;flip bits
-	jsr EliminateDiagonalSubroutine
-	eor #$FF
+; 	eor #$FF	;flip bits
+; 	jsr EliminateDiagonalSubroutine
+; 	eor #$FF
 	
 	rts
 
@@ -1940,8 +1947,8 @@ RegularMovement
 	;   each target is a ZP variable.  Have to update random number in between in case both targets are random numbers (like in the case of tank 3)
 	;---revamp this with three separate routines, "borrowing" from Pac-Man routines (steal from the best, I guess)
 	;       Tank 1 uses the Blinky chase routine (always aiming at player position)
-	;       Tank 2 uses the Pinky chase routine (always aiming 3 "tiles" in front of player)
-	;       Tank 3 uses the Clyde chase routine (aiming for player if 7 tiles away or more, but when close aiming for base)
+	;       Tank 2 uses the Pinky chase routine (always aiming X` "tiles" in front of player)
+	;       Tank 3 uses the Clyde chase routine (aiming for player if X tiles away or more, but when close aiming for base)
 	;--if player is dead, aim for base.
 	lda TankX
 	cmp #16
@@ -2037,11 +2044,12 @@ EnemyTank1Routine
 ChooseTankDirection
     ;have allowable directions in stack and target X and Y values in stack
 	jsr ChooseTankDirectionSubroutine	;returns with new direction in accumulator
+	;takes desired direction and sticks it in TankStatus
 	sta Temp
-	lda TankStatus,X
-	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
-	ora Temp
-	sta TankStatus,X					
+; 	lda TankStatus,X
+; 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+; 	ora Temp
+; 	sta TankStatus,X					
 	pla
 	pla									;pull target for tank off stack and discard
 
@@ -2050,8 +2058,21 @@ ChooseTankDirection
 	;       if not, pick random direction from allowable and move that way.
 	pla	;	--get allowable directions off stack
 	pha	;	but leave on stack
-	and TankStatus,X
-	bne DirectionIsFine
+; 	and TankStatus,X
+    and Temp
+    beq DesiredDirectionsNotAllowed
+    ;--we may have more than one allowed direction, and both may be allowed.
+	eor #$FF	;flip bits
+	jsr EliminateDiagonalSubroutine
+	eor #$FF
+	;--now stick single direction in TankStatus
+	sta Temp
+	lda TankStatus,X
+	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	ora Temp
+	sta TankStatus,X					
+	bne DirectionIsFine     ;branch always
+DesiredDirectionsNotAllowed
 	;--direction is not ok
 	;	for now, randomly pick one of the allowed directions
 	lda RandomNumber
@@ -2094,7 +2115,7 @@ NotAtIntersection
 	eor #$FF					;flip all bits so that is interchangeable with reading from joystick
 								;and can use same routine for both.
 	jmp TankMovementSubroutine
-ReturnFromTankMovementSubroutine
+ReturnFromTankMovementSubroutine        ;should move this label somewhere else and save a byte
 	
 	rts
 
