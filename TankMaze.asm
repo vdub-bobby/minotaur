@@ -2563,35 +2563,21 @@ FireBulletRoutine
 	
 	;--then set new direction:
 	lda TankStatus,Y
-	tay	;--save this value (we don't need tank index any longer)
-	and #TANKUP
-	beq NotFiringUp
-	;--shooting up
+	asl ;--get J0RIGHT into carry
+	bcc NotFiringRight
+	;--shooting right
+	;--shooting right
 	lda BulletDirection
-	ora BulletUp,X
+	ora BulletRight,X
 	sta BulletDirection
-	lda Temp+1
+	lda Temp
 	clc
-	adc #4
-	sta Temp+1
-	jmp DoneFiring
-NotFiringUp
-	tya
-	and #TANKDOWN
-	beq NotFiringDown
-	;--shooting down
-	lda BulletDirection
-	ora BulletDown,X
-	sta BulletDirection
-	lda Temp+1
-	sec
-	sbc #4
-	sta Temp+1
-	jmp DoneFiring
-NotFiringDown	
-	tya ;--restore value
-	and #TANKLEFT
-	beq NotFiringLeft
+	adc #5
+	sta Temp
+    jmp DoneFiring
+NotFiringRight
+    asl ;--get J0LEFT into carry
+    bcc NotFiringLeft
 	;--shooting left
 	lda BulletDirection
 	ora BulletLeft,X
@@ -2602,23 +2588,35 @@ NotFiringDown
 	sta Temp
 	jmp DoneFiring
 NotFiringLeft
-	tya
-	and #TANKRIGHT
-	beq NotFiring
-	;--shooting right
+    asl ;--get J0DOWN into carry
+    bcc NotFiringDown
+	;--shooting down
 	lda BulletDirection
-	ora BulletRight,X
+	ora BulletDown,X
 	sta BulletDirection
-	lda Temp
+	lda Temp+1
+	sec
+	sbc #4
+	sta Temp+1
+	jmp DoneFiring
+NotFiringDown
+    asl ;--get J0UP into carry
+    bcc NoDirectionNotFiringAtAll
+	;--shooting up
+	lda BulletDirection
+	ora BulletUp,X
+	sta BulletDirection
+	lda Temp+1
 	clc
-	adc #5
-	sta Temp
+	adc #4
+	sta Temp+1
+	jmp DoneFiring
 DoneFiring
 	lda Temp
 	sta BulletX,X
 	lda Temp+1
 	sta BulletY,X
-
+NoDirectionNotFiringAtAll
 NotFiring
 NoAvailableBalls	
 TriggerNotDebounced
