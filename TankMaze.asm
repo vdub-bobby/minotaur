@@ -141,7 +141,7 @@
 
 */
 
-DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
+DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 
@@ -1569,15 +1569,18 @@ ShootFromTank
 ; 	lda TankStatus,Y
 ; 	and #$F0
 ; 	beq TankOffscreenCannotShoot
-    ;--make sure tank is fully on screen before shooting
-    lda TankY,Y
-    cmp #MAZEAREAHEIGHT+2
-    bcs TankOffscreenCannotShoot
-    lda TankX,Y
-    cmp #16
+    lda TankStatus,Y
+    lsr     ;--get TANKINPLAY flag into carry
     bcc TankOffscreenCannotShoot
-    cmp #137
-    bcs TankOffscreenCannotShoot
+;     ;--make sure tank is fully on screen before shooting
+;     lda TankY,Y
+;     cmp #MAZEAREAHEIGHT+2
+;     bcs TankOffscreenCannotShoot
+;     lda TankX,Y
+;     cmp #16
+;     bcc TankOffscreenCannotShoot
+;     cmp #137
+;     bcs TankOffscreenCannotShoot
 FireEnemyBulletNow
 	jsr FireBulletRoutine
 TankOffscreenCannotShoot
@@ -1883,6 +1886,7 @@ TankInMaze
     ;           save those directions, then push a target (X and Y) onto the stack, and then turn towards the direction that best goes to the target.
 	lda #0      ;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)  = all directions
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
+AboutToCheckForEnemyTank
 	jsr CheckForEnemyTankSubroutine ;--returns with allowable directions in A
 	
 	and #$F0	;clear bottom nibble
@@ -2601,7 +2605,7 @@ NotFiringLeft
 	jmp DoneFiring
 NotFiringDown
     asl ;--get J0UP into carry
-    bcc NoDirectionNotFiringAtAll
+    bcc NoDirectionNotFiringAtAll   ;is this necessary?  
 	;--shooting up
 	lda BulletDirection
 	ora BulletUp,X
@@ -2783,9 +2787,8 @@ CheckForEnemyTankSubroutine
     beq .TankOffScreenIgnoreLeft
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
-    clc
-    adc #1      ;--have to add one so equal values are ignored
     sec
+    sbc #1      ;--have to add one so equal values are ignored
     sbc TankX,Y
     cmp #14
     bcs .ThisTankNotToLeft
@@ -2823,9 +2826,8 @@ CheckForEnemyTankSubroutine
     beq .TankOffScreenIgnoreRight
     ;see if an enemy tank is 
     lda TankX,Y
-    clc
-    adc #1      ;--have to add one so equal values are ignored
     sec
+    sbc #1      ;--have to add one so equal values are ignored
     sbc TankX,X
     cmp #14
     bcs .ThisTankNotToRight
@@ -2863,9 +2865,8 @@ CheckForEnemyTankSubroutine
     beq .TankOffScreenIgnoreUp
     ;see if an enemy tank is above
     lda TankY,Y
-    clc
-    adc #1      ;--have to add one so equal values are ignored
     sec
+    sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,X
     cmp #12
     bcs .ThisTankNotToUp
@@ -2904,9 +2905,8 @@ CheckForEnemyTankSubroutine
     beq .TankOffScreenIgnoreDown
     ;see if an enemy tank is below
     lda TankY,X
-    clc
-    adc #1      ;--have to add one so equal values are ignored
     sec
+    sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,Y
     cmp #12
     bcs .ThisTankNotToDown
@@ -2919,7 +2919,7 @@ CheckForEnemyTankSubroutine
     bcs .ThisTankNotToDown
     ;--there is a tank there!  can't move up!
     lda Temp
-    ora #J0UP
+    ora #J0DOWN
     sta Temp
     bne .DoneWithEnemyTankChecks  ;branch always to the next check
 .ThisTankNotToDown    
