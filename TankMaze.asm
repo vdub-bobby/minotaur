@@ -123,13 +123,26 @@
 
 	BUG KILLING!
 		scanline count is wonky, need to tighten up various subroutines that take too long
-		FIXED: remove bullets from screen during level transitions
-      Tanks still firing when offscreen.
-      Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
-      Also not exactly a bug (??) but tanks still run into each other a lot.
-      Also not exactly a bug (??) but tank shooting needs to be improved.
-      Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
-          but when other tank dies, movement doesn't happen as quickly as it seems like it should.
+	    FIXED: remove bullets from screen during level transitions
+        FIXED: Tanks still firing when offscreen.  
+            UPDATE: I think this is when tank 3 shoots downward a "ghost" shot occurs from offscreen. 
+            UPDATE UPDATE: that was incorrect, it was due to out-of-bounds conditions not being checked properly when bullets move downward
+        FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+        FIXED I THINK: Also not exactly a bug (??) but tanks still run into each other a lot.
+        Also not exactly a bug (??) but tank shooting needs to be improved.
+        FIXED: Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
+            but when other tank dies, movement doesn't happen as quickly as it seems like it should.
+        MAYBE FIXED: Possible for tanks to get stuck in this situation: (W=wall, T=tank):
+            ww w
+            wT w
+            wwTw
+            wwww
+            and neither tank can move because a tank is in the way.
+                preferred solution: force tanks that don't move for more than 1/2 second to shoot (in a random direction?) to blast out a wall.
+                alternative solution: have tanks that don't move for more than 1/2 second to die.
+                problem is that either of those solutions require some kind of counter for "tank stuck"  
+                I do have probably one free byte of RAM I could use but ... 
+                IMPLEMENTED THIS: Actually, it probably wouldn't be too difficult to fire a bullet from a tank that isn't moving.
 	
   Notes from ZeroPage livestream on 9/1:
       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
@@ -141,9 +154,10 @@
 
 */
 
-DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
+DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
+DEBUGTANKAICOUNTER = 1  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
 
 	processor 6502
 	include vcs.h
@@ -218,7 +232,7 @@ FIRSTCOLUMNX    =   16
 
     
 
-TANKAISWITCH	=	0;64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
+TANKAISWITCH	=	64;64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
                                 ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
 CLYDEDISTANCE   =   30            ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
 PINKYADJUSTMENTX    =   16          ;4 tiles in Pac-Man, equivalent in Minotaur is 2 tiles... I think.  In pixels X = 16.
@@ -671,12 +685,23 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	lda RotationTablesBank1+1,X
 	sta MiscPtr+1
 	
-    lda TankMovementCounter
-	lsr
-	lsr
-	lsr
-	lsr
-	ora #WALLCOLOR&$F0
+	SUBROUTINE
+	if DEBUGTANKAICOUNTER = 1
+        lda TankMovementCounter
+        cmp #TANKAISWITCH
+        bcs .tankaidebug
+        lda #BLUE|$4
+        bcc .tankaidebugend
+.tankaidebug
+    	lsr
+    	lsr
+    	lsr
+    	lsr
+    	ora #WALLCOLOR&$F0
+.tankaidebugend
+    ELSE
+        lda #WALLCOLOR
+    ENDIF
 
 	sta COLUPF
 	;--do this above...the rest we do during the wall below.  
@@ -1558,7 +1583,17 @@ MazeNumberSixteenOrLess
 	and #~ENEMYDEBOUNCEBITS ;this probably isn't necessary, but being safe for now
     ora EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
 	sta Debounce    ;was EnemyDebounce
-	;--find random tank 
+	
+	;--first, look for tank that is stuck (i.e., in play but not moving)
+	ldy #3
+FindStuckTank
+    lda TankStatus,Y
+    and #TANKSPEED|TANKINPLAY
+    cmp #TANKINPLAY|TANKSPEED0
+    beq FireEnemyBulletNow
+    dey
+    bne FindStuckTank
+    ;--if no stuck tank, find random tank 
 	lda RandomNumber
 	and #3
 	tay
@@ -1569,18 +1604,20 @@ ShootFromTank
 ; 	lda TankStatus,Y
 ; 	and #$F0
 ; 	beq TankOffscreenCannotShoot
-    lda TankStatus,Y
-    lsr     ;--get TANKINPLAY flag into carry
+
+    lda TankX,Y
+    cmp #16
     bcc TankOffscreenCannotShoot
-;     ;--make sure tank is fully on screen before shooting
-;     lda TankY,Y
-;     cmp #MAZEAREAHEIGHT+2
-;     bcs TankOffscreenCannotShoot
-;     lda TankX,Y
-;     cmp #16
+    cmp #137
+    bcs TankOffscreenCannotShoot
+    lda TankY,Y
+    cmp #MAZEAREAHEIGHT+2
+    bcs TankOffscreenCannotShoot
+
+    
+;     lda TankStatus,Y
+;     lsr     ;--get TANKINPLAY flag into carry
 ;     bcc TankOffscreenCannotShoot
-;     cmp #137
-;     bcs TankOffscreenCannotShoot
 FireEnemyBulletNow
 	jsr FireBulletRoutine
 TankOffscreenCannotShoot
@@ -1724,7 +1761,7 @@ PlayerTankMovementRoutine
 	;--else still waiting
 	;--update counter every 8 frames
 	lda FrameCounter
-	and #7
+	and #15         ;--make wait longer for tank to respawn
 	bne WaitToUpdateRespawnCounter
 	dec TankStatus
 WaitToUpdateRespawnCounter
@@ -4125,7 +4162,8 @@ BulletNotUp
 	sec
 	sbc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
-	bcs BulletOnScreen                      ;branch always
+	bcc BulletOffScreen                      ;if we are less than zero, then bullet is offscreen
+    bcs BulletOnScreen
 BulletNotDown
 	tya	
 	cmp BulletRightBank2,X
@@ -4213,7 +4251,7 @@ UpdateMazeNumber
 	sta MazeNumber
 	beq UpdateMazeNumber
 	cld
-
+    adc #99  ;--don't like the initial maze, too hard with long vertical corridor from the top to the base
 	;and set seed for maze
 	sta RandomNumber	
 	
@@ -4455,6 +4493,11 @@ ClearSideEntryPointsLoop
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
+	lda #TANKAISWITCH+1
+	sta TankMovementCounter ;enemy tanks start in regular movement mode at beginning of every level....maybe?  
+	
+	
+	;--does this nonsense below work?  Isn't MazeNumber a BCD value?  I think it still does work, but this is sloppy and probably should be fixed at some point.
 	lda MazeNumber
 	asl
 	clc
