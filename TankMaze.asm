@@ -125,6 +125,9 @@
 		scanline count is wonky, need to tighten up various subroutines that take too long
 		FIXED: remove bullets from screen during level transitions
       Tanks still firing when offscreen.
+      Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+      Also not exactly a bug (??) but tanks still run into each other a lot.
+      Also not exactly a bug (??) but tank shooting needs to be improved.
       Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
           but when other tank dies, movement doesn't happen as quickly as it seems like it should.
 	
@@ -182,17 +185,23 @@ DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 
 
 
-;--TankStatus bits (upper four are direction.  lower four are speed when moving, are "delay" when waiting to come onscreen.)
+;--TankStatus bits
+TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
+TANKSPEED       =   %00001110       ;ASL ASL ASL ASL ORA #$1F and then added to TankFractional
+TANKRESPAWNWAIT =   %00001110       ;shares bits with speed
+TANKINPLAY      =   %00000001       ;this is set when tank has respawned and is coming on screen or fully on screen.  cleared when tank is still waiting to be respawned.
+
 TANKRIGHT		=	J0RIGHT
 TANKLEFT		=	J0LEFT
 TANKDOWN		=	J0DOWN
 TANKUP			=	J0UP
 
-ENEMYTANK1DELAY	=	7;7     # of frames of delay is x 4
-ENEMYTANK2DELAY	=	11;7
-ENEMYTANK3DELAY	=	15;7
+    ;delay uses TANKRESPAWNWAIT bits (%00001110) so these values have to be even numbers between 2 and 14
+ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
+ENEMYTANK2DELAY	=	10
+ENEMYTANK3DELAY	=	14
 
-PLAYERRESPAWNDELAY = 15
+PLAYERRESPAWNDELAY = 14
 
 
 STARTINGENEMYTANKCOUNT	=	 20
@@ -251,10 +260,12 @@ ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
-PLAYERTANKSPEED	=	TANKSPEED3
-ENEMYTANKBASESPEED0	=   TANKSPEED7
-ENEMYTANKBASESPEED1 = 	TANKSPEED5
-ENEMYTANKBASESPEED2	=	TANKSPEED3
+
+
+PLAYERTANKSPEED	=	TANKSPEED2;3
+ENEMYTANKBASESPEED0	=   TANKSPEED8
+ENEMYTANKBASESPEED1 = 	TANKSPEED6
+ENEMYTANKBASESPEED2	=	TANKSPEED4
 
 
 PLAYERTANKVOLUME	=	8
@@ -334,6 +345,7 @@ TANKCOLOR2          =    BLUE2|$C
 ;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	100
 
+TANKSPEED0  =   0
 TANKSPEED1	=	1
 TANKSPEED2	=	2
 TANKSPEED3	=	3
@@ -1410,11 +1422,12 @@ StartNewLevel
 	
 	;--move tanks off screen, immobilize 
 	ldx #3
+	ldy #0  ;no direction, no speed, and TANKINPLAY = 0
 	lda #TANKOFFSCREEN
 MoveTanksOffscreenLoop
 	sta TankX,X
 	sta TankY,X
- 	sty TankStatus,X    ;--what does Y hold here?
+ 	sty TankStatus,X   
 	dex
 	bpl MoveTanksOffscreenLoop
 	
@@ -1590,7 +1603,7 @@ SetInitialEnemyTankSpeedRoutine
     adc TanksRemainingSpeedBoost,Y
 	cmp #15
 	bcc NewSpeedNotTooHigh
-	lda #TANKSPEED15
+	lda #TANKSPEED14
 	bne SetNewEnemyTankSpeed
 	
 NewSpeedNotTooHigh
@@ -1607,6 +1620,8 @@ NewSpeedNotTooHigh
 	clc
 	adc Temp
 SetNewEnemyTankSpeed
+    and #TANKSPEED      ;make sure only the bits we want
+    ora #TANKINPLAY     ;tank in action now so set bit
 	ora TankStatus,X
 	sta TankStatus,X
 	
@@ -1637,18 +1652,19 @@ MoveEnemyTanksSubroutine
 MoveAnEnemyTank
 	tax
 
+	;jsr IsTankOnScreenBank0     ;%%%
 	lda TankStatus,X
-	and #$F0
-	bne TankOnscreenMoveIt
+	and #TANKINPLAY	
+	bne TankOnscreenMoveIt         
 	;tank offscreen
 	;--only bring tank onscreen if there are enemy tanks remaining
 	;--how many tanks onscreen?
-	;lda #0  ;---A is zero already following BNE above
+	lda #0  ;---A is zero already following BNE above
 	sta Temp    ;using this to count how many tanks onscreen
 	ldy #3
 CountTanksOnScreenLoop
 	lda TankStatus,Y
-	and #$F0    ;--if tank has no direction set, it is offscreen and waiting to be respawned, and lower 4 bits hold wait counter until it is brought back onscreen
+	and #TANKINPLAY    ;--if tank has no direction set, it is offscreen and waiting to be respawned, and lower 4 bits hold wait counter until it is brought back onscreen
 	beq TankNotOnscreen
 	inc Temp
 TankNotOnscreen
@@ -1661,7 +1677,11 @@ TankNotOnscreen
 	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 4.
 	and #3
 	bne DoNotBringTankOnscreenYet
-	dec TankStatus,X
+	lda TankStatus,X
+	sec
+	sbc #2
+	sta TankStatus,X
+; 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
 	;--wait counter has expired, so bring this tank on screen
 	; if tank off left edge of screen, move right.  if off right edge of screen, move left.  otherwise, move down
@@ -1696,7 +1716,7 @@ PlayerTankMovementRoutine
 	cmp #8
 	bne DoneWaitingBringPlayerTankOnScreen
 	lda TankStatus
-	and #$0F
+	and #TANKRESPAWNWAIT
 	beq AllFinishedWaitingStartPlayerRespawn
 	;--else still waiting
 	;--update counter every 8 frames
@@ -1707,12 +1727,9 @@ PlayerTankMovementRoutine
 WaitToUpdateRespawnCounter
 	rts
 AllFinishedWaitingStartPlayerRespawn
-	;--set player to move immediately and reset speed correctly
+	;--set player to move immediately 
 	lda #255
 	sta TankFractional
-	lda #PLAYERTANKSPEED
-	ora TankStatus
-	sta TankStatus
 DoneWaitingBringPlayerTankOnScreen
  	lda #0		
 	pha			;movement flag
@@ -1727,10 +1744,12 @@ TankOnscreenMoveIt
 	lda TankX,X
 	and #$07
 	beq AtIntersectionX
+	cpx #0      ;check if enemy tank
+	beq PlayerTankDoesNotReverse
+EnemyTankPossibleReversal
 	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
 	lda TankMovementCounter
-	beq TankReverseDirection
-	jmp NotAtIntersection
+	bne NoTankReversal
 TankReverseDirection
 	lda TankStatus,X
 	lsr
@@ -1742,9 +1761,11 @@ TankReverseDirection
 	eor #$FF
 	sta Temp
 	lda TankStatus,X
-	and #$0F
-	eor Temp
-	sta TankStatus,X	
+	and #~TANKDIRECTION
+	ora Temp
+	sta TankStatus,X
+PlayerTankDoesNotReverse
+NoTankReversal	
 	jmp NotAtIntersection
 AtIntersectionX
 	lda TankY,X
@@ -1826,9 +1847,10 @@ EnemyTankDirectionRoutine
 	asl
 	asl
 	asl
-	ora #$0F
+	ora #$1F
 	clc
 	adc TankFractional,X
+;     jsr TankFractionalAddition	
 	bcs TimeForEnemyTankToTurn
 	sta TankFractional,X
 	rts
@@ -1885,7 +1907,7 @@ ThereAreSomeAllowedDirections
 SetNewTankDirection
 	sta Temp
 	lda TankStatus,X
-	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	and #~TANKDIRECTION
 	ora Temp
 	sta TankStatus,X
 	jmp DirectionChosen
@@ -2068,7 +2090,7 @@ ChooseTankDirection
 	;--now stick single direction in TankStatus
 	sta Temp
 	lda TankStatus,X
-	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	and #~TANKDIRECTION
 	ora Temp
 	sta TankStatus,X					
 	bne DirectionIsFine     ;branch always
@@ -2091,7 +2113,7 @@ FoundGoodDirection
 NoAllowedDirections
 	sta Temp
 	lda TankStatus,X
-	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
+	and #~TANKDIRECTION
 	ora Temp
 	sta TankStatus,X
 		
@@ -2297,7 +2319,7 @@ TankFractionalAddition
 	asl
 	asl
 	asl
-	ora #$0F
+	ora #$1F
     clc
     adc TankFractional,X
 	sta TankFractional,X
@@ -2329,16 +2351,24 @@ SkipReadingControllers
 	ldx #PLAYERTANKENGINEVOLUME
 ; NotTryingToMove
 	stx AUDV0	
-	ldx #0		;index into which tank	
 
 
 	sta Temp			;--save desired direction of tank
     ;--and set player speed which we set to zero when he stopped
+    ;--set tank speed lower if player off left edge of screen
     lda TankStatus
-    and #$F0
+    and #TANKDIRECTION
     ora #PLAYERTANKSPEED
+    ldx TankX
+    cpx #16
+    bcs RegularPlayerTankSpeed
+    ;and #$F1          ;change from TANKSPEED3 to TANKSPEED1
+RegularPlayerTankSpeed    
     sta TankStatus 
-    
+
+	ldx #0		;index into which tank	
+
+        
 	lda Temp
 	pha
 	
@@ -2383,7 +2413,7 @@ ProcessDirections
 	eor #$F0
 	sta Temp
 	lda TankStatus,X
-	and #$F0
+	and #TANKDIRECTION
 	cmp Temp
 	beq TankNotTurning
 	;tank turning
@@ -2410,7 +2440,7 @@ TankNotTurning
 	
 TurnUpward
 	lda TankStatus,X
-	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
+	and #~TANKDIRECTION
 	ora #TANKUP
 	sta TankStatus,X
 	jmp DoneMoving
@@ -2424,7 +2454,7 @@ NoUp
 	dec TankY,X
 TurnDownward
 	lda TankStatus,X
-	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
+	and #~TANKDIRECTION
 	ora #TANKDOWN
 	sta TankStatus,X
 	jmp DoneMoving
@@ -2439,7 +2469,7 @@ NoDown
 	sta TankX,X
 TurnRightward	
 	lda TankStatus,X
-	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
+	and #~TANKDIRECTION
 	ora #TANKRIGHT
 	sta TankStatus,X
 	jmp DoneMoving
@@ -2453,7 +2483,7 @@ NoRight
 	dec TankX,X
 TurnLeftward
 	lda TankStatus,X
-	and #~(TANKUP|TANKDOWN|TANKRIGHT|TANKLEFT)
+	and #~TANKDIRECTION
 	ora #TANKLEFT
 	sta TankStatus,X
 	
@@ -2514,7 +2544,7 @@ NoBulletSound
 FireBulletRoutine
 	
 	
-	;--set initial position (will be adjusted below depending on which way the tank is facing)
+	;--set initial position at approx center of tank (will be adjusted below depending on which way the tank is facing)
 	lda TankX,Y
 	clc
 	adc #4
@@ -2533,7 +2563,7 @@ FireBulletRoutine
 	
 	;--then set new direction:
 	lda TankStatus,Y
-	tay	;--save this value
+	tay	;--save this value (we don't need tank index any longer)
 	and #TANKUP
 	beq NotFiringUp
 	;--shooting up
@@ -2600,9 +2630,26 @@ TriggerNotDebounced
 
 ;****************************************************************************
 
-
-
-
+    SUBROUTINE
+    
+IsTankOnScreenBank0
+    ;--X holds tank number to check
+    ;--return in accumulator:  0 if offscreen, 1 if onscreen
+    lda TankX,X
+    cmp #TANKONSCREENLEFT
+    bcc .TankOffScreen
+    cmp #TANKONSCREENRIGHT+1
+    bcs .TankOffScreen
+    lda TankY,X
+    cmp #TANKONSCREENTOP+2
+    bcc .TankOnScreen    
+.TankOffScreen
+    lda #0
+    rts
+.TankOnScreen
+    lda #1
+    rts
+;****************************************************************************
 
 IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
@@ -2734,7 +2781,7 @@ CheckForEnemyTankSubroutine
     beq .NoCompareTankToItselfLeft
     ;--see if enemy tank is offscreen
     lda TankStatus,Y
-    and #$F0
+    and #TANKINPLAY
     beq .TankOffScreenIgnoreLeft
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
@@ -2774,7 +2821,7 @@ CheckForEnemyTankSubroutine
     beq .NoCompareTankToItselfRight
     ;--see if enemy tank is offscreen
     lda TankStatus,Y
-    and #$F0
+    and #TANKINPLAY
     beq .TankOffScreenIgnoreRight
     ;see if an enemy tank is 
     lda TankX,Y
@@ -2814,7 +2861,7 @@ CheckForEnemyTankSubroutine
     beq .NoCompareTankToItselfUp
     ;--see if enemy tank is offscreen
     lda TankStatus,Y
-    and #$F0
+    and #TANKINPLAY
     beq .TankOffScreenIgnoreUp
     ;see if an enemy tank is above
     lda TankY,Y
@@ -2855,7 +2902,7 @@ CheckForEnemyTankSubroutine
     beq .NoCompareTankToItselfDown
     ;--see if enemy tank is offscreen
     lda TankStatus,Y
-    and #$F0
+    and #TANKINPLAY
     beq .TankOffScreenIgnoreDown
     ;see if an enemy tank is below
     lda TankY,X
@@ -3052,7 +3099,7 @@ PlayerNotMissile
 	bne NotPlayerTankSkipNotMovingCheck
 	;--how do we know if tank is not moving?  
 	lda TankStatus
-	and #$0F
+	and #TANKSPEED
 	bne PlayerTankMovingSetRegularGraphicsPointers
 ; 	lda #0
 	.byte $2C   ;--skip two bytes 
@@ -3842,7 +3889,7 @@ TanksRemainingSpeedBoost = * - 3
                         ;--just realized the first three values in this table have no effect.  not sure
                         ;   yet if I want to shift the values or not.
 ;     .byte 15, 10, 8
-    .byte 6, 4, 2, 1, 0, 0, 0
+    .byte 6, 4, 2, 2, 0, 0, 0
     .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
 	
 	PAGEALIGN 4
@@ -4691,17 +4738,6 @@ TankCollisionLoop
     ;--tank is onscreen
     tya ;--set flags based on which tank
     bne EnemyTankDied
-; 	lda StartingTankYPosition+4
-; 	sta TankY
-; 	lda StartingTankXPosition+4
-; 	sta TankX
-; 	lda StartingTankStatus;+4
-; 	sta TankStatus
-; 	;--play tank explosion sound
-; 	sty Temp+1  ;save Y register
-; 	ldy #ENEMYTANKSOUND
-; 	jsr StartSoundSubroutineBank2
-; 	ldy Temp+1  ;restore Y register
  	;--add KILLTANKSCORE to score 
 	lda #>KILLTANKSCORE
 	sta Temp
@@ -4769,10 +4805,6 @@ BulletCollisionM1
     lda M1CollisionTable,Y
     tax
 FoundDeadTankNowKill
-;     ;--if tank offscreen, cannot be killed <--bullets are removed before they go off the maze area, so this is unnecessary
-;     lda TankStatus,X
-;     and #$F0
-;     beq TankOffScreenCannotBeKilled
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
 	lda FrameCounter
 	and #3
@@ -4991,20 +5023,6 @@ EnemyTankRespawnRoutine
 	tay	
 	bne FoundRespawnPosition    ;branch always, since enemy tank = 1, 2, or 3.  so Y holds either 2, 3, 4, 5, 6, 7 (but not 0 or 1)
 
-; 	lda RandomNumber
-; 	and #3
-; 	ora #1
-; ;	beq UseRegularRespawnPosition       ;--problem is another tank could be in this spot.  hmmmm.  instead loop through?
-; 	tay
-; FindEnemyTankRespawnLoop
-; 	lda TankStatus,Y    ;this is to see which tanks are offscreen.   In theory, if upper four bits of TankStatus are all zeroes than tank is offscreen.
-; 	and #$F0
-; 	bne FoundRespawnPosition
-; 	dey
-; 	bne FindEnemyTankRespawnLoop
-; 	ldy #3
-; 	bne FindEnemyTankRespawnLoop    ;endless loop, which should work...haha.  
-; 	                                ;besides this not working as intended, can be endless if all four tanks were stuck (blocked by other tanks) and so couldn't move.
 ; ; UseRegularRespawnPosition
 UsePlayerRespawnPosition
     txa
@@ -5035,10 +5053,8 @@ TopRowEnemyTankRespawn
 	sta TankY,X
 	lda StartingTankXPosition,Y
 	sta TankX,X
-	lda StartingTankStatus,X    ;
+	lda StartingTankStatus,X  
 	sta TankStatus,X
-; 	lda #$FF
-; 	sta TankFractional,X
 
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
@@ -5054,10 +5070,10 @@ TopRowEnemyTankRespawn
 	lda GameStatus
 	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
 	sta GameStatus
-	;--stop player tank from moving
-	lda TankStatus
-	and #$F0
-	sta TankStatus
+	;--stop tank from moving
+	lda TankStatus,X
+	and #~TANKSPEED
+	sta TankStatus,X
 	;--remove remaining enemy tanks from screen
 	lda #0		
 	sta AUDV0
@@ -5085,27 +5101,31 @@ LevelNotComplete
     ;--loop through tanks and increase speed?
     ;--use Y variable... or save X and restore?
     txa
-    pha
+    pha     ;save X
     ldx #3
 IncreaseEnemyTankSpeedLoop
     lda TankStatus,X
-    and #$0F
+    lsr     ;get TANKINPLAY flag into carry
+    bcc TankNotOnScreenDoNotIncreaseSpeed
+    rol     ;get TANKINPLAY flag back into lower bit
+    and #TANKSPEED
     clc
     adc #LEVELENDTANKSPEEDBOOST
-    cmp #15
+    cmp #TANKSPEED14+1
     bcc NewEnemyTankSpeedNotTooHigh
-    lda #$0F    
+    lda #TANKSPEED14    
 NewEnemyTankSpeedNotTooHigh
     sta Temp
     lda TankStatus,X
-    and #$F0
+    and #TANKDIRECTION|TANKINPLAY  ;clears tank speed AND tank-in-play bits
     ora Temp
     sta TankStatus,X
+TankNotOnScreenDoNotIncreaseSpeed
     dex
     bne IncreaseEnemyTankSpeedLoop
     
     pla
-    tax    
+    tax     ;restore X
 MoreThanFourTanksRemainingStill    
 	;--save and restore Y in this routine
 	pla
