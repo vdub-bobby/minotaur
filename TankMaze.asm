@@ -285,13 +285,14 @@ ENEMYTANKBASESPEED2	=	TANKSPEED4
 
 ;--SOUND CONSTANTS
 ;   indexes into lookup table for sound effects
-BRICKSOUND          =   0
-BULLETSOUND         =   1
-ENEMYTANKSOUND      =   2
-SHORTBRICKSOUND     =   3
-LONGEXPLOSIONSOUND  =   4
-ENEMYBULLETSOUND    =   5
-WALLSOUND           =   6
+BRICKSOUND              =   0
+BULLETSOUND             =   1
+ENEMYTANKSOUND          =   2
+SHORTBRICKSOUND         =   3
+LONGEXPLOSIONSOUND      =   4
+ENEMYBULLETSOUND        =   5
+WALLSOUND               =   6
+PLAYERTANKENGINESOUND   =   7
 
 ;   sound values
 PLAYERTANKVOLUME	=	8
@@ -300,6 +301,7 @@ PLAYERTANKVOLUME	=	8
 PLAYERTANKENGINEFREQ	=	8;31
 PLAYERTANKENGINETONE	=	2;ENGINESOUND
 PLAYERTANKENGINEVOLUME	=	3
+PLAYERTANKENGINELENGTH  =   3
 
 BULLETSOUNDTONE		=	ENGINESOUND
 BULLETSOUNDFREQ		=	13
@@ -2208,7 +2210,15 @@ SoundSubroutine
 	
 	;  tentative:
 	;	channel 0 = player tank movement
-	;	channel 1 = all shots and explosions (no shot sound when an explosion is happening)
+	;	channel 1 = all other sound effects (no shot sound when an explosion is happening)
+	
+	;--the way this works:
+	;   all sound effects have a duration (1-255)
+	;   this duration (stored in Channel1Decay) decrements every frame
+	;       while Channel1Decay >= 7, the volume for the sound is 7
+	;       when Channel1Decay < 7, the volume for the sound = Channel1Decay
+	;   in other words, all sounds effects have a static volume (=7) until the last 7 frames (approx 1/10 of a second)
+	;       at which point the sound volume linearly fades out to zero
 	
 	lda Channel1Decay
  	cmp #$07
@@ -2392,7 +2402,7 @@ TankFractionalAddition
 ReadControllersSubroutine
 
 	lda #0
-	pha			;movement flag
+	pha			;movement flag onto stack
 	
 	lda SWCHA	;A holds joystick
 	and #$F0	;clear bottom nibble
@@ -2405,16 +2415,20 @@ ReadControllersSubroutine
     sta TankStatus
     ;--stop engine sound
     pla ;--pop movement flag (=0) off stack
-    sta AUDV0
+;     sta AUDV0
     rts
 TryingToMove
 SkipReadingControllers
-	ldx #PLAYERTANKENGINEVOLUME
+; 	ldx #PLAYERTANKENGINEVOLUME
 ; NotTryingToMove
-	stx AUDV0	
+; 	stx AUDV0	
+;     tax ;save joystick directions
+;     ldy #PLAYERTANKENGINESOUND
+;     jsr StartSoundSubroutine
+;     txa ;restore joystick directions
 
 
-	sta Temp			;--save desired direction of tank
+	sta Temp			;--save original desired direction of tank
     ;--and set player speed which we set to zero when he stopped
     ;--set tank speed lower if player off left edge of screen
     lda TankStatus
@@ -2431,12 +2445,12 @@ RegularPlayerTankSpeed
 
         
 	lda Temp
-	pha
+	pha         ;push desired directions onto stack (player tank)
 	
-	jsr CheckForWallSubroutine		;--returns with allowed directions in A
+	jsr CheckForWallSubroutine		;--returns with allowed directions, of the desired directions, in A
 	.byte $24	;--skip next byte
-TankMovementSubroutine				;jump here when moving enemy tanks
-	pha			;--save desired direction of tank (skipped when player tank)
+TankMovementSubroutine				;jump here when moving enemy tanks, with movement flag already on top of stack)
+	pha			;--save desired direction of tank (enemy tank - skipped when player tank)
 	
 	;--if no directions are allowed, but tank is trying to move, turn tank but do not move.
 	and #$F0	;clear bottom nibble
@@ -2446,26 +2460,25 @@ TankMovementSubroutine				;jump here when moving enemy tanks
 	pha		;save index into which tank
 	tsx
 	lda #$FF
-	sta $03,X	;movementflag
+	sta $03,X	;update movementflag
 	pla
 	tax			;restore tank index
 	jmp ProcessDirections
 MovementAllowed
-	pha		;save allowed directions
+	pha		;save allowed directions (stack holds [top down]: allowed directions, desired directions, movement flag, return address)
 	
 	
 	txa
 	pha		;save index into which tank
-	
 	tsx
 	lda $02,X	;load allowed directions (see above)
 	sta $03,X	;overwrite desired directions (either joystick (if player) or calc direction if enemy)
 	pla			;pull tank index off stack
 	tax			;restore tank index
-	pla			;pull allowed directions off (of original desired directions)
+	pla			;pulls allowed directions off as it is duplicative
 ProcessDirections
-	pla			;pulls allowed directions off (of original desired directions)
-; 	jsr EliminateDiagonalSubroutine		;tanks cannot move diagonally  is this necessary?
+	pla			;pulls final directions off stack (directions that are both allowed and desired) 
+	            ;stack at this point holds (top down): movement flag, return address
 
 	tay	;--save direction in Y
 	
@@ -2481,19 +2494,23 @@ ProcessDirections
 	lda #$FF
 	sta TankFractional,X
 TankNotTurning
-	txa
-	pha	;save tank index
-	
-	tsx
-	lda $02,X		;get movement flag into carry flag  ;can we get this into some other flag?  overflow?
-	                ;then we can use the carry flag to more efficiently test direction (by shifting directions left into carry)
-	                ;could use BIT but we don't have ZP,X addressing mode
+    pla             ;get movement flag into accumulator
     sta Temp
     bit Temp        ;movement flag in overflow
-	pla
-	tax	;restore tank index
+	tya
+	pha             ;push Y (direction(s) tank wants to go) onto stack
+	cpx #0
+	bne NoTankSoundForEnemyTanks
+	lda Channel1Decay
+	cmp #PLAYERTANKENGINEVOLUME
+	bcs DoNotStartPlayerTankSound
+	ldy #PLAYERTANKENGINESOUND
+	jsr StartSoundSubroutine
+DoNotStartPlayerTankSound
 	
-	tya						;get saved directions back in A	
+NoTankSoundForEnemyTanks
+	
+	pla						;get saved directions back in A	
 	asl
 	bcs NoRight
 	bvs TurnRightward		;overflow holds movement flag (clear=no movement)
@@ -2548,7 +2565,6 @@ TurnUpward
 	sta TankStatus,X
 NoUp
 DoneMoving
-	pla		;pop movement flag off of stack and discard
 
 	;--don't allow player to fire when offscreen
 	lda TankX
@@ -2560,7 +2576,7 @@ PlayerOnScreenCanShoot
 	ldx #1
 FindAvailableBallLoop
 	lda BulletX,X
-	;cmp #BALLOFFSCREEN
+	;cmp #BALLOFFSCREEN ;<--this value is zero
 	beq FoundAvailableBall
 	dex
 	bpl FindAvailableBallLoop
@@ -3691,13 +3707,13 @@ PFRegisterLookup
 	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
 
 Tone
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
 
 Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
 
 SoundLength
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 
 		PAGEALIGN 3
 	
@@ -4805,8 +4821,8 @@ TankCollisionLoop
 	lda #<KILLTANKSCORE
 	jsr IncreaseScoreSubroutine
 	;--turn off player movement sound
-	lda #0
-	sta AUDV0
+; 	lda #0
+; 	sta AUDV0
 ;     beq PlayerTankDead
 EnemyTankDied
     ;--remove enemy tank    
@@ -5072,7 +5088,7 @@ PlayerHitTank
 	txa
 	bne EnemyTankRespawnRoutine
     ;--stop player tank sound and use regular respawn for player tank
-    sta AUDV0
+;     sta AUDV0
     beq UsePlayerRespawnPosition
 EnemyTankRespawnRoutine
 	;--new respawn routine: randomly pick between 2 respawn spots for each tank
