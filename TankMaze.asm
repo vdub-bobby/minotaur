@@ -157,7 +157,7 @@
 DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
-DEBUGTANKAICOUNTER = 1  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
+DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
 
 	processor 6502
 	include vcs.h
@@ -169,8 +169,10 @@ DEBUGTANKAICOUNTER = 1  ;if this is set, the top 4 bits of TankMovementCounter a
 ;--this macro aligns at page boundary (only if needed) and echoes the bytes used
     MAC PAGEALIGN
         if <* != 0
-        	echo "---Page aligned", ((* & $FF00) + $100) - *, "bytes left at PAGEALIGN", [{1}]d, "at location", *
+        	echo "---Page aligned -", ((* & $FF00) + $100) - *, "bytes left at PAGEALIGN", [{1}]d, "at location", *
     	    align 256
+    	else
+    	    echo "---Page aligned - 0$ bytes left at PAGEALIGN", [{1}]d, "at location", *
         endif
     ENDM
 	
@@ -281,28 +283,34 @@ ENEMYTANKBASESPEED0	=   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED6
 ENEMYTANKBASESPEED2	=	TANKSPEED4
 
+;--SOUND CONSTANTS
+;   indexes into lookup table for sound effects
+BRICKSOUND          =   0
+BULLETSOUND         =   1
+ENEMYTANKSOUND      =   2
+SHORTBRICKSOUND     =   3
+LONGEXPLOSIONSOUND  =   4
+ENEMYBULLETSOUND    =   5
+WALLSOUND           =   6
 
+;   sound values
 PLAYERTANKVOLUME	=	8
-BULLETTONE		=	3
-BULLETFREQ		=	15
 
-BRICKSOUND	=	0
-BULLETSOUND = 1
-ENEMYTANKSOUND	=	2
-SHORTBRICKSOUND = 3
-LONGEXPLOSIONSOUND	=	4
 
 PLAYERTANKENGINEFREQ	=	8;31
 PLAYERTANKENGINETONE	=	2;ENGINESOUND
 PLAYERTANKENGINEVOLUME	=	3
 
-BULLETSOUNDTONE		=	3
+BULLETSOUNDTONE		=	ENGINESOUND
 BULLETSOUNDFREQ		=	13
 BULLETSOUNDLENGTH	=	12
-BRICKSOUNDTONE		=	8
+ENEMYBULLETSOUNDTONE    =   BULLETSOUNDTONE
+ENEMYBULLETSOUNDFREQ    =   17
+ENEMYBULLETSOUNDLENGTH  =   BULLETSOUNDLENGTH
+BRICKSOUNDTONE		=	NOISESOUND
 BRICKSOUNDFREQ		=	20
 BRICKSOUNDLENGTH	=	25
-ENEMYTANKSOUNDTONE	=	8
+ENEMYTANKSOUNDTONE	=	NOISESOUND
 ENEMYTANKSOUNDFREQ	=	30
 ENEMYTANKSOUNDLENGTH	=	50
 SHORTBRICKSOUNDTONE	=	BRICKSOUNDTONE
@@ -311,6 +319,11 @@ SHORTBRICKSOUNDLENGTH	=	7
 LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
+WALLSOUNDTONE       =   SQUARESOUND
+WALLSOUNDFREQ       =   10
+WALLSOUNDLENGTH     =   SHORTBRICKSOUNDLENGTH
+
+;--end SOUND CONSTANTS
 
 WALLDESTRUCTIONSCORE    =   $0005
 KILLTANKSCORE           =   $0100
@@ -1614,12 +1627,20 @@ ShootFromTank
     cmp #MAZEAREAHEIGHT+2
     bcs TankOffscreenCannotShoot
 
-    
+    ;%
 ;     lda TankStatus,Y
 ;     lsr     ;--get TANKINPLAY flag into carry
 ;     bcc TankOffscreenCannotShoot
 FireEnemyBulletNow
 	jsr FireBulletRoutine
+	;--start enemy bullet sound, only if explosion not in early stages
+	SUBROUTINE
+; 	lda Channel1Decay
+; 	and #$F8
+; 	bne .NoEnemyBulletSound
+	ldy #ENEMYBULLETSOUND
+	jsr StartSoundSubroutine
+.NoEnemyBulletSound
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
 	;--then we're done
@@ -2178,9 +2199,7 @@ NotAtIntersection
 	eor #$FF					;flip all bits so that is interchangeable with reading from joystick
 								;and can use same routine for both.
 	jmp TankMovementSubroutine
-ReturnFromTankMovementSubroutine        ;should move this label somewhere else and save a byte
 	
-	rts
 
 ;****************************************************************************
 
@@ -2201,14 +2220,15 @@ SetChannel1Volume
 	beq DoNotUpdateChannel1Decay
 	dec Channel1Decay
 DoNotUpdateChannel1Decay	
+ReturnFromTankMovementSubroutine       
 	rts
 
 	
 ;****************************************************************************
 
     ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
-    if ((* + 5) & $FF00) != ((* + 8) & $FF00)
-        echo $FF - ((* + 4) & $FF), "bytes left at location", *
+    if ((* + 5) & $FF00) != ((* + 9) & $FF00)
+        echo "---Aligned PositionASpriteSubroutine -", $FF - ((* + 4) & $FF), "bytes left at location", *
         ds $FF - ((* + 4) & $FF)
     endif
 
@@ -2379,9 +2399,9 @@ ReadControllersSubroutine
 	cmp #$F0
     bne TryingToMove
     ;--not trying to move, so just ... exit?
-    ;--also clear TankStatus bottom nibble so we know it isn't trying to move.
+    ;--also clear speed bits in TankStatus so we know it isn't trying to move.
     lda TankStatus
-    and #$F0
+    and #~TANKSPEED
     sta TankStatus
     ;--stop engine sound
     pla ;--pop movement flag (=0) off stack
@@ -2450,8 +2470,8 @@ ProcessDirections
 	tay	;--save direction in Y
 	
 	;--if tank is turning, set fractional variable so tank moves immediately
-	and #$F0
-	eor #$F0
+	and #TANKDIRECTION
+	eor #$F0        ;flip bits
 	sta Temp
 	lda TankStatus,X
 	and #TANKDIRECTION
@@ -2465,45 +2485,18 @@ TankNotTurning
 	pha	;save tank index
 	
 	tsx
-	asl $02,X		;get movement flag into carry flag
-
+	lda $02,X		;get movement flag into carry flag  ;can we get this into some other flag?  overflow?
+	                ;then we can use the carry flag to more efficiently test direction (by shifting directions left into carry)
+	                ;could use BIT but we don't have ZP,X addressing mode
+    sta Temp
+    bit Temp        ;movement flag in overflow
 	pla
 	tax	;restore tank index
 	
 	tya						;get saved directions back in A	
-	and #J0UP
-	bne NoUp
-	bcs TurnUpward			;carry holds movement flag (carry clear=no movement)
-	jsr TankFractionalAddition
-	lda TankY,X
-	adc #0
-	sta TankY,X
-	
-TurnUpward
-	lda TankStatus,X
-	and #~TANKDIRECTION
-	ora #TANKUP
-	sta TankStatus,X
-	jmp DoneMoving
-NoUp
-	tya
-	and #J0DOWN
-	bne NoDown
-	bcs TurnDownward		;carry holds movement flag (carry clear=no movement)
-	jsr TankFractionalAddition
-	bcc TurnDownward	;but don't move down
-	dec TankY,X
-TurnDownward
-	lda TankStatus,X
-	and #~TANKDIRECTION
-	ora #TANKDOWN
-	sta TankStatus,X
-	jmp DoneMoving
-NoDown
-	tya
-	and #J0RIGHT
-	bne NoRight
-	bcs TurnRightward		;carry holds movement flag (carry clear=no movement)
+	asl
+	bcs NoRight
+	bvs TurnRightward		;overflow holds movement flag (clear=no movement)
 	jsr TankFractionalAddition
 	lda TankX,X
 	adc #0
@@ -2513,22 +2506,47 @@ TurnRightward
 	and #~TANKDIRECTION
 	ora #TANKRIGHT
 	sta TankStatus,X
-	jmp DoneMoving
+	bne DoneMoving  ;branch always 
 NoRight
-	tya
-	and #J0LEFT
-	bne NoLeft
-	bcs TurnLeftward		;carry holds movement flag (carry clear=no movement)
+	asl
+	bcs NoLeft
+	bvs TurnLeftward		;overflow holds movement flag (clear=no movement)
 	jsr TankFractionalAddition
-	bcc TurnLeftward	;but don't move
+	bcc TurnLeftward	;but don't move -- since TankFractional always adds, we can't then SBC #0 and use the carry flag here
 	dec TankX,X
 TurnLeftward
 	lda TankStatus,X
 	and #~TANKDIRECTION
 	ora #TANKLEFT
 	sta TankStatus,X
-	
+	bne DoneMoving  ;branch always 
 NoLeft
+    asl
+    bcs NoDown
+	bvs TurnDownward		;overflow holds movement flag (clear=no movement)
+	jsr TankFractionalAddition
+	bcc TurnDownward	;but don't move down
+	dec TankY,X
+TurnDownward
+	lda TankStatus,X
+	and #~TANKDIRECTION
+	ora #TANKDOWN
+	sta TankStatus,X
+	bne DoneMoving  ;branch always
+NoDown
+    asl
+    bcs NoUp
+	bvs TurnUpward			;overflow holds movement flag (clear=no movement)
+	jsr TankFractionalAddition
+	lda TankY,X
+	adc #0
+	sta TankY,X
+TurnUpward
+	lda TankStatus,X
+	and #~TANKDIRECTION
+	ora #TANKUP
+	sta TankStatus,X
+NoUp
 DoneMoving
 	pla		;pop movement flag off of stack and discard
 
@@ -3672,7 +3690,14 @@ PFRegisterLookup
 	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
 	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
 
+Tone
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
 
+Frequency
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
+
+SoundLength
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
 
 		PAGEALIGN 3
 	
@@ -3988,14 +4013,6 @@ SwitchMovementX = *-1
 SwitchMovementY = *-1
 	.byte 255, 0, 255
 	
-Tone
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE
-
-Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ
-
-SoundLength
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH
 	
 NumberOfBitsSet
 	.byte 0, 1, 1, 2
@@ -4141,7 +4158,7 @@ NoUpdateBulletFractionalThisFrame
     sta Temp
 	lda BulletY,X
 	;cmp #BALLOFFSCREEN
-	beq BulletOffScreen;NoBulletMovement
+	beq NoBulletMovement;BulletOffScreen;
 	lda BulletDirection
 	and BulletDirectionMask,X
 	tay							;save value
@@ -4200,6 +4217,9 @@ BulletOffScreen
 	lda #BALLOFFSCREEN
 	sta BulletX,X       ;<--is this necessary?
 	sta BulletY,X	
+	;--make noise for when bullet hits outer wall
+	ldy #WALLSOUND
+	jsr StartSoundSubroutineBank2
 NoBulletMovement
 BulletOnScreen
 ; 	dex
@@ -5175,7 +5195,7 @@ MoreThanFourTanksRemainingStill
 	rts
 
 ;****************************************************************************
-
+    SUBROUTINE
 StartSoundSubroutineBank2
 	
 	lda Channel1Decay
@@ -5187,7 +5207,6 @@ StartSoundSubroutineBank2
 	sta AUDF1
 	lda SoundLengthBank2,Y
 	sta Channel1Decay
-	
 .DoNotStartSound
 	rts
 
@@ -5421,13 +5440,12 @@ StartingTankStatus
 	
 	
 ToneBank2
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
 
 FrequencyBank2
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
 SoundLengthBank2
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH
-
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
 	
 NumberOfBitsSetBank2
 	.byte 0, 1, 1, 2
