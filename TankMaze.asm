@@ -122,6 +122,8 @@
 	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 
 	BUG KILLING!
+        Occasionally (cause?) the a tank respawns when it shouldn't.
+        Tanks kill each other when entering the screen.  Need to see if this can be fixed.
 		scanline count is wonky, need to tighten up various subroutines that take too long
 	    FIXED: remove bullets from screen during level transitions
         FIXED: Tanks still firing when offscreen.  
@@ -142,7 +144,8 @@
                 alternative solution: have tanks that don't move for more than 1/2 second to die.
                 problem is that either of those solutions require some kind of counter for "tank stuck"  
                 I do have probably one free byte of RAM I could use but ... 
-                IMPLEMENTED THIS: Actually, it probably wouldn't be too difficult to fire a bullet from a tank that isn't moving.
+                IMPLEMENTED THIS: Actually, it probably wouldn't be too difficult to fire a bullet from a tank that isn't moving.  They fire immediately,
+                    and just whichever direction they are facing.  Depending, this may not suffice to free them.  
 	
   Notes from ZeroPage livestream on 9/1:
       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
@@ -186,13 +189,15 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 50       ;--this jitters a bit
+VBLANK_TIMER = 51       ;--this jitters a bit
 OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
 
 TANKHEIGHT	=	7
 BLOCKHEIGHT = 	7
+ROWHEIGHT = 7
+COLUMNWIDTH = 8
 MAZEROWS	=	11
 TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
@@ -322,8 +327,8 @@ LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
 WALLSOUNDTONE       =   SQUARESOUND
-WALLSOUNDFREQ       =   10
-WALLSOUNDLENGTH     =   SHORTBRICKSOUNDLENGTH
+WALLSOUNDFREQ       =   8
+WALLSOUNDLENGTH     =   8
 
 ;--end SOUND CONSTANTS
 
@@ -788,6 +793,20 @@ PositioningLoop	;--just players
 		
 	jmp BeginMainMazeKernel ;+3     33
 
+	
+;****************************************
+	;--stick this here since we have a few free bytes
+UpdateRandomNumber
+    lda RandomNumber
+    lsr
+    bcc SkipEOR
+    eor #$B2
+SkipEOR
+    sta RandomNumber
+    rts
+
+	
+;*****************************************
     PAGEALIGN 1
 	
 Switch0
@@ -1259,7 +1278,7 @@ InBetweenLevels
 	;--keep playing sound even when game not on
 	jsr SoundSubroutine
 	
-	jsr UpdateRandomNumber
+	jsr UpdateRandomNumber  ;--once per frame
 	
 
     lda GameStatus
@@ -1382,7 +1401,7 @@ OverTimeOverscan
 	nop
 EndOverscan	
 	
-	sta WSYNC		;last line...I think?
+;	sta WSYNC		;last line...I think?
 
 	rts
 	
@@ -1496,19 +1515,16 @@ SetUpTankInitialValues
 	lda #GAMEOFF|TITLESCREEN
 	sta GameStatus
 
-	lda #PLAYERTANKENGINETONE
-	sta AUDC0
-	
-	lda #PLAYERTANKENGINEFREQ
-	sta AUDF0
 	
 	lda #WALLCOLOR
 	sta COLUPF
 	
-	lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	if DEBUGPFPRIORITY = 1
-	    and #~PRIORITYPF
+	    lda #REFLECTEDPF|DOUBLEWIDTHBALL
+	else
+	    lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
 	endif    
+	
 	sta CTRLPF
 	
 	lda #TitleGraphicsEnd-TitleGraphics-1
@@ -1616,10 +1632,6 @@ FindStuckTank
 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
     ;--if tank offscreen, don't shoot from it
-; 	lda TankStatus,Y
-; 	and #$F0
-; 	beq TankOffscreenCannotShoot
-
     lda TankX,Y
     cmp #16
     bcc TankOffscreenCannotShoot
@@ -1629,22 +1641,53 @@ ShootFromTank
     cmp #MAZEAREAHEIGHT+2
     bcs TankOffscreenCannotShoot
 
+    ;--what kind of logic can we use for shooting?
+    ;-- how about - only allow horizontal firing if on bottom row (at base) or if player tank is within ... 3 rows?
+    ;               and only allow vertical firing if in center two columns (at base) or if player tank is within ...3 columns?
+    lda TankStatus,Y
+    asl
+    bcs EnemyShootingHorizontal
+    asl
+    bcs EnemyShootingHorizontal
+    ;--else shooting vertical
+    ;--is tank in center two columns? (X between 72 and 80)
+    lda TankX,Y
+    cmp #72
+    bcc EnemyNotInCenterColumns    
+    cmp #80
+    bcs FireEnemyBulletNow
+EnemyNotInCenterColumns
+    ;--now see if close to player tank
+    clc
+    adc #COLUMNWIDTH*3
+    sec
+    sbc TankX
+    cmp #(COLUMNWIDTH*7)+1
+    bcc FireEnemyBulletNow
+    bcs EnemyNotAllowedToShootVertically    ;branch always
+EnemyShootingHorizontal    ;--just don't shoot horizontally for now so I can see if everything is working
+    lda TankY,Y
+    cmp #ROWHEIGHT+1
+    beq FireEnemyBulletNow
+    clc
+    adc #ROWHEIGHT*3
+    sec
+    sbc TankY
+    cmp #(ROWHEIGHT*7)+1
+    bcs EnemyNotAllowedToShootHorizontally
     ;%
 ;     lda TankStatus,Y
 ;     lsr     ;--get TANKINPLAY flag into carry
 ;     bcc TankOffscreenCannotShoot
 FireEnemyBulletNow
 	jsr FireBulletRoutine
-	;--start enemy bullet sound, only if explosion not in early stages
-	SUBROUTINE
-; 	lda Channel1Decay
-; 	and #$F8
-; 	bne .NoEnemyBulletSound
+	;--start enemy bullet sound
 	ldy #ENEMYBULLETSOUND
 	jsr StartSoundSubroutine
-.NoEnemyBulletSound
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
+EnemyNotAllowedToShootVertically
+EnemyNotAllowedToShootHorizontally
 	;--then we're done
 	rts	
 	
@@ -1660,8 +1703,6 @@ SetInitialEnemyTankSpeedRoutine
 	clc
 	adc MazeNumber
 	;--increase speed depending on tanks remaining
-;	sta Temp
-; 	lda Temp
     ldy TanksRemaining
     adc TanksRemainingSpeedBoost,Y
 	cmp #15
@@ -2107,35 +2148,11 @@ EnemyTank1Routine
     pha
     lda TankY
     pha
-; 	ldy TankTargetX,X
-; 	lda $00,Y
-; 	ldy TankTargetAdjustX,X
-; 	sec
-; 	sbc $00,Y
-; 	jsr DivideByTwoSubroutine   ;can't just LSR since we need to account for negative numbers
-; 	clc
-; 	adc $00,Y
-; 	pha
-; 	jsr UpdateRandomNumber
-; 	ldy TankTargetY,X
-; 	lda $00,Y
-; 	ldy TankTargetAdjustY,X
-; 	sec
-; 	sbc $00,Y
-; 	jsr DivideByTwoSubroutine
-; 	clc
-; 	adc $00,Y
-; 	pha
-
 ChooseTankDirection
     ;have allowable directions in stack and target X and Y values in stack
 	jsr ChooseTankDirectionSubroutine	;returns with new direction in accumulator
 	;takes desired direction and sticks it in TankStatus
 	sta Temp
-; 	lda TankStatus,X
-; 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
-; 	ora Temp
-; 	sta TankStatus,X					
 	pla
 	pla									;pull target for tank off stack and discard
 
@@ -2189,10 +2206,10 @@ NotAtIntersection
 
 
 	;push return address onto stack
-	lda #>(ReturnFromTankMovementSubroutine-1)
-	pha
-	lda #<(ReturnFromTankMovementSubroutine-1)
-	pha
+; 	lda #>(ReturnFromTankMovementSubroutine-1)
+; 	pha
+; 	lda #<(ReturnFromTankMovementSubroutine-1)
+; 	pha
 	;push movementflag (zero) onto stack
 	lda #0
 	pha
@@ -2240,6 +2257,8 @@ ReturnFromTankMovementSubroutine
     if ((* + 5) & $FF00) != ((* + 9) & $FF00)
         echo "---Aligned PositionASpriteSubroutine -", $FF - ((* + 4) & $FF), "bytes left at location", *
         ds $FF - ((* + 4) & $FF)
+    else
+        echo "---Aligned PositionASpriteSubroutine not necessary"
     endif
 
 PositionASpriteSubroutine
@@ -2287,27 +2306,19 @@ DivideLoop2			;				this loop can't cross a page boundary!!!
 
 
 
-DivideByTwoSubroutine		;come in with number in accumlator
-	and #$FF		;set flags
-	clc
-	bpl DivideByTwoPositive
-	;--else negative
-	sec
-DivideByTwoPositive
-	ror
-	rts
+; DivideByTwoSubroutine		;come in with number in accumlator
+; 	and #$FF		;set flags
+; 	clc
+; 	bpl DivideByTwoPositive
+; 	;--else negative
+; 	sec
+; DivideByTwoPositive
+; 	ror
+; 	rts
 	
 	
 ;****************************************************************************
 
-UpdateRandomNumber
-    lda RandomNumber
-    lsr
-    bcc SkipEOR
-    eor #$B2
-SkipEOR
-    sta RandomNumber
-    rts
     
 ;****************************************************************************
 
@@ -2382,19 +2393,6 @@ DirectionsFine
 
 	rts
 
-;****************************************************************************
-
-TankFractionalAddition	
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$1F
-    clc
-    adc TankFractional,X
-	sta TankFractional,X
-    rts
 	
 	
 ;****************************************************************************
@@ -3715,6 +3713,23 @@ Frequency
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 
+	
+;****************************************************************************
+
+TankFractionalAddition	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$1F
+    clc
+    adc TankFractional,X
+	sta TankFractional,X
+    rts
+
+;****************************************************************************
+	
 		PAGEALIGN 3
 	
 DigitData
