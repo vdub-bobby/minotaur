@@ -189,7 +189,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 51       ;--this jitters a bit
+VBLANK_TIMER = 41       ;--this jitters a bit
 OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
@@ -564,7 +564,8 @@ LastRowL ds 1
 LastRowR ds 1
 Temp ds 3
 MiscPtr 
-ScorePtr ds 6
+ScorePtr ds 12
+
 
    ; Display Remaining RAM
    echo "----",($100 - *) , "bytes left (ZP RAM)"
@@ -576,8 +577,12 @@ ScorePtr ds 6
 	rorg $1000
 
 Start
-	sta $1FF8
-	CLEAN_START
+;	sta $1FF8
+;     nop
+;     nop
+;     nop
+	jmp *+3
+    CLEAN_START
 
 ;--Some Initial Setup
 
@@ -595,629 +600,622 @@ Start
 MainGameLoop
 
 	jsr VBLANKRoutine
-	jsr KernelRoutineGame
+	brk
+	.word KernelRoutineGame
 	jsr OverscanRoutine
 	jmp MainGameLoop
 
 
 
 	
-;----------------------------------------------------------------------------
-;----------------------Kernel Routine----------------------------------------
-;----------------------------------------------------------------------------
-	
-KernelRoutineGame
-
-
-	;--room for score up here?
-
-	lda #RIGHTEIGHT
-	sta HMM1
-	
-	ldy #0
-	sta WSYNC
-	lda #SCORECOLOR
-	sta COLUP0
-	sta COLUP1						;+8		 8
-		
-	
-	;--display score
-	lda #THREECOPIESCLOSE|LEFTONE
-	sta VDELP0
-	sta VDELP1						;+8		16		turn on VDELPx (bit0==1)
-
-	sta NUSIZ0
-	sta NUSIZ1						;+6		29
-
-	SLEEP 7
-	
-	sta HMP0						  ;					 LEFTONE
-	asl
-	sta HMP1						  ;+8		37		LEFTTWO
-
-	sta RESP0						 ;+8		40		positioned at 57 (move left 1)
-	sta RESP1						 ;+3		43		positioned at 66 (move left 2)
-
-	sty GRP1
-	sty GRP0
-	sty ENAM0						 ;+7		50
-
-
-	sta WSYNC
-	sta HMOVE	
-	;--waste time efficiently:
-	SUBROUTINE
-	ldy #10		; 2
-.wait
-	dey			 ; 2
-	bne .wait	 ; 3
-
-	SLEEP 3
-	
-	ldy #6+1
-ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
-									 ;				(or - if it does, adjust the timing!)
-	SLEEP 3
-	dey							 ;+5		64
-	sty Temp					;+3		67
-	lda (ScorePtr),Y
-	sta GRP0					  ;+8		75
-	lda (ScorePtr+2),Y
-	sta GRP1					  ;+8		 7
-	lda (ScorePtr+4),Y
-	sta GRP0					  ;+8		15
-	lda (ScorePtr+6),Y
-	tax							 ;+7		22
-	lda (ScorePtr+8),Y
-	pha							 ;+8		30
-	lda (ScorePtr+10),Y
-	tay							 ;+7		37
-	pla							 ;+4		41
-	stx GRP1					  ;+3		44
-	sta GRP0
-	sty GRP1
-	sty GRP0					  ;+9		53
-	ldy Temp					;+3		56
-	bne ScoreKernelLoop		;+3		59
-									 ;		  58
-	sty GRP0
-	sty GRP1
-	sty GRP0					  ;+9		67	
-	
-	
-	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
-	sta NUSIZ0
-	sta NUSIZ1
-	
-	;--tank colors
-	lda #TANKCOLOR1 ;GOLD+10
-	sta COLUP0
-	lda #TANKCOLOR2 ;BLUE2+12
-	sta COLUP1
-	
-	;--reflect P0 or P1 as necessary.   prep for flip loop below
-	lda FrameCounter
-	and #1
-	asl
-	tax
-	lda RotationTablesBank1,X
-	sta MiscPtr
-	lda RotationTablesBank1+1,X
-	sta MiscPtr+1
-	
-	SUBROUTINE
-	if DEBUGTANKAICOUNTER = 1
-        lda TankMovementCounter
-        cmp #TANKAISWITCH
-        bcs .tankaidebug
-        lda #BLUE|$4
-        bcc .tankaidebugend
-.tankaidebug
-    	lsr
-    	lsr
-    	lsr
-    	lsr
-    	ora #WALLCOLOR&$F0
-.tankaidebugend
-    ELSE
-        lda #WALLCOLOR
-    ENDIF
-
-	sta COLUPF
-	;--do this above...the rest we do during the wall below.  
-	ldx #4
-; PositioningLoopVBLANK	;--excluding players (and M1)
-	lda PlayerX,X
-	jsr PositionASpriteSubroutine   ;        9
-; 	dex
-; 	cpx #3
-; 	bne PositioningLoopVBLANK
-	
-
-	
-	ldx #$C0
-	lda #$FF                        ;+4     13
+; ;----------------------------------------------------------------------------
+; ;----------------------Kernel Routine----------------------------------------
+; ;----------------------------------------------------------------------------
+; 	
+; KernelRoutineGame
+; 
+; 
+; 	;--room for score up here?
+; 
+; 	lda #RIGHTEIGHT
+; 	sta HMM1
+; 	
+; 	ldy #0
 ; 	sta WSYNC
-; 	sta HMCLR
-	stx PF0
-	sta PF1
-	sta PF2                         ;+9     22
-	
-	;---reflect P0/P1
-	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
-	ldy #3
-SetREFPLoop
-	lda TankStatus,Y
-	and #TANKLEFT
-	beq EndREFPLoop     ;--only if facing left do we reflect
-	lax (MiscPtr),Y		;get X index into graphics registers
-	cpx #2
-	bcs EndREFPLoop
-	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
-	sta REFP0,X	
-EndREFPLoop
-	dey
-	bpl SetREFPLoop
-
-	
-	sty VDELP0  ;Y is 255 following loop above
-	sty VDELBL    
-
-	iny         ;Y = 0
-	sty VDELP1
-	
-	tsx
-	stx Temp       ;save stack pointer
-		
-
-	ldx #3
-PositioningLoop	;--just players
-	lda PlayerX,X
-	jsr PositionASpriteSubroutine
-	dex
-	bpl PositioningLoop     ;       13 cycles last time through
-    
-	sty PF1                 ; Y is zero
-	sty PF2					;
-	sta CXCLR               ;+9     22
-
-	;--use stack pointer to hit ENABL
-	ldx #<ENABL
-	txs						;+4		26
-	
-	nop
-    nop
-    
-	ldy #TANKAREAHEIGHT		;+2		30
-
-		
-	jmp BeginMainMazeKernel ;+3     33
-
-	
+; 	lda #SCORECOLOR
+; 	sta COLUP0
+; 	sta COLUP1						;+8		 8
+; 		
+; 	
+; 	;--display score
+; 	lda #THREECOPIESCLOSE|LEFTONE
+; 	sta VDELP0
+; 	sta VDELP1						;+8		16		turn on VDELPx (bit0==1)
+; 
+; 	sta NUSIZ0
+; 	sta NUSIZ1						;+6		29
+; 
+; 	SLEEP 7
+; 	
+; 	sta HMP0						  ;					 LEFTONE
+; 	asl
+; 	sta HMP1						  ;+8		37		LEFTTWO
+; 
+; 	sta RESP0						 ;+8		40		positioned at 57 (move left 1)
+; 	sta RESP1						 ;+3		43		positioned at 66 (move left 2)
+; 
+; 	sty GRP1
+; 	sty GRP0
+; 	sty ENAM0						 ;+7		50
+; 
+; 
+; 	sta WSYNC
+; 	sta HMOVE	
+; 	;--waste time efficiently:
+; 	SUBROUTINE
+; 	ldy #10		; 2
+; .wait
+; 	dey			 ; 2
+; 	bne .wait	 ; 3
+; 
+; 	SLEEP 3
+; 	
+; 	ldy #6+1
+; ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
+; 									 ;				(or - if it does, adjust the timing!)
+; 	SLEEP 3
+; 	dey							 ;+5		64
+; 	sty Temp					;+3		67
+; 	lda (ScorePtr),Y
+; 	sta GRP0					  ;+8		75
+; 	lda (ScorePtr+2),Y
+; 	sta GRP1					  ;+8		 7
+; 	lda (ScorePtr+4),Y
+; 	sta GRP0					  ;+8		15
+; 	lda (ScorePtr+6),Y
+; 	tax							 ;+7		22
+; 	lda (ScorePtr+8),Y
+; 	pha							 ;+8		30
+; 	lda (ScorePtr+10),Y
+; 	tay							 ;+7		37
+; 	pla							 ;+4		41
+; 	stx GRP1					  ;+3		44
+; 	sta GRP0
+; 	sty GRP1
+; 	sty GRP0					  ;+9		53
+; 	ldy Temp					;+3		56
+; 	bne ScoreKernelLoop		;+3		59
+; 									 ;		  58
+; 	sty GRP0
+; 	sty GRP1
+; 	sty GRP0					  ;+9		67	
+; 	
+; 	
+; 	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
+; 	sta NUSIZ0
+; 	sta NUSIZ1
+; 	
+; 	;--tank colors
+; 	lda #TANKCOLOR1 ;GOLD+10
+; 	sta COLUP0
+; 	lda #TANKCOLOR2 ;BLUE2+12
+; 	sta COLUP1
+; 	
+; 	;--reflect P0 or P1 as necessary.   prep for flip loop below
+; 	lda FrameCounter
+; 	and #1
+; 	asl
+; 	tax
+; 	lda RotationTablesBank1,X
+; 	sta MiscPtr
+; 	lda RotationTablesBank1+1,X
+; 	sta MiscPtr+1
+; 	
+; 	SUBROUTINE
+; 	if DEBUGTANKAICOUNTER = 1
+;         lda TankMovementCounter
+;         cmp #TANKAISWITCH
+;         bcs .tankaidebug
+;         lda #BLUE|$4
+;         bcc .tankaidebugend
+; .tankaidebug
+;     	lsr
+;     	lsr
+;     	lsr
+;     	lsr
+;     	ora #WALLCOLOR&$F0
+; .tankaidebugend
+;     ELSE
+;         lda #WALLCOLOR
+;     ENDIF
+; 
+; 	sta COLUPF
+; 	;--do this above...the rest we do during the wall below.  
+; 	ldx #4
+; ; PositioningLoopVBLANK	;--excluding players (and M1)
+; 	lda PlayerX,X
+; 	jsr PositionASpriteSubroutine   ;        9
+; ; 	dex
+; ; 	cpx #3
+; ; 	bne PositioningLoopVBLANK
+; 	
+; 
+; 	
+; 	ldx #$C0
+; 	lda #$FF                        ;+4     13
+; ; 	sta WSYNC
+; ; 	sta HMCLR
+; 	stx PF0
+; 	sta PF1
+; 	sta PF2                         ;+9     22
+; 	
+; 	;---reflect P0/P1
+; 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
+; 	ldy #3
+; SetREFPLoop
+; 	lda TankStatus,Y
+; 	and #TANKLEFT
+; 	beq EndREFPLoop     ;--only if facing left do we reflect
+; 	lax (MiscPtr),Y		;get X index into graphics registers
+; 	cpx #2
+; 	bcs EndREFPLoop
+; 	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
+; 	sta REFP0,X	
+; EndREFPLoop
+; 	dey
+; 	bpl SetREFPLoop
+; 
+; 	
+; 	sty VDELP0  ;Y is 255 following loop above
+; 	sty VDELBL    
+; 
+; 	iny         ;Y = 0
+; 	sty VDELP1
+; 	
+; 	tsx
+; 	stx Temp       ;save stack pointer
+; 		
+; 
+; 	ldx #3
+; PositioningLoop	;--just players
+; 	lda PlayerX,X
+; 	jsr PositionASpriteSubroutine
+; 	dex
+; 	bpl PositioningLoop     ;       13 cycles last time through
+;     
+; 	sty PF1                 ; Y is zero
+; 	sty PF2					;
+; 	sta CXCLR               ;+9     22
+; 
+; 	;--use stack pointer to hit ENABL
+; 	ldx #<ENABL
+; 	txs						;+4		26
+; 	
+; 	nop
+;     nop
+;     
+; 	ldy #TANKAREAHEIGHT		;+2		30
+; 
+; 		
+; 	jmp BeginMainMazeKernel ;+3     33
+; 
+; 	
 ;****************************************
 	;--stick this here since we have a few free bytes
-UpdateRandomNumber
-    lda RandomNumber
-    lsr
-    bcc SkipEOR
-    eor #$B2
-SkipEOR
-    sta RandomNumber
-    rts
 
-	
-;*****************************************
-    PAGEALIGN 1
-	
-Switch0
-	lda Player0Bottom
-	sta Player0Top
-	bne BackFromSwitch0
-
-Wait0
-	nop
-	nop
-	bpl BackFromSwitch0
-	
-Switch1
-	lda Player0Bottom
-	sta Player0Top
-	bne BackFromSwitch1
-
-Wait1
-	nop
-	nop
-	bpl BackFromSwitch1
-	
-	
-	
-BeginMainMazeKernel
-
-
-	
-
-	
-KernelLoop
-	;draw player 0
-	cpy Player0Top				
-	beq Switch0
-	bpl Wait0
-	lda (Player0Ptr),Y
-	sta GRP0				;+15	50
-BackFromSwitch0	
-	
-
-	ldx BlockRowTable-BLOCKHEIGHT-1,Y	;+4		54
-
-	;draw player 1
-	lda #TANKHEIGHT*2-1
-	dcp PlayerYTemp
-	bcs DoDraw10
-	lda #0
-	.byte $2C
-DoDraw10
-	lda (Player1Ptr),Y
-	sta GRP1				;+18	72
-
-
-
-	;draw missile 0
-	lda #TANKHEIGHT-2
-	dcp MissileYTemp
-	sbc #TANKHEIGHT-4
-	sta ENAM0				;+12	 8
-	
-	
-	lda #TANKHEIGHT-2
-	dcp MissileYTemp+1
-	sbc #TANKHEIGHT-4
-	sta ENAM1				;+12	20
-	
-
-	
-	
-	lda PF1Left,X
-	sta PF1				;+7		27
-	lda PF2Left,X
-	sta PF2				;+7		34
-	
-	lda PF1Right,X
-	sta PF1				;+7		41
-	lda PF2Right,X
-	sta PF2				;+7		48
-
-	tsx					;+2		50
-	cpy BallY
-	php
-	txs					;+8		58
-	
-	
-	cpy Player0Top				
-	beq Switch1
-	bpl Wait1
-	lda (Player0Ptr+2),Y		
-	sta GRP0			;+15	73
-BackFromSwitch1
-	
-	
-	;draw player 1
-	lda #TANKHEIGHT*2-1
-	dcp PlayerYTemp
-	bcs DoDraw11
-	lda #0
-	.byte $2C
-DoDraw11
-	lda (Player1Ptr+2),Y
-	sta GRP1			;+18	15
-	
-	lda #0
-	sta PF1
-	sta PF2				;+8		23
-	
-	
-	dey
-	cpy #BLOCKHEIGHT
-	beq KernelLastRow	;+6		29
-	SLEEP 3
-	bne KernelLoop		;+6		35
-
-	
-Switch0b
-	lda Player0Bottom
-	sta Player0Top
-	bne BackFromSwitch0b
-
-Wait0b
-	nop
-	nop
-	bpl BackFromSwitch0b
-	
-Switch1b
-	lda Player0Bottom
-	sta Player0Top
-	bne BackFromSwitch1b
-
-Wait1b
-	nop
-	nop
-	bpl BackFromSwitch1b
-	
-KernelLastRow				;		31		branch here crosses page boundary
-	;lda #$80
-	;sta PF2
-	SLEEP 5
-	;line 1 of last row, this row has BASE (not wall)
-KernelLastRowLoop			;		36
-	lda Temp+1
-	sta COLUPF				;+6		42
-	;draw player 0
-	cpy Player0Top				
-	beq Switch0b
-	bpl Wait0b
-	lda (Player0Ptr),Y
-	sta GRP0				;+15	57
-BackFromSwitch0b
-	
-	lda #WALLCOLOR
-	sta COLUPF				;+5		62
-	
-
-	;draw player 1
-	lda #TANKHEIGHT*2-1
-	dcp PlayerYTemp
-	bcs DoDraw10b
-	lda #0
-	.byte $2C
-DoDraw10b
-	lda (Player1Ptr),Y
-	sta GRP1				;+18	 4
-
-
-	;line 2 of last row, has WALL (not base)
-	;draw missile 0
-	lda #TANKHEIGHT-2
-	dcp MissileYTemp
-	sbc #TANKHEIGHT-4
-	sta ENAM0				;+12	16
-	
-	
-	lda #TANKHEIGHT-2
-	dcp MissileYTemp+1
-	sbc #TANKHEIGHT-4
-	sta ENAM1				;+12	28
-	
-	
-	lda LastRowL
-	sta PF2					;+6		34
-	
-	SLEEP 6					;		40
-
-	
-	lda LastRowR
-	sta PF2					;+6		46
-	
-	tsx
-	cpy BallY
-	php
-	txs						;+10	56
-	
-	
-	
-	cpy Player0Top				
-	beq Switch1b
-	bpl Wait1b
-	lda (Player0Ptr+2),Y		
-	sta GRP0				;+15	71
-BackFromSwitch1b
-	
-	
-	;draw player 1
-	lda #TANKHEIGHT*2-1
-	dcp PlayerYTemp
-	bcs DoDraw11b
-	lda #0
-	.byte $2C
-DoDraw11b
-	lda (Player1Ptr+2),Y
-	sta GRP1			;+18	13
-	
-	lda LastRowL
-	sta PF2				;+6		19
-
-    ;--don't draw base sometimes	
-    lda GameStatus
-    and #DRAWBASE
-    beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
-	
-	lda #$80
-	sta PF2				;+5		31
-	dey
-	bne KernelLastRowLoop		;+5		36
-	beq DoneWithKernelLastRowLoop   ;is this necessary?
-DoNotDrawBase
-    sta.w PF2           ;+4
-    dey
-    bne KernelLastRowLoop
-DoneWithKernelLastRowLoop
-	sty PF2		;AKSHUALLY don't display base on last row
-	ldx Temp
-	txs			;+8		44
-
-	sty ENABL	;+3		47
-	sty GRP0	;+3		50
-	ldy #$FF	;+2		52
-	ldx #0		;+2		54
-	sta WSYNC
-	sty PF2		;+3		57
-	sty PF1		;+3		60
-	stx GRP1	
-	stx ENAM0
-	stx ENAM1
-;	sta PF0
-	
-;     sta HMCLR
-	lda #104
-; 	jsr PositionASpriteNoHMOVESubroutine
-    jsr PositionASpriteSubroutine	
-
-	lda #112
-	inx
-; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-    jsr PositionASpriteSubroutine	
-    
-	lda #60
-	inx
-; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-    jsr PositionASpriteSubroutine	
-
-	lda #66
-	inx
-; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-    jsr PositionASpriteSubroutine	
-
-	
-	;--done displaying maze
-	;--set up score, tanks remaining, lives remaining etc
-
-	sta WSYNC
-; 	sta HMOVE
-	ldy #0
-	sty PF0
-	sty PF1
-	sty PF2
-	sty COLUPF
-	sty REFP0
-	sty REFP1
-	sty VDELP0
-	sty VDELBL
-	lda #THREECOPIESCLOSE
-	sta NUSIZ0
-	lda #TWOCOPIESCLOSE
-	sta NUSIZ1
-	
-	lda #TANKSREMAININGCOLOR
-	sta COLUP0
-	sta COLUP1
-	sta HMCLR
-	
-
-	lda #>DigitDataMissile
-	sta Player0Ptr+3
-	sta Player1Ptr+1
-	lda MazeNumber
-	lsr
-	lsr
-	lsr
-	lsr
-	tay
-	lda DigitDataMissileLo,Y
-	sta Player0Ptr+2
-	lda MazeNumber
-	and #$0F
-	tay
-	lda DigitDataMissileLo,Y
-	sta Player1Ptr
-
-	lda #$FF
-	sta PF0
-	sta PF2		;this masks the missiles before we want them to show
-				;we will use the actual mask inside the loop below
-	
-	lda TanksRemaining
-	lsr
-	tax
-
-	lda TanksRemainingPF1Mask,X
-	sta PF1
-	
-	lda #2
-	sta ENAM0
-	sta ENAM1
-	ldy #8
-	bne BottomKernelLoopInner	;	branch always
-	
-BottomKernelLoopMiddle			;		19
-	dey							;+2		21
-	
-	lda TanksRemaining
-	lsr
-	adc #0						;+7		28
-	
-	tax							;+2		30
-	lda TanksRemainingPF1Mask,X
-	sta PF1
-	lda TanksRemainingPF2Mask,X
-	sta PF2						;14		44
-	
-	lda (Player0Ptr+2),Y		;+5
-	sta HMM0					;+3
-	asl							;+2
-	asl							;+2
-	ora #3						;+2
-	sta NUSIZ0					;+3		61
-
-	lda (Player1Ptr),Y			;+5		66
-	sta HMM1					;+3		69	
-	asl							;+2		71
-	asl							;+2		73
-	ora #3						;+2		75
-	sta NUSIZ1					;+3		 2
-
-	sta HMOVE					;+3		 5
-
-	
-	bne BottomKernelLoopInnerMiddle	;	 8		branch always
-	
-BottomKernelLoopInner			;		38
-	lda (Player0Ptr+2),Y		;+5
-	sta HMM0					;+3
-	asl							;+2
-	asl							;+2
-	ora #3						;+2
-	sta NUSIZ0					;+3		55
-
-	lda (Player1Ptr),Y			;+5		
-	sta HMM1					;+3			
-	asl							;+2
-	asl							;+2		
-	ora #3						;+2
-	sta NUSIZ1					;+3		72
-
-	sta WSYNC
-	
-	sta HMOVE					;+3		 3
-BottomKernelLoopInnerMiddle		;		 8
-	
-
-	lda TanksRemainingGfx,Y		;+4	
-	sta GRP0			
-	sta GRP1					;+6		13
-	
-	cpy #4						
-	beq BottomKernelLoopMiddle	;+5		18
-								;		17
-	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
-	;	which is necessary to mask the missiles before we are ready to display them
-	lda TanksRemainingPF2Mask,X
-	sta PF2
-	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
-	dey
-	bpl BottomKernelLoopInner	;+5		33
-
-	
-BottomKernelLoopDone
-	sta WSYNC
-	iny
-	sty ENAM0
-	sty ENAM1
-	sty GRP0
-	sty GRP1
-	sty GRP0
-	sty PF0
-	sty PF1
-	sty PF2
-
-	rts
+; 	
+; ;*****************************************
+;     PAGEALIGN 1
+; 	
+; Switch0
+; 	lda Player0Bottom
+; 	sta Player0Top
+; 	bne BackFromSwitch0
+; 
+; Wait0
+; 	nop
+; 	nop
+; 	bpl BackFromSwitch0
+; 	
+; Switch1
+; 	lda Player0Bottom
+; 	sta Player0Top
+; 	bne BackFromSwitch1
+; 
+; Wait1
+; 	nop
+; 	nop
+; 	bpl BackFromSwitch1
+; 	
+; 	
+; 	
+; BeginMainMazeKernel
+; 
+; 
+; 	
+; 
+; 	
+; KernelLoop
+; 	;draw player 0
+; 	cpy Player0Top				
+; 	beq Switch0
+; 	bpl Wait0
+; 	lda (Player0Ptr),Y
+; 	sta GRP0				;+15	50
+; BackFromSwitch0	
+; 	
+; 
+; 	ldx BlockRowTable-BLOCKHEIGHT-1,Y	;+4		54
+; 
+; 	;draw player 1
+; 	lda #TANKHEIGHT*2-1
+; 	dcp PlayerYTemp
+; 	bcs DoDraw10
+; 	lda #0
+; 	.byte $2C
+; DoDraw10
+; 	lda (Player1Ptr),Y
+; 	sta GRP1				;+18	72
+; 
+; 
+; 
+; 	;draw missile 0
+; 	lda #TANKHEIGHT-2
+; 	dcp MissileYTemp
+; 	sbc #TANKHEIGHT-4
+; 	sta ENAM0				;+12	 8
+; 	
+; 	
+; 	lda #TANKHEIGHT-2
+; 	dcp MissileYTemp+1
+; 	sbc #TANKHEIGHT-4
+; 	sta ENAM1				;+12	20
+; 	
+; 
+; 	
+; 	
+; 	lda PF1Left,X
+; 	sta PF1				;+7		27
+; 	lda PF2Left,X
+; 	sta PF2				;+7		34
+; 	
+; 	lda PF1Right,X
+; 	sta PF1				;+7		41
+; 	lda PF2Right,X
+; 	sta PF2				;+7		48
+; 
+; 	tsx					;+2		50
+; 	cpy BallY
+; 	php
+; 	txs					;+8		58
+; 	
+; 	
+; 	cpy Player0Top				
+; 	beq Switch1
+; 	bpl Wait1
+; 	lda (Player0Ptr+2),Y		
+; 	sta GRP0			;+15	73
+; BackFromSwitch1
+; 	
+; 	
+; 	;draw player 1
+; 	lda #TANKHEIGHT*2-1
+; 	dcp PlayerYTemp
+; 	bcs DoDraw11
+; 	lda #0
+; 	.byte $2C
+; DoDraw11
+; 	lda (Player1Ptr+2),Y
+; 	sta GRP1			;+18	15
+; 	
+; 	lda #0
+; 	sta PF1
+; 	sta PF2				;+8		23
+; 	
+; 	
+; 	dey
+; 	cpy #BLOCKHEIGHT
+; 	beq KernelLastRow	;+6		29
+; 	SLEEP 3
+; 	bne KernelLoop		;+6		35
+; 
+; 	
+; Switch0b
+; 	lda Player0Bottom
+; 	sta Player0Top
+; 	bne BackFromSwitch0b
+; 
+; Wait0b
+; 	nop
+; 	nop
+; 	bpl BackFromSwitch0b
+; 	
+; Switch1b
+; 	lda Player0Bottom
+; 	sta Player0Top
+; 	bne BackFromSwitch1b
+; 
+; Wait1b
+; 	nop
+; 	nop
+; 	bpl BackFromSwitch1b
+; 	
+; KernelLastRow				;		31		branch here crosses page boundary
+; 	;lda #$80
+; 	;sta PF2
+; 	SLEEP 5
+; 	;line 1 of last row, this row has BASE (not wall)
+; KernelLastRowLoop			;		36
+; 	lda Temp+1
+; 	sta COLUPF				;+6		42
+; 	;draw player 0
+; 	cpy Player0Top				
+; 	beq Switch0b
+; 	bpl Wait0b
+; 	lda (Player0Ptr),Y
+; 	sta GRP0				;+15	57
+; BackFromSwitch0b
+; 	
+; 	lda #WALLCOLOR
+; 	sta COLUPF				;+5		62
+; 	
+; 
+; 	;draw player 1
+; 	lda #TANKHEIGHT*2-1
+; 	dcp PlayerYTemp
+; 	bcs DoDraw10b
+; 	lda #0
+; 	.byte $2C
+; DoDraw10b
+; 	lda (Player1Ptr),Y
+; 	sta GRP1				;+18	 4
+; 
+; 
+; 	;line 2 of last row, has WALL (not base)
+; 	;draw missile 0
+; 	lda #TANKHEIGHT-2
+; 	dcp MissileYTemp
+; 	sbc #TANKHEIGHT-4
+; 	sta ENAM0				;+12	16
+; 	
+; 	
+; 	lda #TANKHEIGHT-2
+; 	dcp MissileYTemp+1
+; 	sbc #TANKHEIGHT-4
+; 	sta ENAM1				;+12	28
+; 	
+; 	
+; 	lda LastRowL
+; 	sta PF2					;+6		34
+; 	
+; 	SLEEP 6					;		40
+; 
+; 	
+; 	lda LastRowR
+; 	sta PF2					;+6		46
+; 	
+; 	tsx
+; 	cpy BallY
+; 	php
+; 	txs						;+10	56
+; 	
+; 	
+; 	
+; 	cpy Player0Top				
+; 	beq Switch1b
+; 	bpl Wait1b
+; 	lda (Player0Ptr+2),Y		
+; 	sta GRP0				;+15	71
+; BackFromSwitch1b
+; 	
+; 	
+; 	;draw player 1
+; 	lda #TANKHEIGHT*2-1
+; 	dcp PlayerYTemp
+; 	bcs DoDraw11b
+; 	lda #0
+; 	.byte $2C
+; DoDraw11b
+; 	lda (Player1Ptr+2),Y
+; 	sta GRP1			;+18	13
+; 	
+; 	lda LastRowL
+; 	sta PF2				;+6		19
+; 
+;     ;--don't draw base sometimes	
+;     lda GameStatus
+;     and #DRAWBASE
+;     beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
+; 	
+; 	lda #$80
+; 	sta PF2				;+5		31
+; 	dey
+; 	bne KernelLastRowLoop		;+5		36
+; 	beq DoneWithKernelLastRowLoop   ;is this necessary?
+; DoNotDrawBase
+;     sta.w PF2           ;+4
+;     dey
+;     bne KernelLastRowLoop
+; DoneWithKernelLastRowLoop
+; 	sty PF2		;AKSHUALLY don't display base on last row
+; 	ldx Temp
+; 	txs			;+8		44
+; 
+; 	sty ENABL	;+3		47
+; 	sty GRP0	;+3		50
+; 	ldy #$FF	;+2		52
+; 	ldx #0		;+2		54
+; 	sta WSYNC
+; 	sty PF2		;+3		57
+; 	sty PF1		;+3		60
+; 	stx GRP1	
+; 	stx ENAM0
+; 	stx ENAM1
+; ;	sta PF0
+; 	
+; ;     sta HMCLR
+; 	lda #104
+; ; 	jsr PositionASpriteNoHMOVESubroutine
+;     jsr PositionASpriteSubroutine	
+; 
+; 	lda #112
+; 	inx
+; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+;     jsr PositionASpriteSubroutine	
+;     
+; 	lda #60
+; 	inx
+; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+;     jsr PositionASpriteSubroutine	
+; 
+; 	lda #66
+; 	inx
+; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+;     jsr PositionASpriteSubroutine	
+; 
+; 	
+; 	;--done displaying maze
+; 	;--set up score, tanks remaining, lives remaining etc
+; 
+; 	sta WSYNC
+; ; 	sta HMOVE
+; 	ldy #0
+; 	sty PF0
+; 	sty PF1
+; 	sty PF2
+; 	sty COLUPF
+; 	sty REFP0
+; 	sty REFP1
+; 	sty VDELP0
+; 	sty VDELBL
+; 	lda #THREECOPIESCLOSE
+; 	sta NUSIZ0
+; 	lda #TWOCOPIESCLOSE
+; 	sta NUSIZ1
+; 	
+; 	lda #TANKSREMAININGCOLOR
+; 	sta COLUP0
+; 	sta COLUP1
+; 	sta HMCLR
+; 	
+; 
+; 	lda #>DigitDataMissile
+; 	sta Player0Ptr+3
+; 	sta Player1Ptr+1
+; 	lda MazeNumber
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	tay
+; 	lda DigitDataMissileLo,Y
+; 	sta Player0Ptr+2
+; 	lda MazeNumber
+; 	and #$0F
+; 	tay
+; 	lda DigitDataMissileLo,Y
+; 	sta Player1Ptr
+; 
+; 	lda #$FF
+; 	sta PF0
+; 	sta PF2		;this masks the missiles before we want them to show
+; 				;we will use the actual mask inside the loop below
+; 	
+; 	lda TanksRemaining
+; 	lsr
+; 	tax
+; 
+; 	lda TanksRemainingPF1Mask,X
+; 	sta PF1
+; 	
+; 	lda #2
+; 	sta ENAM0
+; 	sta ENAM1
+; 	ldy #8
+; 	bne BottomKernelLoopInner	;	branch always
+; 	
+; BottomKernelLoopMiddle			;		19
+; 	dey							;+2		21
+; 	
+; 	lda TanksRemaining
+; 	lsr
+; 	adc #0						;+7		28
+; 	
+; 	tax							;+2		30
+; 	lda TanksRemainingPF1Mask,X
+; 	sta PF1
+; 	lda TanksRemainingPF2Mask,X
+; 	sta PF2						;14		44
+; 	
+; 	lda (Player0Ptr+2),Y		;+5
+; 	sta HMM0					;+3
+; 	asl							;+2
+; 	asl							;+2
+; 	ora #3						;+2
+; 	sta NUSIZ0					;+3		61
+; 
+; 	lda (Player1Ptr),Y			;+5		66
+; 	sta HMM1					;+3		69	
+; 	asl							;+2		71
+; 	asl							;+2		73
+; 	ora #3						;+2		75
+; 	sta NUSIZ1					;+3		 2
+; 
+; 	sta HMOVE					;+3		 5
+; 
+; 	
+; 	bne BottomKernelLoopInnerMiddle	;	 8		branch always
+; 	
+; BottomKernelLoopInner			;		38
+; 	lda (Player0Ptr+2),Y		;+5
+; 	sta HMM0					;+3
+; 	asl							;+2
+; 	asl							;+2
+; 	ora #3						;+2
+; 	sta NUSIZ0					;+3		55
+; 
+; 	lda (Player1Ptr),Y			;+5		
+; 	sta HMM1					;+3			
+; 	asl							;+2
+; 	asl							;+2		
+; 	ora #3						;+2
+; 	sta NUSIZ1					;+3		72
+; 
+; 	sta WSYNC
+; 	
+; 	sta HMOVE					;+3		 3
+; BottomKernelLoopInnerMiddle		;		 8
+; 	
+; 
+; 	lda TanksRemainingGfx,Y		;+4	
+; 	sta GRP0			
+; 	sta GRP1					;+6		13
+; 	
+; 	cpy #4						
+; 	beq BottomKernelLoopMiddle	;+5		18
+; 								;		17
+; 	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
+; 	;	which is necessary to mask the missiles before we are ready to display them
+; 	lda TanksRemainingPF2Mask,X
+; 	sta PF2
+; 	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
+; 	dey
+; 	bpl BottomKernelLoopInner	;+5		33
+; 
+; 	
+; BottomKernelLoopDone
+; 	sta WSYNC
+; 	iny
+; 	sty ENAM0
+; 	sty ENAM1
+; 	sty GRP0
+; 	sty GRP1
+; 	sty GRP0
+; 	sty PF0
+; 	sty PF1
+; 	sty PF2
+; 
+; 	rts
 
 
 ;----------------------------------------------------------------------------
@@ -1288,7 +1286,7 @@ InBetweenLevels
 DoNotReadConsoleSwitchesWhileGeneratingMaze
 ; 	brk
 ; 	.word KernelSetupSubroutine
-    jsr KernelSetupSubroutine
+;     jsr KernelSetupSubroutine
 
 WaitForVblankEnd
 	lda INTIM
@@ -1302,9 +1300,6 @@ OverTimeVBLANK				;this nonsense is here just so I can trap an overtime conditio
 		
 EndVBLANK	
 
-	sta WSYNC
-	lda #0
-	sta VBLANK
 
 
 	rts
@@ -1418,7 +1413,14 @@ EndOverscan
 
 
 
-
+UpdateRandomNumber
+    lda RandomNumber
+    lsr
+    bcc SkipEOR
+    eor #$B2
+SkipEOR
+    sta RandomNumber
+    rts
 	
 	
 	
@@ -3131,7 +3133,1005 @@ DoneWithMovementChecks
 ;----------------------------------------------------------------------------
 
 
-KernelSetupSubroutine
+; KernelSetupSubroutine
+; 
+; 
+; 	;rotate Tanks through Players and Missiles
+; 	
+; 	lda FrameCounter
+; 	and #1
+; 	asl
+; 	tax
+; 	lda RotationTablesBank1,X   ;"RotationTables" if we move back to bank 2
+; 	sta MiscPtr
+; 	lda RotationTablesBank1+1,X
+; 	sta MiscPtr+1
+; 	ldy #3
+; RotationLoop
+; 	lax (MiscPtr),Y
+; 	lda TankX,Y
+; 	sta PlayerX,X
+; 	lda TankY,Y
+; 	sta PlayerY,X
+; 	txa
+; 	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
+; 	bne MissileNotPlayer   
+; PlayerNotMissile
+; 	;--get correct tank gfx ptr set up
+; 	txa
+; 	asl
+; 	asl
+; ; 	tax		;we need X * 4
+; 	sta Temp		;save X index
+; 	;--if Y = 0 then we are doing player tank.  Check if not moving.
+; 	tya ;set flags based on Y
+; 	bne NotPlayerTankSkipNotMovingCheck
+; 	;--how do we know if tank is not moving?  
+; 	lda TankStatus
+; 	and #TANKSPEED
+; 	bne PlayerTankMovingSetRegularGraphicsPointers
+; ; 	lda #0
+; 	.byte $2C   ;--skip two bytes 
+; 	;--end
+; PlayerTankMovingSetRegularGraphicsPointers
+; NotPlayerTankSkipNotMovingCheck
+; 	;--get index into tank graphics image
+; 	lda FrameCounter
+; 	lsr
+; 	and #%00000110
+; 	tax
+; 
+; 
+; 	lda TankStatus,Y
+; 	and #TANKUP
+; 	beq TankNotFacingUp
+; 	
+; 	lda TankUpFrame,X
+; 	pha
+; 	lda TankUpFrame+1,X
+; 	jmp SetTankGfxPtr
+; TankNotFacingUp
+; 	lda TankStatus,Y
+; 	and #TANKDOWN
+; 	beq TankNotFacingDown
+; 	lda TankDownFrame,X
+; 	pha
+; 	lda TankDownFrame+1,X
+; 	jmp SetTankGfxPtr
+; TankNotFacingDown
+; 	lda TankStatus,Y
+; 	and #TANKRIGHT
+; 	beq TankNotFacingRight
+; 	lda TankRightFrame,X
+; 	pha
+; 	lda TankRightFrame+1,X
+; 	jmp SetTankGfxPtr
+; TankNotFacingRight
+; 	lda TankRightFrame,X
+; 	pha
+; 	lda TankRightFrame+1,X
+; SetTankGfxPtr
+;     ldx Temp
+; 	sta Player0Ptr+1,X
+; 	sta Player0Ptr+3,X
+; 	pla
+; 	sec
+; 	sbc TankY,Y
+; 	sta Player0Ptr,X
+; 	clc
+; 	adc #TANKHEIGHT
+; 	sta Player0Ptr+2,X
+; 	jmp EndRotationLoop
+; MissileNotPlayer	
+; 	;--adjust missile width and position
+; 	txa
+; 	and #1
+; 	tax		;get correct index
+; 	lda MissileX,X
+; 	sec
+; 	sbc #2
+; 	sta MissileX,X
+; 	lda #OCTWIDTHMISSILE
+; 	sta NUSIZ0,X
+; 	lda #TANKHEIGHT-2
+; 	sta MissileHeight,X
+; EndRotationLoop
+; 	dey
+; 	bmi DoneWithRotationLoop
+; 	jmp RotationLoop
+; DoneWithRotationLoop
+; 	
+; 	
+; 	lda #TANKAREAHEIGHT
+; 	sec
+; 	sbc PlayerY+1
+; 	adc #TANKHEIGHT
+; 	asl
+; 	sta PlayerYTemp
+; 
+; 	lda PlayerY
+; 	sta Player0Top
+; 	sec
+; 	sbc #TANKHEIGHT	
+; 	ora #$80
+; 	sta Player0Bottom
+; 	lda PlayerY
+; 	cmp #TANKAREAHEIGHT
+; 	bcc NoSpecialAdjustmentToPlayer0Top
+; 	lda Player0Bottom
+; 	sta Player0Top	
+; 
+; NoSpecialAdjustmentToPlayer0Top
+; 
+; 
+; 
+; 	ldx #1
+; PreKernelSetupLoop2
+; 	lda #TANKAREAHEIGHT+1
+; 	sec
+; 	sbc MissileY,X
+; 	adc MissileHeight,X
+; 	sta MissileYTemp,X
+; 	
+; 	lda MissileX,X
+; 	clc
+; 	adc #3
+; 	sta MissileX,X
+; 	dex
+; 	bpl PreKernelSetupLoop2
+; 	
+; 	
+; 	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
+; 	ldx #1
+; AdjustMissileYLoop
+; 	lda MissileYTemp,X
+; 	cmp #TANKHEIGHT-2
+; 	bcs NoAdjustMissileY 
+; 	adc #1
+; 	sta MissileYTemp,X
+; NoAdjustMissileY
+; 	dex
+; 	bpl AdjustMissileYLoop
+; 	
+; 	
+; 	lda FrameCounter
+; 	and #$0F
+; 	sta Temp        ;used below for cycling base color
+; 	;bullet flicker rotation:
+; 	and #3
+; 	tax
+; 	lda BulletX,X
+; 	sta BallX
+; 	lda BulletY,X
+; 	sta BallY
+; 
+; 
+; 	;--cycle BaseColor
+; 	lda #(BASECOLOR)&($F0)
+; 	ora Temp
+; 	sta Temp+1
+; 	
+; 	;--set up score pointers
+; 	
+; 	ldx #10
+; SetupScorePtrsLoop
+; 	txa
+; 	lsr
+; 	lsr
+; 	tay
+; 	lda Score,Y
+; 	pha
+; 	and #$0F
+; 	tay
+; 	lda DigitDataLo,Y
+; 	sta ScorePtr,X
+; 	pla
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	tay
+; 	lda DigitDataLo,Y
+; 	sta ScorePtr-2,X
+; 	lda #>DigitData
+; 	sta ScorePtr+1,X
+; 	sta ScorePtr-1,X
+; 	dex
+; 	dex
+; 	dex
+; 	dex
+; 	bpl SetupScorePtrsLoop
+	
+	
+	
+	rts
+
+
+;----------------------------------------------------------------------------
+;-------------------------Data Below-----------------------------------------
+;----------------------------------------------------------------------------
+	
+
+	
+	
+	
+
+
+
+
+	
+	
+;DigitA
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitB
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01111111;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitC
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00100000;--
+;       .byte #%00111100;--
+;DigitD
+;       .byte #%01111111;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000011;--
+;       .byte #%01000010;--
+;       .byte #%01000010;--
+;       .byte #%01111110;--
+;DigitE
+;       .byte #%01111111;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
+;DigitF
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01100000;--
+;       .byte #%01111100;--
+;       .byte #%01100000;--
+;       .byte #%00100000;--
+;       .byte #%00111110;--
+	
+
+
+	
+
+
+	
+
+
+	
+
+	
+	PAGEALIGN 2
+	
+	
+    
+    
+; DigitDataMissile
+; 
+; 
+; 
+; 
+; MissileOne
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
+; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; 
+; 
+; 
+; 
+; 
+; 
+; 
+; MissileThree
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; 
+; MissileFour
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; MissileFive
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; 
+; 
+; 
+; 
+; 
+; 
+; MissileSeven
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; MissileSix
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; MissileNine    
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;     .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;  	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; MissileEight
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 
+; MissileZero
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; MissileTwo
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+	
+
+
+;     ALIGNGFXDATA 1
+; 	
+; TankGfxVertical
+;    
+;       
+;         
+;      ;--animation for upward facing tank:   
+; TankUpAnimated1
+; 		.byte 0
+;         .byte #%11011011;--
+;         .byte #%00111100;--
+;         .byte #%11111111;--
+;         .byte #%00011000;--
+;         .byte #%11011011;--
+;         .byte #%00011000;--
+; TankUpAnimated1b
+; 		.byte 0
+;         .byte #%00000011;--
+;         .byte #%11111100;--
+;         .byte #%00111111;--
+;         .byte #%11111100;--
+;         .byte #%00011011;--
+;         .byte #%11011000;--
+;         .byte 0
+; TankUpAnimated2
+; 		.byte 0
+; 		.byte #%11011000;--
+; 		.byte #%00111111;--
+; 		.byte #%11111100;--
+; 		.byte #%00011011;--
+; 		.byte #%11011000;--
+; 		.byte #%00011011;--
+; TankUpAnimated2b
+; 		.byte 0
+;         .byte #%11000011;--
+;         .byte #%00111100;--
+;         .byte #%11111111;--
+;         .byte #%00011000;--
+;         .byte #%11011011;--
+;         .byte #%00011000;--
+; 		.byte 0
+; TankUpAnimated3
+; 		.byte 0
+; 		.byte #%00011000;--
+; 		.byte #%11111111;--
+; 		.byte #%00111100;--
+; 		.byte #%11011011;--
+; 		.byte #%00011000;--
+; 		.byte #%11011011;--
+; TankUpAnimated3b
+; 		.byte 0
+;         .byte #%11000000;--
+;         .byte #%00111111;--
+;         .byte #%11111100;--
+;         .byte #%00011011;--
+;         .byte #%11011000;--
+;         .byte #%00011011;--
+; 		.byte 0
+; TankUpAnimated4
+; 		.byte 0
+; 		.byte #%00011011;--
+; 		.byte #%11111100;--
+; 		.byte #%00111111;--
+; 		.byte #%11011000;--
+; 		.byte #%00011011;--
+; 		.byte #%11011000;--
+; TankUpAnimated4b
+; 		.byte 0
+;         .byte #%00000000;--
+;         .byte #%11111111;--
+;         .byte #%00111100;--
+;         .byte #%11011011;--
+;         .byte #%00011000;--
+;         .byte #%11011011;--
+; 		.byte 0
+; TankDownAnimated1
+;         .byte 0
+;         .byte #%11011000;--
+;         .byte #%00011011;--
+;         .byte #%11011000;--
+;         .byte #%00111111;--
+;         .byte #%11111100;--
+;         .byte #%00000011;--
+; TankDownAnimated1b
+; 		.byte 0
+; 		.byte #%00011000;--
+; 		.byte #%11011011;--
+; 		.byte #%00011000;--
+; 		.byte #%11111111;--
+; 		.byte #%00111100;--
+; 		.byte #%11011011;--
+; 		.byte 0
+; TankDownAnimated2
+;         .byte 0
+;         .byte #%00011000;--
+;         .byte #%11011011;--
+;         .byte #%00011000;--
+;         .byte #%11111111;--
+;         .byte #%00111100;--
+;         .byte #%11000011;--
+; TankDownAnimated2b
+; 		.byte 0
+; 		.byte #%00011011;--
+; 		.byte #%11011000;--
+; 		.byte #%00011011;--
+; 		.byte #%11111100;--
+; 		.byte #%00111111;--
+; 		.byte #%11011000;--
+; 		.byte 0
+; TankDownAnimated3
+;         .byte 0
+;         .byte #%00011011;--
+;         .byte #%11011000;--
+;         .byte #%00011011;--
+;         .byte #%11111100;--
+;         .byte #%00111111;--
+;         .byte #%11000000;--
+; TankDownAnimated3b
+; 		.byte 0
+; 		.byte #%11011011;--
+; 		.byte #%00011000;--
+; 		.byte #%11011011;--
+; 		.byte #%00111100;--
+; 		.byte #%11111111;--
+; 		.byte #%00011000;--
+; 		.byte 0
+; TankDownAnimated4
+;         .byte 0
+;         .byte #%11011011;--
+;         .byte #%00011000;--
+;         .byte #%11011011;--
+;         .byte #%00111100;--
+;         .byte #%11111111;--
+;         .byte #%00000000;--       	
+; TankDownAnimated4b
+; 		.byte 0
+; 		.byte #%11011000;--
+; 		.byte #%00011011;--
+; 		.byte #%11011000;--
+; 		.byte #%00111111;--
+; 		.byte #%11111100;--
+; 		.byte #%00011011;--
+; 		.byte 0
+		
+
+PFRegisterLookup
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+Tone
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
+
+Frequency
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
+
+SoundLength
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
+
+	
+;****************************************************************************
+
+TankFractionalAddition	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$1F
+    clc
+    adc TankFractional,X
+	sta TankFractional,X
+    rts
+
+;****************************************************************************
+	
+; 		PAGEALIGN 3
+; 	
+; DigitData
+; Zero
+;         .byte #%01101100;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%01101100;--
+; One
+;         .byte #%00011000;--
+;         .byte #%00011000;--
+;         .byte #%00011000;--
+;         .byte #%00011000;--
+;         .byte #%00011000;--
+;         .byte #%00111000;--
+;         .byte #%00011000;--
+; Two
+;         .byte #%11111110;--
+;         .byte #%11000000;--
+;         .byte #%01111000;--
+;         .byte #%00011110;--
+;         .byte #%00000110;--
+;         .byte #%11000110;--
+;         .byte #%01111100;--
+; Three
+;         .byte #%01111100;--
+;         .byte #%11000110;--
+;         .byte #%00000110;--
+;         .byte #%00001100;--
+;         .byte #%00000110;--
+;         .byte #%11000110;--
+;         .byte #%01111100;--
+; Four
+;         .byte #%00001100;--
+;         .byte #%00001100;--
+;         .byte #%11101110;--
+;         .byte #%11001100;--
+;         .byte #%01101100;--
+;         .byte #%00101100;--
+;         .byte #%00001100;--
+; Five
+;         .byte #%01111100;--
+;         .byte #%11000110;--
+;         .byte #%00000110;--
+;         .byte #%00000110;--
+;         .byte #%11111100;--
+;         .byte #%11000000;--
+;         .byte #%11111110;--
+; Six
+;         .byte #%01101100;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%11101100;--
+;         .byte #%11000000;--
+;         .byte #%11000000;--
+;         .byte #%01101100;--
+; Seven
+;         .byte #%00110000;--
+;         .byte #%00110000;--
+;         .byte #%00011000;--
+;         .byte #%00001100;--
+;         .byte #%00000110;--
+;         .byte #%00000110;--
+;         .byte #%11111110;--
+; Eight
+;         .byte #%01101100;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%01101100;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%01101100;--
+; Nine
+;         .byte #%01101100;--
+;         .byte #%00000110;--
+;         .byte #%00000110;--
+;         .byte #%01101110;--
+;         .byte #%11000110;--
+;         .byte #%11000110;--
+;         .byte #%01101100;--
+; 
+; 	
+; 
+;     ALIGNGFXDATA 2
+; 		
+; TankGfxHorizontal
+; TankRightAnimated1
+;         .byte 0
+;         .byte #%01100110;--
+;         .byte #%00110000;--
+;         .byte #%01111111;--
+;         .byte #%01111000;--
+;         .byte #%11001100;--
+;         .byte #%11001100;--
+; TankRightAnimated1b
+; 		.byte 0
+; 		.byte #%01100110;--
+; 		.byte #%01100110;--
+; 		.byte #%01111000;--
+; 		.byte #%01111111;--
+; 		.byte #%00110000;--
+; 		.byte #%11001100;--
+; 		.byte 0
+; TankRightAnimated2
+;         .byte 0
+;         .byte #%11001100;--
+;         .byte #%00110000;--
+;         .byte #%01111111;--
+;         .byte #%01111000;--
+;         .byte #%10011001;--
+;         .byte #%10011001;--
+; TankRightAnimated2b
+; 		.byte 0
+; 		.byte #%11001100;--
+; 		.byte #%11001100;--
+; 		.byte #%01111000;--
+; 		.byte #%01111111;--
+; 		.byte #%00110000;--
+; 		.byte #%10011001;--
+; 		.byte 0
+; TankRightAnimated3
+;         .byte 0
+;         .byte #%10011001;--
+;         .byte #%00110000;--
+;         .byte #%01111111;--
+;         .byte #%01111000;--
+;         .byte #%00110011;--
+;         .byte #%00110011;--
+; TankRightAnimated3b
+; 		.byte 0
+; 		.byte #%10011001;--
+; 		.byte #%10011001;--
+; 		.byte #%01111000;--
+; 		.byte #%01111111;--
+; 		.byte #%00110000;--
+; 		.byte #%00110011;--
+; 		.byte 0
+; TankRightAnimated4
+;        	.byte 0
+;         .byte #%00110011;--
+;         .byte #%00110000;--
+;         .byte #%01111111;--
+;         .byte #%01111000;--
+;         .byte #%01100110;--
+;         .byte #%01100110;--
+; TankRightAnimated4b
+; 		.byte 0
+; 		.byte #%00110011;--
+; 		.byte #%00110011;--
+; 		.byte #%01111000;--
+; 		.byte #%01111111;--
+; 		.byte #%00110000;--
+; 		.byte #%01100110;--
+; 		.byte 0
+; 
+; 		
+; 		
+; 		
+; 		
+; 
+; TanksRemainingGfx
+; ;	.byte 0
+; 	.byte %11101110
+; 	.byte %11101110
+; 	.byte %11101110
+; 	.byte %01000100		
+; 	.byte 0
+; 	.byte %11101110
+; 	.byte %11101110
+; 	.byte %11101110
+; 	.byte %01000100		
+			
+
+	
+
+		
+	
+;--if we are aiming at RAM locations, how do we aim at the base?  Base X = 80, Y = 0
+
+	;
+
+	;tank 0 = player, so don't need entry for that
+	;tank 1 target = player position
+	;tank 2 target = random position
+	;tank 3 target = player position
+TankTargetX = *-1
+	.byte TankX, TankX, TankX
+TankTargetY = *-1
+	.byte TankY, TankY, TankY
+	
+	;--following is combined with target above (see routine for details)
+	;tank 0 = player, so don't need entry for that
+	;tank 1 target = player position
+	;tank 2 target = tank 1?  or switched to player
+	;tank 3 target = tank 1
+TankTargetAdjustX = *-1
+	.byte TankX, RandomNumber, TankX+1
+TankTargetAdjustY = *-1
+	.byte TankY, RandomNumber, TankY+1
+	
+;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
+TankTargetAdjustmentX 
+    .byte 0, 0, 0, 0
+    .byte -PINKYADJUSTMENTX, 0, 0, 0
+    .byte PINKYADJUSTMENTX
+TankTargetAdjustmentY 
+    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
+    .byte 0, 0, 0, 0
+    .byte 0
+	
+BulletDirectionClear
+BulletUp
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDown
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeft
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+
+	
+	
+PFMaskLookup
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+
+	
+
+		
+EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
+    .byte 30, 28, 25, 22
+    .byte 20, 19, 18, 17
+    .byte 15, 13, 12, 11
+    .byte 10, 7, 2, 1	
+
+    
+
+TanksRemainingSpeedBoost = * - 3 
+                        ;--just realized the first three values in this table have no effect.  not sure
+                        ;   yet if I want to shift the values or not.
+;     .byte 15, 10, 8
+    .byte 6, 4, 2, 2, 0, 0, 0
+    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
+	
+; 	PAGEALIGN 4
+; 
+; 
+; 
+; 
+; 	
+; 	ds BLOCKHEIGHT+1 - (* & $FF)
+; BlockRowTable
+; DigitBlank
+; 	ds BLOCKHEIGHT, 0
+; 	ds BLOCKHEIGHT, 1
+; 	ds BLOCKHEIGHT, 2
+; 	ds BLOCKHEIGHT, 3
+; 	ds BLOCKHEIGHT, 4
+; 	ds BLOCKHEIGHT, 5
+; 	ds BLOCKHEIGHT, 6
+; 	ds BLOCKHEIGHT, 7
+; 	ds BLOCKHEIGHT, 8
+; 	ds BLOCKHEIGHT, 9
+; 	ds BLOCKHEIGHT, 10
+; 	ds BLOCKHEIGHT, 11
+; 	ds BLOCKHEIGHT, 12
+; 	ds BLOCKHEIGHT, 13
+; 	ds BLOCKHEIGHT, 14
+; 	ds BLOCKHEIGHT, 15
+; 	ds BLOCKHEIGHT, 16
+; 	ds BLOCKHEIGHT, 17
+; 	
+; 
+; 
+; DigitDataMissileLo
+; 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
+; 	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
+; 		
+; TanksRemainingPF1Mask
+; 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+; 
+; TanksRemainingPF2Mask		
+; 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+
+
+TankDirection
+	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
+
+	
+NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
+	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2
+	
+	
+PreventReverses = *-1	;--the FF are wasted bytes
+	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
+	
+	;tank 0 = player, so don't need initial byte
+	;tank 1 target = upper left corner
+	;tank 2 target = base (bottom center)
+	;tank 3 target = upper right corner
+SwitchMovementX = *-1
+	.byte 0, 80, 255
+SwitchMovementY = *-1
+	.byte 255, 0, 255
+	
+	
+NumberOfBitsSet
+	.byte 0, 1, 1, 2
+	.byte 1, 2, 2, 3
+	.byte 1, 2, 2, 3
+	.byte 2, 3, 3, 4
+MovementMask
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+	
+RotationTablesBank1
+	.word RotationEvenBank1, RotationOddBank1	
+	
+RotationOddBank1
+	.byte 0	;and first 3 bytes of next table
+RotationEvenBank1
+	.byte 2, 1, 3, 0
+
+
+	
+;------------------------------------------------------------------------------------------
+	
+    echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
+
+	org $1F00
+	rorg $1F00
+	
+BankSwitchSubroutine1 
+	plp
+	tsx
+	dec $01,X
+	lda ($01,X)
+	sta MiscPtr
+	inc $01,X
+	lda ($01,X)
+	sta MiscPtr+1
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+;     nop $1FF9
+
+	jmp (MiscPtr)
+	
+ReturnFromBSSubroutine1
+	tsx
+	inx
+	inx
+	lda $00,X      ;get high byte of return address
+	lsr
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	nop $1FF8,X
+;     nop $1FF9
+	
+	rts    
+
+	org $1FFC
+    rorg $1FFC
+    
+	.word Start+3
+	.word BankSwitchSubroutine1
+
+;----------------------------------------------------------------------------------------------------
+;----------------------------------------------------------------------------------------------------
+;---------------------------------        BANK TWO           ----------------------------------------
+;----------------------------------------------------------------------------------------------------
+;----------------------------------------------------------------------------------------------------
+
+
+	org $2000
+	rorg $3000
+
+Start2
+	sta $1FF8
+
+	
+
+;----------------------------------------------------------------------------
+;----------------------Kernel Routine----------------------------------------
+;----------------------------------------------------------------------------
+	
+KernelRoutineGame
+
+; KernelSetupSubroutine
 
 
 	;rotate Tanks through Players and Missiles
@@ -3140,9 +4140,9 @@ KernelSetupSubroutine
 	and #1
 	asl
 	tax
-	lda RotationTablesBank1,X   ;"RotationTables" if we move back to bank 2
+	lda RotationTables,X   ;"RotationTables" if we move back to bank 2
 	sta MiscPtr
-	lda RotationTablesBank1+1,X
+	lda RotationTables+1,X
 	sta MiscPtr+1
 	ldy #3
 RotationLoop
@@ -3339,799 +4339,606 @@ SetupScorePtrsLoop
 	dex
 	dex
 	bpl SetupScorePtrsLoop
-	
-	
-	
-	rts
+	;--room for score up here?
 
-
-;----------------------------------------------------------------------------
-;-------------------------Data Below-----------------------------------------
-;----------------------------------------------------------------------------
-	
+	lda #RIGHTEIGHT
+	sta HMM1
 
 	
-	
-	
-
-
-
-
-	
-	
-;DigitA
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitB
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitC
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00100000;--
-;       .byte #%00111100;--
-;DigitD
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitE
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-;DigitF
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-	
-
-
-	
-
-
-	
-
-
-	
-
-	
-	PAGEALIGN 2
-	
-	
-    
-    
-DigitDataMissile
-
-
-
-
-MissileOne
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
-	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
-
-
-
-
-
-
-MissileThree
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
-MissileFour
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-MissileFive
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
-
-
-
-
-
-MissileSeven
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-MissileSix
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-MissileNine    
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-    .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;  	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-MissileEight
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-MissileZero
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-MissileTwo
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-	
-
-
-    ALIGNGFXDATA 1
-	
-TankGfxVertical
-   
-      
-        
-     ;--animation for upward facing tank:   
-TankUpAnimated1
-		.byte 0
-        .byte #%11011011;--
-        .byte #%00111100;--
-        .byte #%11111111;--
-        .byte #%00011000;--
-        .byte #%11011011;--
-        .byte #%00011000;--
-TankUpAnimated1b
-		.byte 0
-        .byte #%00000011;--
-        .byte #%11111100;--
-        .byte #%00111111;--
-        .byte #%11111100;--
-        .byte #%00011011;--
-        .byte #%11011000;--
-        .byte 0
-TankUpAnimated2
-		.byte 0
-		.byte #%11011000;--
-		.byte #%00111111;--
-		.byte #%11111100;--
-		.byte #%00011011;--
-		.byte #%11011000;--
-		.byte #%00011011;--
-TankUpAnimated2b
-		.byte 0
-        .byte #%11000011;--
-        .byte #%00111100;--
-        .byte #%11111111;--
-        .byte #%00011000;--
-        .byte #%11011011;--
-        .byte #%00011000;--
-		.byte 0
-TankUpAnimated3
-		.byte 0
-		.byte #%00011000;--
-		.byte #%11111111;--
-		.byte #%00111100;--
-		.byte #%11011011;--
-		.byte #%00011000;--
-		.byte #%11011011;--
-TankUpAnimated3b
-		.byte 0
-        .byte #%11000000;--
-        .byte #%00111111;--
-        .byte #%11111100;--
-        .byte #%00011011;--
-        .byte #%11011000;--
-        .byte #%00011011;--
-		.byte 0
-TankUpAnimated4
-		.byte 0
-		.byte #%00011011;--
-		.byte #%11111100;--
-		.byte #%00111111;--
-		.byte #%11011000;--
-		.byte #%00011011;--
-		.byte #%11011000;--
-TankUpAnimated4b
-		.byte 0
-        .byte #%00000000;--
-        .byte #%11111111;--
-        .byte #%00111100;--
-        .byte #%11011011;--
-        .byte #%00011000;--
-        .byte #%11011011;--
-		.byte 0
-TankDownAnimated1
-        .byte 0
-        .byte #%11011000;--
-        .byte #%00011011;--
-        .byte #%11011000;--
-        .byte #%00111111;--
-        .byte #%11111100;--
-        .byte #%00000011;--
-TankDownAnimated1b
-		.byte 0
-		.byte #%00011000;--
-		.byte #%11011011;--
-		.byte #%00011000;--
-		.byte #%11111111;--
-		.byte #%00111100;--
-		.byte #%11011011;--
-		.byte 0
-TankDownAnimated2
-        .byte 0
-        .byte #%00011000;--
-        .byte #%11011011;--
-        .byte #%00011000;--
-        .byte #%11111111;--
-        .byte #%00111100;--
-        .byte #%11000011;--
-TankDownAnimated2b
-		.byte 0
-		.byte #%00011011;--
-		.byte #%11011000;--
-		.byte #%00011011;--
-		.byte #%11111100;--
-		.byte #%00111111;--
-		.byte #%11011000;--
-		.byte 0
-TankDownAnimated3
-        .byte 0
-        .byte #%00011011;--
-        .byte #%11011000;--
-        .byte #%00011011;--
-        .byte #%11111100;--
-        .byte #%00111111;--
-        .byte #%11000000;--
-TankDownAnimated3b
-		.byte 0
-		.byte #%11011011;--
-		.byte #%00011000;--
-		.byte #%11011011;--
-		.byte #%00111100;--
-		.byte #%11111111;--
-		.byte #%00011000;--
-		.byte 0
-TankDownAnimated4
-        .byte 0
-        .byte #%11011011;--
-        .byte #%00011000;--
-        .byte #%11011011;--
-        .byte #%00111100;--
-        .byte #%11111111;--
-        .byte #%00000000;--       	
-TankDownAnimated4b
-		.byte 0
-		.byte #%11011000;--
-		.byte #%00011011;--
-		.byte #%11011000;--
-		.byte #%00111111;--
-		.byte #%11111100;--
-		.byte #%00011011;--
-		.byte 0
+	ldy #0
+	sta WSYNC
+	sta VBLANK
+	lda #SCORECOLOR
+	sta COLUP0
+	sta COLUP1						;+11    11
 		
-
-PFRegisterLookup
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-Tone
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-
-Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-
-SoundLength
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
+	
 
 	
-;****************************************************************************
+	;--display score
+	lda #THREECOPIESCLOSE|LEFTONE
+	sta VDELP0
+	sta VDELP1						;+8		19		turn on VDELPx (bit0==1)
 
-TankFractionalAddition	
-	lda TankStatus,X
+	sta NUSIZ0
+	sta NUSIZ1						;+6		25
+
+	SLEEP 4                         ;+4     29
+	
+	sta HMP0						  ;					 LEFTONE
 	asl
+	sta HMP1						 ;+8		37		LEFTTWO
+
+	sta RESP0						 ;+8		40		positioned at 57 (move left 1)
+	sta RESP1						 ;+3		43		positioned at 66 (move left 2)
+
+	sty GRP1
+	sty GRP0
+	sty ENAM0						 ;+7		50
+
+
+	sta WSYNC
+	sta HMOVE	
+	;--waste time efficiently:
+	SUBROUTINE
+	ldy #10		; 2
+.wait
+	dey			 ; 2
+	bne .wait	 ; 3
+
+	SLEEP 3
+	
+	ldy #6+1
+ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
+									 ;				(or - if it does, adjust the timing!)
+	SLEEP 3
+	dey							 ;+5		64
+	sty Temp					;+3		67
+	lda (ScorePtr),Y
+	sta GRP0					  ;+8		75
+	lda (ScorePtr+2),Y
+	sta GRP1					  ;+8		 7
+	lda (ScorePtr+4),Y
+	sta GRP0					  ;+8		15
+	lda (ScorePtr+6),Y
+	tax							 ;+7		22
+	lda (ScorePtr+8),Y
+	pha							 ;+8		30
+	lda (ScorePtr+10),Y
+	tay							 ;+7		37
+	pla							 ;+4		41
+	stx GRP1					  ;+3		44
+	sta GRP0
+	sty GRP1
+	sty GRP0					  ;+9		53
+	ldy Temp					;+3		56
+	bne ScoreKernelLoop		;+3		59
+									 ;		  58
+	sty GRP0
+	sty GRP1
+	sty GRP0					  ;+9		67	
+	
+	
+	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
+	sta NUSIZ0
+	sta NUSIZ1
+	
+	;--tank colors
+	lda #TANKCOLOR1 ;GOLD+10
+	sta COLUP0
+	lda #TANKCOLOR2 ;BLUE2+12
+	sta COLUP1
+	
+	;--reflect P0 or P1 as necessary.   prep for flip loop below
+	lda FrameCounter
+	and #1
 	asl
-	asl
-	asl
-	ora #$1F
-    clc
-    adc TankFractional,X
-	sta TankFractional,X
-    rts
-
-;****************************************************************************
-	
-		PAGEALIGN 3
-	
-DigitData
-Zero
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%01101100;--
-One
-        .byte #%00011000;--
-        .byte #%00011000;--
-        .byte #%00011000;--
-        .byte #%00011000;--
-        .byte #%00011000;--
-        .byte #%00111000;--
-        .byte #%00011000;--
-Two
-        .byte #%11111110;--
-        .byte #%11000000;--
-        .byte #%01111000;--
-        .byte #%00011110;--
-        .byte #%00000110;--
-        .byte #%11000110;--
-        .byte #%01111100;--
-Three
-        .byte #%01111100;--
-        .byte #%11000110;--
-        .byte #%00000110;--
-        .byte #%00001100;--
-        .byte #%00000110;--
-        .byte #%11000110;--
-        .byte #%01111100;--
-Four
-        .byte #%00001100;--
-        .byte #%00001100;--
-        .byte #%11101110;--
-        .byte #%11001100;--
-        .byte #%01101100;--
-        .byte #%00101100;--
-        .byte #%00001100;--
-Five
-        .byte #%01111100;--
-        .byte #%11000110;--
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%11111100;--
-        .byte #%11000000;--
-        .byte #%11111110;--
-Six
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11101100;--
-        .byte #%11000000;--
-        .byte #%11000000;--
-        .byte #%01101100;--
-Seven
-        .byte #%00110000;--
-        .byte #%00110000;--
-        .byte #%00011000;--
-        .byte #%00001100;--
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%11111110;--
-Eight
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%01101100;--
-Nine
-        .byte #%01101100;--
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%01101110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%01101100;--
-
-	
-
-    ALIGNGFXDATA 2
-		
-TankGfxHorizontal
-TankRightAnimated1
-        .byte 0
-        .byte #%01100110;--
-        .byte #%00110000;--
-        .byte #%01111111;--
-        .byte #%01111000;--
-        .byte #%11001100;--
-        .byte #%11001100;--
-TankRightAnimated1b
-		.byte 0
-		.byte #%01100110;--
-		.byte #%01100110;--
-		.byte #%01111000;--
-		.byte #%01111111;--
-		.byte #%00110000;--
-		.byte #%11001100;--
-		.byte 0
-TankRightAnimated2
-        .byte 0
-        .byte #%11001100;--
-        .byte #%00110000;--
-        .byte #%01111111;--
-        .byte #%01111000;--
-        .byte #%10011001;--
-        .byte #%10011001;--
-TankRightAnimated2b
-		.byte 0
-		.byte #%11001100;--
-		.byte #%11001100;--
-		.byte #%01111000;--
-		.byte #%01111111;--
-		.byte #%00110000;--
-		.byte #%10011001;--
-		.byte 0
-TankRightAnimated3
-        .byte 0
-        .byte #%10011001;--
-        .byte #%00110000;--
-        .byte #%01111111;--
-        .byte #%01111000;--
-        .byte #%00110011;--
-        .byte #%00110011;--
-TankRightAnimated3b
-		.byte 0
-		.byte #%10011001;--
-		.byte #%10011001;--
-		.byte #%01111000;--
-		.byte #%01111111;--
-		.byte #%00110000;--
-		.byte #%00110011;--
-		.byte 0
-TankRightAnimated4
-       	.byte 0
-        .byte #%00110011;--
-        .byte #%00110000;--
-        .byte #%01111111;--
-        .byte #%01111000;--
-        .byte #%01100110;--
-        .byte #%01100110;--
-TankRightAnimated4b
-		.byte 0
-		.byte #%00110011;--
-		.byte #%00110011;--
-		.byte #%01111000;--
-		.byte #%01111111;--
-		.byte #%00110000;--
-		.byte #%01100110;--
-		.byte 0
-
-		
-		
-		
-		
-
-TanksRemainingGfx
-;	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-			
-
-	
-
-		
-	
-;--if we are aiming at RAM locations, how do we aim at the base?  Base X = 80, Y = 0
-
-	;
-
-	;tank 0 = player, so don't need entry for that
-	;tank 1 target = player position
-	;tank 2 target = random position
-	;tank 3 target = player position
-TankTargetX = *-1
-	.byte TankX, TankX, TankX
-TankTargetY = *-1
-	.byte TankY, TankY, TankY
-	
-	;--following is combined with target above (see routine for details)
-	;tank 0 = player, so don't need entry for that
-	;tank 1 target = player position
-	;tank 2 target = tank 1?  or switched to player
-	;tank 3 target = tank 1
-TankTargetAdjustX = *-1
-	.byte TankX, RandomNumber, TankX+1
-TankTargetAdjustY = *-1
-	.byte TankY, RandomNumber, TankY+1
-	
-;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
-TankTargetAdjustmentX 
-    .byte 0, 0, 0, 0
-    .byte -PINKYADJUSTMENTX, 0, 0, 0
-    .byte PINKYADJUSTMENTX
-TankTargetAdjustmentY 
-    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
-    .byte 0, 0, 0, 0
-    .byte 0
-	
-BulletDirectionClear
-BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
-
-	
-	
-PFMaskLookup
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
-
-	
-
-		
-EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 30, 28, 25, 22
-    .byte 20, 19, 18, 17
-    .byte 15, 13, 12, 11
-    .byte 10, 7, 2, 1	
-
-    
-
-TanksRemainingSpeedBoost = * - 3 
-                        ;--just realized the first three values in this table have no effect.  not sure
-                        ;   yet if I want to shift the values or not.
-;     .byte 15, 10, 8
-    .byte 6, 4, 2, 2, 0, 0, 0
-    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
-	
-	PAGEALIGN 4
-
-
-
-
-	
-	ds BLOCKHEIGHT+1 - (* & $FF)
-BlockRowTable
-DigitBlank
-	ds BLOCKHEIGHT, 0
-	ds BLOCKHEIGHT, 1
-	ds BLOCKHEIGHT, 2
-	ds BLOCKHEIGHT, 3
-	ds BLOCKHEIGHT, 4
-	ds BLOCKHEIGHT, 5
-	ds BLOCKHEIGHT, 6
-	ds BLOCKHEIGHT, 7
-	ds BLOCKHEIGHT, 8
-	ds BLOCKHEIGHT, 9
-	ds BLOCKHEIGHT, 10
-	ds BLOCKHEIGHT, 11
-	ds BLOCKHEIGHT, 12
-	ds BLOCKHEIGHT, 13
-	ds BLOCKHEIGHT, 14
-	ds BLOCKHEIGHT, 15
-	ds BLOCKHEIGHT, 16
-	ds BLOCKHEIGHT, 17
-	
-
-
-DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
-	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
-		
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
-
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
-
-
-TankDirection
-	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
-
-	
-NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2
-	
-	
-PreventReverses = *-1	;--the FF are wasted bytes
-	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
-	
-	;tank 0 = player, so don't need initial byte
-	;tank 1 target = upper left corner
-	;tank 2 target = base (bottom center)
-	;tank 3 target = upper right corner
-SwitchMovementX = *-1
-	.byte 0, 80, 255
-SwitchMovementY = *-1
-	.byte 255, 0, 255
-	
-	
-NumberOfBitsSet
-	.byte 0, 1, 1, 2
-	.byte 1, 2, 2, 3
-	.byte 1, 2, 2, 3
-	.byte 2, 3, 3, 4
-MovementMask
-	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
-	
-RotationTablesBank1
-	.word RotationEvenBank1, RotationOddBank1	
-	
-RotationOddBank1
-	.byte 0	;and first 3 bytes of next table
-RotationEvenBank1
-	.byte 2, 1, 3, 0
-
-TankUpFrame
-	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
-TankDownFrame
-	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
-TankRightFrame
-	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
-
-	
-;------------------------------------------------------------------------------------------
-	
-    echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
-
-	org $1F00
-	rorg $1F00
-	
-BankSwitchSubroutine1
-	plp
-	tsx
-	dec $01,X
-	lda ($01,X)
+	tax
+	lda RotationTables,X        ;RotationTablesBank1 if moved back to bank 1
 	sta MiscPtr
-	inc $01,X
-	lda ($01,X)
+	lda RotationTables+1,X
 	sta MiscPtr+1
-	lsr
-	lsr
-	lsr
-	lsr
-	lsr
-	tax
-	nop $1FF8,X
 	
-	jmp (MiscPtr)
+	SUBROUTINE
+	if DEBUGTANKAICOUNTER = 1
+        lda TankMovementCounter
+        cmp #TANKAISWITCH
+        bcs .tankaidebug
+        lda #BLUE|$4
+        bcc .tankaidebugend
+.tankaidebug
+    	lsr
+    	lsr
+    	lsr
+    	lsr
+    	ora #WALLCOLOR&$F0
+.tankaidebugend
+    ELSE
+        lda #WALLCOLOR
+    ENDIF
+
+	sta COLUPF
+	;--do this above...the rest we do during the wall below.  
+	ldx #4
+; PositioningLoopVBLANK	;--excluding players (and M1)
+	lda PlayerX,X
+	jsr PositionASpriteSubroutineBank2   ;        9
+; 	dex
+; 	cpx #3
+; 	bne PositioningLoopVBLANK
 	
-ReturnFromBSSubroutine1
+
+	
+	ldx #$C0
+	lda #$FF                        ;+4     13
+; 	sta WSYNC
+; 	sta HMCLR
+	stx PF0
+	sta PF1
+	sta PF2                         ;+9     22
+	
+	;---reflect P0/P1
+	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
+	ldy #3
+SetREFPLoop
+	lda TankStatus,Y
+	and #TANKLEFT
+	beq EndREFPLoop     ;--only if facing left do we reflect
+	lax (MiscPtr),Y		;get X index into graphics registers
+	cpx #2
+	bcs EndREFPLoop
+	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
+	sta REFP0,X	
+EndREFPLoop
+	dey
+	bpl SetREFPLoop
+
+	
+	sty VDELP0  ;Y is 255 following loop above
+	sty VDELBL    
+
+	iny         ;Y = 0
+	sty VDELP1
+	
 	tsx
+	stx Temp       ;save stack pointer
+		
+
+	ldx #3
+PositioningLoop	;--just players
+	lda PlayerX,X
+	jsr PositionASpriteSubroutineBank2
+	dex
+	bpl PositioningLoop     ;       13 cycles last time through
+    
+	sty PF1                 ; Y is zero
+	sty PF2					;
+	sta CXCLR               ;+9     22
+
+	;--use stack pointer to hit ENABL
+	ldx #<ENABL
+	txs						;+4		26
+	
+	nop
+    nop
+    
+	ldy #TANKAREAHEIGHT		;+2		30
+
+		
+	jmp BeginMainMazeKernel ;+3     33
+
+	
+    PAGEALIGN 6
+	
+Switch0
+	lda Player0Bottom
+	sta Player0Top
+	bne BackFromSwitch0
+
+Wait0
+	nop
+	nop
+	bpl BackFromSwitch0
+	
+Switch1
+	lda Player0Bottom
+	sta Player0Top
+	bne BackFromSwitch1
+
+Wait1
+	nop
+	nop
+	bpl BackFromSwitch1
+	
+	
+	
+BeginMainMazeKernel
+
+
+	
+
+	
+KernelLoop
+	;draw player 0
+	cpy Player0Top				
+	beq Switch0
+	bpl Wait0
+	lda (Player0Ptr),Y
+	sta GRP0				;+15	50
+BackFromSwitch0	
+	
+
+	ldx BlockRowTable-BLOCKHEIGHT-1,Y	;+4		54
+
+	;draw player 1
+	lda #TANKHEIGHT*2-1
+	dcp PlayerYTemp
+	bcs DoDraw10
+	lda #0
+	.byte $2C
+DoDraw10
+	lda (Player1Ptr),Y
+	sta GRP1				;+18	72
+
+
+
+	;draw missile 0
+	lda #TANKHEIGHT-2
+	dcp MissileYTemp
+	sbc #TANKHEIGHT-4
+	sta ENAM0				;+12	 8
+	
+	
+	lda #TANKHEIGHT-2
+	dcp MissileYTemp+1
+	sbc #TANKHEIGHT-4
+	sta ENAM1				;+12	20
+	
+
+	
+	
+	lda PF1Left,X
+	sta PF1				;+7		27
+	lda PF2Left,X
+	sta PF2				;+7		34
+	
+	lda PF1Right,X
+	sta PF1				;+7		41
+	lda PF2Right,X
+	sta PF2				;+7		48
+
+	tsx					;+2		50
+	cpy BallY
+	php
+	txs					;+8		58
+	
+	
+	cpy Player0Top				
+	beq Switch1
+	bpl Wait1
+	lda (Player0Ptr+2),Y		
+	sta GRP0			;+15	73
+BackFromSwitch1
+	
+	
+	;draw player 1
+	lda #TANKHEIGHT*2-1
+	dcp PlayerYTemp
+	bcs DoDraw11
+	lda #0
+	.byte $2C
+DoDraw11
+	lda (Player1Ptr+2),Y
+	sta GRP1			;+18	15
+	
+	lda #0
+	sta PF1
+	sta PF2				;+8		23
+	
+	
+	dey
+	cpy #BLOCKHEIGHT
+	beq KernelLastRow	;+6		29
+	SLEEP 3
+	bne KernelLoop		;+6		35
+
+	
+Switch0b
+	lda Player0Bottom
+	sta Player0Top
+	bne BackFromSwitch0b
+
+Wait0b
+	nop
+	nop
+	bpl BackFromSwitch0b
+	
+Switch1b
+	lda Player0Bottom
+	sta Player0Top
+	bne BackFromSwitch1b
+
+Wait1b
+	nop
+	nop
+	bpl BackFromSwitch1b
+	
+KernelLastRow				;		31		branch here crosses page boundary
+	;lda #$80
+	;sta PF2
+	SLEEP 5
+	;line 1 of last row, this row has BASE (not wall)
+KernelLastRowLoop			;		36
+	lda Temp+1
+	sta COLUPF				;+6		42
+	;draw player 0
+	cpy Player0Top				
+	beq Switch0b
+	bpl Wait0b
+	lda (Player0Ptr),Y
+	sta GRP0				;+15	57
+BackFromSwitch0b
+	
+	lda #WALLCOLOR
+	sta COLUPF				;+5		62
+	
+
+	;draw player 1
+	lda #TANKHEIGHT*2-1
+	dcp PlayerYTemp
+	bcs DoDraw10b
+	lda #0
+	.byte $2C
+DoDraw10b
+	lda (Player1Ptr),Y
+	sta GRP1				;+18	 4
+
+
+	;line 2 of last row, has WALL (not base)
+	;draw missile 0
+	lda #TANKHEIGHT-2
+	dcp MissileYTemp
+	sbc #TANKHEIGHT-4
+	sta ENAM0				;+12	16
+	
+	
+	lda #TANKHEIGHT-2
+	dcp MissileYTemp+1
+	sbc #TANKHEIGHT-4
+	sta ENAM1				;+12	28
+	
+	
+	lda LastRowL
+	sta PF2					;+6		34
+	
+	SLEEP 6					;		40
+
+	
+	lda LastRowR
+	sta PF2					;+6		46
+	
+	tsx
+	cpy BallY
+	php
+	txs						;+10	56
+	
+	
+	
+	cpy Player0Top				
+	beq Switch1b
+	bpl Wait1b
+	lda (Player0Ptr+2),Y		
+	sta GRP0				;+15	71
+BackFromSwitch1b
+	
+	
+	;draw player 1
+	lda #TANKHEIGHT*2-1
+	dcp PlayerYTemp
+	bcs DoDraw11b
+	lda #0
+	.byte $2C
+DoDraw11b
+	lda (Player1Ptr+2),Y
+	sta GRP1			;+18	13
+	
+	lda LastRowL
+	sta PF2				;+6		19
+
+    ;--don't draw base sometimes	
+    lda GameStatus
+    and #DRAWBASE
+    beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
+	
+	lda #$80
+	sta PF2				;+5		31
+	dey
+	bne KernelLastRowLoop		;+5		36
+	beq DoneWithKernelLastRowLoop   ;is this necessary?
+DoNotDrawBase
+    sta.w PF2           ;+4
+    dey
+    bne KernelLastRowLoop
+DoneWithKernelLastRowLoop
+	sty PF2		;AKSHUALLY don't display base on last row
+	ldx Temp
+	txs			;+8		44
+
+	sty ENABL	;+3		47
+	sty GRP0	;+3		50
+	ldy #$FF	;+2		52
+	ldx #0		;+2		54
+	sta WSYNC
+	sty PF2		;+3		57
+	sty PF1		;+3		60
+	stx GRP1	
+	stx ENAM0
+	stx ENAM1
+;	sta PF0
+	
+;     sta HMCLR
+	lda #104
+; 	jsr PositionASpriteNoHMOVESubroutine
+    jsr PositionASpriteSubroutineBank2	
+
+	lda #112
 	inx
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutineBank2	
+    
+	lda #60
 	inx
-	lda $00,X      ;get high byte of return address
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutineBank2	
+
+	lda #66
+	inx
+; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
+    jsr PositionASpriteSubroutineBank2	
+
+	
+	;--done displaying maze
+	;--set up score, tanks remaining, lives remaining etc
+
+	sta WSYNC
+; 	sta HMOVE
+	ldy #0
+	sty PF0
+	sty PF1
+	sty PF2
+	sty COLUPF
+	sty REFP0
+	sty REFP1
+	sty VDELP0
+	sty VDELBL
+	lda #THREECOPIESCLOSE
+	sta NUSIZ0
+	lda #TWOCOPIESCLOSE
+	sta NUSIZ1
+	
+	lda #TANKSREMAININGCOLOR
+	sta COLUP0
+	sta COLUP1
+	sta HMCLR
+	
+
+	lda #>DigitDataMissile
+	sta Player0Ptr+3
+	sta Player1Ptr+1
+	lda MazeNumber
 	lsr
 	lsr
 	lsr
 	lsr
+	tay
+	lda DigitDataMissileLo,Y
+	sta Player0Ptr+2
+	lda MazeNumber
+	and #$0F
+	tay
+	lda DigitDataMissileLo,Y
+	sta Player1Ptr
+
+	lda #$FF
+	sta PF0
+	sta PF2		;this masks the missiles before we want them to show
+				;we will use the actual mask inside the loop below
+	
+	lda TanksRemaining
 	lsr
 	tax
-	nop $1FF8,X
+
+	lda TanksRemainingPF1Mask,X
+	sta PF1
 	
-	rts    
+	lda #2
+	sta ENAM0
+	sta ENAM1
+	ldy #8
+	bne BottomKernelLoopInner	;	branch always
+	
+BottomKernelLoopMiddle			;		19
+	dey							;+2		21
+	
+	lda TanksRemaining
+	lsr
+	adc #0						;+7		28
+	
+	tax							;+2		30
+	lda TanksRemainingPF1Mask,X
+	sta PF1
+	lda TanksRemainingPF2Mask,X
+	sta PF2						;14		44
+	
+	lda (Player0Ptr+2),Y		;+5
+	sta HMM0					;+3
+	asl							;+2
+	asl							;+2
+	ora #3						;+2
+	sta NUSIZ0					;+3		61
 
-	org $1FFC
-    rorg $1FFC
-    
-	.word Start
-	.word BankSwitchSubroutine1
+	lda (Player1Ptr),Y			;+5		66
+	sta HMM1					;+3		69	
+	asl							;+2		71
+	asl							;+2		73
+	ora #3						;+2		75
+	sta NUSIZ1					;+3		 2
 
-;----------------------------------------------------------------------------------------------------
-;----------------------------------------------------------------------------------------------------
-;---------------------------------        BANK TWO           ----------------------------------------
-;----------------------------------------------------------------------------------------------------
-;----------------------------------------------------------------------------------------------------
-
-
-	org $2000
-	rorg $3000
-
-Start2
-	sta $1FF8
+	sta HMOVE					;+3		 5
 
 	
+	bne BottomKernelLoopInnerMiddle	;	 8		branch always
+	
+BottomKernelLoopInner			;		38
+	lda (Player0Ptr+2),Y		;+5
+	sta HMM0					;+3
+	asl							;+2
+	asl							;+2
+	ora #3						;+2
+	sta NUSIZ0					;+3		55
 
+	lda (Player1Ptr),Y			;+5		
+	sta HMM1					;+3			
+	asl							;+2
+	asl							;+2		
+	ora #3						;+2
+	sta NUSIZ1					;+3		72
 
+	sta WSYNC
+	
+	sta HMOVE					;+3		 3
+BottomKernelLoopInnerMiddle		;		 8
+	
+
+	lda TanksRemainingGfx,Y		;+4	
+	sta GRP0			
+	sta GRP1					;+6		13
+	
+	cpy #4						
+	beq BottomKernelLoopMiddle	;+5		18
+								;		17
+	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
+	;	which is necessary to mask the missiles before we are ready to display them
+	lda TanksRemainingPF2Mask,X
+	sta PF2
+	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
+	dey
+	bpl BottomKernelLoopInner	;+5		33
+
+	
+BottomKernelLoopDone
+	sta WSYNC
+	iny
+	sty ENAM0
+	sty ENAM1
+	sty GRP0
+	sty GRP1
+	sty GRP0
+	sty PF0
+	sty PF1
+	sty PF2
+
+	jmp ReturnFromBSSubroutine2
 	
 
 
@@ -5403,14 +6210,531 @@ IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
 	tax		;restore X from stack
 	rts
 	
-	
+;****************************************************************************
+
+    ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
+    if ((* + 5) & $FF00) != ((* + 9) & $FF00)
+        echo "---Aligned PositionASpriteSubroutine -", $FF - ((* + 4) & $FF), "bytes left at location", *
+        ds $FF - ((* + 4) & $FF)
+    else
+        echo "---Aligned PositionASpriteSubroutine not necessary"
+    endif
+    SUBROUTINE
+PositionASpriteSubroutineBank2
+    sec
+	sta HMCLR
+	sta WSYNC
+.DivideLoop			;				this loop can't cross a page boundary!!!
+	sbc #15
+	bcs .DivideLoop	;+4		 4
+	eor #7
+	asl
+	asl
+	asl
+	asl				;+10	14
+	sta.wx HMP0,X	;+5		19
+	sta RESP0,X		;+4		23
+	sta WSYNC
+	sta HMOVE
+	rts                 ;+9      9
 	
 ;------------------------------------------------------
 ;---------------------DATA-----------------------------
 ;------------------------------------------------------
-; DigitDataLo
-; 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-; 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
+
+    PAGEALIGN 5
+    
+DigitDataMissile
+
+
+
+
+MissileOne
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
+
+
+
+
+
+MissileThree
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+MissileFour
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+MissileFive
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+
+
+
+
+
+
+MissileSeven
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileSix
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileNine    
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+    .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;  	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+MissileEight
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+MissileZero
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+MissileTwo
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+
+    ALIGNGFXDATA 1
+	
+TankGfxVertical
+   
+      
+        
+     ;--animation for upward facing tank:   
+TankUpAnimated1
+		.byte 0
+        .byte #%11011011;--
+        .byte #%00111100;--
+        .byte #%11111111;--
+        .byte #%00011000;--
+        .byte #%11011011;--
+        .byte #%00011000;--
+TankUpAnimated1b
+		.byte 0
+        .byte #%00000011;--
+        .byte #%11111100;--
+        .byte #%00111111;--
+        .byte #%11111100;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte 0
+TankUpAnimated2
+		.byte 0
+		.byte #%11011000;--
+		.byte #%00111111;--
+		.byte #%11111100;--
+		.byte #%00011011;--
+		.byte #%11011000;--
+		.byte #%00011011;--
+TankUpAnimated2b
+		.byte 0
+        .byte #%11000011;--
+        .byte #%00111100;--
+        .byte #%11111111;--
+        .byte #%00011000;--
+        .byte #%11011011;--
+        .byte #%00011000;--
+		.byte 0
+TankUpAnimated3
+		.byte 0
+		.byte #%00011000;--
+		.byte #%11111111;--
+		.byte #%00111100;--
+		.byte #%11011011;--
+		.byte #%00011000;--
+		.byte #%11011011;--
+TankUpAnimated3b
+		.byte 0
+        .byte #%11000000;--
+        .byte #%00111111;--
+        .byte #%11111100;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte #%00011011;--
+		.byte 0
+TankUpAnimated4
+		.byte 0
+		.byte #%00011011;--
+		.byte #%11111100;--
+		.byte #%00111111;--
+		.byte #%11011000;--
+		.byte #%00011011;--
+		.byte #%11011000;--
+TankUpAnimated4b
+		.byte 0
+        .byte #%00000000;--
+        .byte #%11111111;--
+        .byte #%00111100;--
+        .byte #%11011011;--
+        .byte #%00011000;--
+        .byte #%11011011;--
+		.byte 0
+TankDownAnimated1
+        .byte 0
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte #%00111111;--
+        .byte #%11111100;--
+        .byte #%00000011;--
+TankDownAnimated1b
+		.byte 0
+		.byte #%00011000;--
+		.byte #%11011011;--
+		.byte #%00011000;--
+		.byte #%11111111;--
+		.byte #%00111100;--
+		.byte #%11011011;--
+		.byte 0
+TankDownAnimated2
+        .byte 0
+        .byte #%00011000;--
+        .byte #%11011011;--
+        .byte #%00011000;--
+        .byte #%11111111;--
+        .byte #%00111100;--
+        .byte #%11000011;--
+TankDownAnimated2b
+		.byte 0
+		.byte #%00011011;--
+		.byte #%11011000;--
+		.byte #%00011011;--
+		.byte #%11111100;--
+		.byte #%00111111;--
+		.byte #%11011000;--
+		.byte 0
+TankDownAnimated3
+        .byte 0
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%11111100;--
+        .byte #%00111111;--
+        .byte #%11000000;--
+TankDownAnimated3b
+		.byte 0
+		.byte #%11011011;--
+		.byte #%00011000;--
+		.byte #%11011011;--
+		.byte #%00111100;--
+		.byte #%11111111;--
+		.byte #%00011000;--
+		.byte 0
+TankDownAnimated4
+        .byte 0
+        .byte #%11011011;--
+        .byte #%00011000;--
+        .byte #%11011011;--
+        .byte #%00111100;--
+        .byte #%11111111;--
+        .byte #%00000000;--       	
+TankDownAnimated4b
+		.byte 0
+		.byte #%11011000;--
+		.byte #%00011011;--
+		.byte #%11011000;--
+		.byte #%00111111;--
+		.byte #%11111100;--
+		.byte #%00011011;--
+		.byte 0
+
+		
+		
+		PAGEALIGN 3
+	
+DigitData
+Zero
+        .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%01101100;--
+One
+        .byte #%00011000;--
+        .byte #%00011000;--
+        .byte #%00011000;--
+        .byte #%00011000;--
+        .byte #%00011000;--
+        .byte #%00111000;--
+        .byte #%00011000;--
+Two
+        .byte #%11111110;--
+        .byte #%11000000;--
+        .byte #%01111000;--
+        .byte #%00011110;--
+        .byte #%00000110;--
+        .byte #%11000110;--
+        .byte #%01111100;--
+Three
+        .byte #%01111100;--
+        .byte #%11000110;--
+        .byte #%00000110;--
+        .byte #%00001100;--
+        .byte #%00000110;--
+        .byte #%11000110;--
+        .byte #%01111100;--
+Four
+        .byte #%00001100;--
+        .byte #%00001100;--
+        .byte #%11101110;--
+        .byte #%11001100;--
+        .byte #%01101100;--
+        .byte #%00101100;--
+        .byte #%00001100;--
+Five
+        .byte #%01111100;--
+        .byte #%11000110;--
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%11111100;--
+        .byte #%11000000;--
+        .byte #%11111110;--
+Six
+        .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11101100;--
+        .byte #%11000000;--
+        .byte #%11000000;--
+        .byte #%01101100;--
+Seven
+        .byte #%00110000;--
+        .byte #%00110000;--
+        .byte #%00011000;--
+        .byte #%00001100;--
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%11111110;--
+Eight
+        .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%01101100;--
+Nine
+        .byte #%01101100;--
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%01101110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%01101100;--
+
+	
+
+    ALIGNGFXDATA 2
+		
+TankGfxHorizontal
+TankRightAnimated1
+        .byte 0
+        .byte #%01100110;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%11001100;--
+        .byte #%11001100;--
+TankRightAnimated1b
+		.byte 0
+		.byte #%01100110;--
+		.byte #%01100110;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
+		.byte #%11001100;--
+		.byte 0
+TankRightAnimated2
+        .byte 0
+        .byte #%11001100;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%10011001;--
+        .byte #%10011001;--
+TankRightAnimated2b
+		.byte 0
+		.byte #%11001100;--
+		.byte #%11001100;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
+		.byte #%10011001;--
+		.byte 0
+TankRightAnimated3
+        .byte 0
+        .byte #%10011001;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%00110011;--
+        .byte #%00110011;--
+TankRightAnimated3b
+		.byte 0
+		.byte #%10011001;--
+		.byte #%10011001;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
+		.byte #%00110011;--
+		.byte 0
+TankRightAnimated4
+       	.byte 0
+        .byte #%00110011;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%01100110;--
+        .byte #%01100110;--
+TankRightAnimated4b
+		.byte 0
+		.byte #%00110011;--
+		.byte #%00110011;--
+		.byte #%01111000;--
+		.byte #%01111111;--
+		.byte #%00110000;--
+		.byte #%01100110;--
+		.byte 0
+
+		
+		
+		
+		
+
+TanksRemainingGfx
+;	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+		
+	
+	
+	
+	PAGEALIGN 4
+
+
+
+
+	
+	ds BLOCKHEIGHT+1 - (* & $FF)
+BlockRowTable
+DigitBlank
+	ds BLOCKHEIGHT, 0
+	ds BLOCKHEIGHT, 1
+	ds BLOCKHEIGHT, 2
+	ds BLOCKHEIGHT, 3
+	ds BLOCKHEIGHT, 4
+	ds BLOCKHEIGHT, 5
+	ds BLOCKHEIGHT, 6
+	ds BLOCKHEIGHT, 7
+	ds BLOCKHEIGHT, 8
+	ds BLOCKHEIGHT, 9
+	ds BLOCKHEIGHT, 10
+	ds BLOCKHEIGHT, 11
+	ds BLOCKHEIGHT, 12
+	ds BLOCKHEIGHT, 13
+	ds BLOCKHEIGHT, 14
+	ds BLOCKHEIGHT, 15
+	ds BLOCKHEIGHT, 16
+	ds BLOCKHEIGHT, 17
+	
+
+
+DigitDataMissileLo
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
+	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
+		
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+		
 
 RotationTables
 	.word RotationEven, RotationOdd	
@@ -5419,8 +6743,6 @@ RotationOdd
 	.byte 0	;and first 3 bytes of next table
 RotationEven
 	.byte 2, 1, 3, 0
-; RotationOdd	=	* - 1	;uses last byte (zero) of data immediately preceding
-; 	.byte 2, 1, 3	
 
 
 	
@@ -5505,7 +6827,19 @@ TitleGraphicsEnd
 PFPointer
 	.word PF1Left, PF2Left, PF2Right, PF1Right
 
+
+TankUpFrame
+	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
+TankDownFrame
+	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
+TankRightFrame
+	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
+
 	
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
 ;****************************************************************************	
 
     echo "----", ($3F00-*), " bytes left (ROM) at end of Bank 2"
@@ -5513,7 +6847,7 @@ PFPointer
    	org $2F00
 	rorg $3F00
 	
-BankSwitchSubroutine2
+BankSwitchSubroutine2 
 	plp             ;+4
 	tsx             ;+2
 	dec $01,X       ;+6
@@ -5529,7 +6863,8 @@ BankSwitchSubroutine2
 	lsr             ;+10
 	tax             ;+2
 	nop $1FF8,X     ;+4
-	
+;     nop $1FF8
+
 	jmp (MiscPtr)   ;+5     57
 	
 ReturnFromBSSubroutine2
@@ -5543,8 +6878,9 @@ ReturnFromBSSubroutine2
 	lsr
 	lsr             ;+10
 	tax             ;+2
-	nop $1FF8,X     ;+4
-	
+; 	nop $1FF8,X     ;+4
+    nop $1FF8
+
 	rts             ;+6     32
 
 
