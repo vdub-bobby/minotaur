@@ -608,614 +608,6 @@ MainGameLoop
 
 
 	
-; ;----------------------------------------------------------------------------
-; ;----------------------Kernel Routine----------------------------------------
-; ;----------------------------------------------------------------------------
-; 	
-; KernelRoutineGame
-; 
-; 
-; 	;--room for score up here?
-; 
-; 	lda #RIGHTEIGHT
-; 	sta HMM1
-; 	
-; 	ldy #0
-; 	sta WSYNC
-; 	lda #SCORECOLOR
-; 	sta COLUP0
-; 	sta COLUP1						;+8		 8
-; 		
-; 	
-; 	;--display score
-; 	lda #THREECOPIESCLOSE|LEFTONE
-; 	sta VDELP0
-; 	sta VDELP1						;+8		16		turn on VDELPx (bit0==1)
-; 
-; 	sta NUSIZ0
-; 	sta NUSIZ1						;+6		29
-; 
-; 	SLEEP 7
-; 	
-; 	sta HMP0						  ;					 LEFTONE
-; 	asl
-; 	sta HMP1						  ;+8		37		LEFTTWO
-; 
-; 	sta RESP0						 ;+8		40		positioned at 57 (move left 1)
-; 	sta RESP1						 ;+3		43		positioned at 66 (move left 2)
-; 
-; 	sty GRP1
-; 	sty GRP0
-; 	sty ENAM0						 ;+7		50
-; 
-; 
-; 	sta WSYNC
-; 	sta HMOVE	
-; 	;--waste time efficiently:
-; 	SUBROUTINE
-; 	ldy #10		; 2
-; .wait
-; 	dey			 ; 2
-; 	bne .wait	 ; 3
-; 
-; 	SLEEP 3
-; 	
-; 	ldy #6+1
-; ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
-; 									 ;				(or - if it does, adjust the timing!)
-; 	SLEEP 3
-; 	dey							 ;+5		64
-; 	sty Temp					;+3		67
-; 	lda (ScorePtr),Y
-; 	sta GRP0					  ;+8		75
-; 	lda (ScorePtr+2),Y
-; 	sta GRP1					  ;+8		 7
-; 	lda (ScorePtr+4),Y
-; 	sta GRP0					  ;+8		15
-; 	lda (ScorePtr+6),Y
-; 	tax							 ;+7		22
-; 	lda (ScorePtr+8),Y
-; 	pha							 ;+8		30
-; 	lda (ScorePtr+10),Y
-; 	tay							 ;+7		37
-; 	pla							 ;+4		41
-; 	stx GRP1					  ;+3		44
-; 	sta GRP0
-; 	sty GRP1
-; 	sty GRP0					  ;+9		53
-; 	ldy Temp					;+3		56
-; 	bne ScoreKernelLoop		;+3		59
-; 									 ;		  58
-; 	sty GRP0
-; 	sty GRP1
-; 	sty GRP0					  ;+9		67	
-; 	
-; 	
-; 	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
-; 	sta NUSIZ0
-; 	sta NUSIZ1
-; 	
-; 	;--tank colors
-; 	lda #TANKCOLOR1 ;GOLD+10
-; 	sta COLUP0
-; 	lda #TANKCOLOR2 ;BLUE2+12
-; 	sta COLUP1
-; 	
-; 	;--reflect P0 or P1 as necessary.   prep for flip loop below
-; 	lda FrameCounter
-; 	and #1
-; 	asl
-; 	tax
-; 	lda RotationTablesBank1,X
-; 	sta MiscPtr
-; 	lda RotationTablesBank1+1,X
-; 	sta MiscPtr+1
-; 	
-; 	SUBROUTINE
-; 	if DEBUGTANKAICOUNTER = 1
-;         lda TankMovementCounter
-;         cmp #TANKAISWITCH
-;         bcs .tankaidebug
-;         lda #BLUE|$4
-;         bcc .tankaidebugend
-; .tankaidebug
-;     	lsr
-;     	lsr
-;     	lsr
-;     	lsr
-;     	ora #WALLCOLOR&$F0
-; .tankaidebugend
-;     ELSE
-;         lda #WALLCOLOR
-;     ENDIF
-; 
-; 	sta COLUPF
-; 	;--do this above...the rest we do during the wall below.  
-; 	ldx #4
-; ; PositioningLoopVBLANK	;--excluding players (and M1)
-; 	lda PlayerX,X
-; 	jsr PositionASpriteSubroutine   ;        9
-; ; 	dex
-; ; 	cpx #3
-; ; 	bne PositioningLoopVBLANK
-; 	
-; 
-; 	
-; 	ldx #$C0
-; 	lda #$FF                        ;+4     13
-; ; 	sta WSYNC
-; ; 	sta HMCLR
-; 	stx PF0
-; 	sta PF1
-; 	sta PF2                         ;+9     22
-; 	
-; 	;---reflect P0/P1
-; 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
-; 	ldy #3
-; SetREFPLoop
-; 	lda TankStatus,Y
-; 	and #TANKLEFT
-; 	beq EndREFPLoop     ;--only if facing left do we reflect
-; 	lax (MiscPtr),Y		;get X index into graphics registers
-; 	cpx #2
-; 	bcs EndREFPLoop
-; 	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
-; 	sta REFP0,X	
-; EndREFPLoop
-; 	dey
-; 	bpl SetREFPLoop
-; 
-; 	
-; 	sty VDELP0  ;Y is 255 following loop above
-; 	sty VDELBL    
-; 
-; 	iny         ;Y = 0
-; 	sty VDELP1
-; 	
-; 	tsx
-; 	stx Temp       ;save stack pointer
-; 		
-; 
-; 	ldx #3
-; PositioningLoop	;--just players
-; 	lda PlayerX,X
-; 	jsr PositionASpriteSubroutine
-; 	dex
-; 	bpl PositioningLoop     ;       13 cycles last time through
-;     
-; 	sty PF1                 ; Y is zero
-; 	sty PF2					;
-; 	sta CXCLR               ;+9     22
-; 
-; 	;--use stack pointer to hit ENABL
-; 	ldx #<ENABL
-; 	txs						;+4		26
-; 	
-; 	nop
-;     nop
-;     
-; 	ldy #TANKAREAHEIGHT		;+2		30
-; 
-; 		
-; 	jmp BeginMainMazeKernel ;+3     33
-; 
-; 	
-;****************************************
-	;--stick this here since we have a few free bytes
-
-; 	
-; ;*****************************************
-;     PAGEALIGN 1
-; 	
-; Switch0
-; 	lda Player0Bottom
-; 	sta Player0Top
-; 	bne BackFromSwitch0
-; 
-; Wait0
-; 	nop
-; 	nop
-; 	bpl BackFromSwitch0
-; 	
-; Switch1
-; 	lda Player0Bottom
-; 	sta Player0Top
-; 	bne BackFromSwitch1
-; 
-; Wait1
-; 	nop
-; 	nop
-; 	bpl BackFromSwitch1
-; 	
-; 	
-; 	
-; BeginMainMazeKernel
-; 
-; 
-; 	
-; 
-; 	
-; KernelLoop
-; 	;draw player 0
-; 	cpy Player0Top				
-; 	beq Switch0
-; 	bpl Wait0
-; 	lda (Player0Ptr),Y
-; 	sta GRP0				;+15	50
-; BackFromSwitch0	
-; 	
-; 
-; 	ldx BlockRowTable-BLOCKHEIGHT-1,Y	;+4		54
-; 
-; 	;draw player 1
-; 	lda #TANKHEIGHT*2-1
-; 	dcp PlayerYTemp
-; 	bcs DoDraw10
-; 	lda #0
-; 	.byte $2C
-; DoDraw10
-; 	lda (Player1Ptr),Y
-; 	sta GRP1				;+18	72
-; 
-; 
-; 
-; 	;draw missile 0
-; 	lda #TANKHEIGHT-2
-; 	dcp MissileYTemp
-; 	sbc #TANKHEIGHT-4
-; 	sta ENAM0				;+12	 8
-; 	
-; 	
-; 	lda #TANKHEIGHT-2
-; 	dcp MissileYTemp+1
-; 	sbc #TANKHEIGHT-4
-; 	sta ENAM1				;+12	20
-; 	
-; 
-; 	
-; 	
-; 	lda PF1Left,X
-; 	sta PF1				;+7		27
-; 	lda PF2Left,X
-; 	sta PF2				;+7		34
-; 	
-; 	lda PF1Right,X
-; 	sta PF1				;+7		41
-; 	lda PF2Right,X
-; 	sta PF2				;+7		48
-; 
-; 	tsx					;+2		50
-; 	cpy BallY
-; 	php
-; 	txs					;+8		58
-; 	
-; 	
-; 	cpy Player0Top				
-; 	beq Switch1
-; 	bpl Wait1
-; 	lda (Player0Ptr+2),Y		
-; 	sta GRP0			;+15	73
-; BackFromSwitch1
-; 	
-; 	
-; 	;draw player 1
-; 	lda #TANKHEIGHT*2-1
-; 	dcp PlayerYTemp
-; 	bcs DoDraw11
-; 	lda #0
-; 	.byte $2C
-; DoDraw11
-; 	lda (Player1Ptr+2),Y
-; 	sta GRP1			;+18	15
-; 	
-; 	lda #0
-; 	sta PF1
-; 	sta PF2				;+8		23
-; 	
-; 	
-; 	dey
-; 	cpy #BLOCKHEIGHT
-; 	beq KernelLastRow	;+6		29
-; 	SLEEP 3
-; 	bne KernelLoop		;+6		35
-; 
-; 	
-; Switch0b
-; 	lda Player0Bottom
-; 	sta Player0Top
-; 	bne BackFromSwitch0b
-; 
-; Wait0b
-; 	nop
-; 	nop
-; 	bpl BackFromSwitch0b
-; 	
-; Switch1b
-; 	lda Player0Bottom
-; 	sta Player0Top
-; 	bne BackFromSwitch1b
-; 
-; Wait1b
-; 	nop
-; 	nop
-; 	bpl BackFromSwitch1b
-; 	
-; KernelLastRow				;		31		branch here crosses page boundary
-; 	;lda #$80
-; 	;sta PF2
-; 	SLEEP 5
-; 	;line 1 of last row, this row has BASE (not wall)
-; KernelLastRowLoop			;		36
-; 	lda Temp+1
-; 	sta COLUPF				;+6		42
-; 	;draw player 0
-; 	cpy Player0Top				
-; 	beq Switch0b
-; 	bpl Wait0b
-; 	lda (Player0Ptr),Y
-; 	sta GRP0				;+15	57
-; BackFromSwitch0b
-; 	
-; 	lda #WALLCOLOR
-; 	sta COLUPF				;+5		62
-; 	
-; 
-; 	;draw player 1
-; 	lda #TANKHEIGHT*2-1
-; 	dcp PlayerYTemp
-; 	bcs DoDraw10b
-; 	lda #0
-; 	.byte $2C
-; DoDraw10b
-; 	lda (Player1Ptr),Y
-; 	sta GRP1				;+18	 4
-; 
-; 
-; 	;line 2 of last row, has WALL (not base)
-; 	;draw missile 0
-; 	lda #TANKHEIGHT-2
-; 	dcp MissileYTemp
-; 	sbc #TANKHEIGHT-4
-; 	sta ENAM0				;+12	16
-; 	
-; 	
-; 	lda #TANKHEIGHT-2
-; 	dcp MissileYTemp+1
-; 	sbc #TANKHEIGHT-4
-; 	sta ENAM1				;+12	28
-; 	
-; 	
-; 	lda LastRowL
-; 	sta PF2					;+6		34
-; 	
-; 	SLEEP 6					;		40
-; 
-; 	
-; 	lda LastRowR
-; 	sta PF2					;+6		46
-; 	
-; 	tsx
-; 	cpy BallY
-; 	php
-; 	txs						;+10	56
-; 	
-; 	
-; 	
-; 	cpy Player0Top				
-; 	beq Switch1b
-; 	bpl Wait1b
-; 	lda (Player0Ptr+2),Y		
-; 	sta GRP0				;+15	71
-; BackFromSwitch1b
-; 	
-; 	
-; 	;draw player 1
-; 	lda #TANKHEIGHT*2-1
-; 	dcp PlayerYTemp
-; 	bcs DoDraw11b
-; 	lda #0
-; 	.byte $2C
-; DoDraw11b
-; 	lda (Player1Ptr+2),Y
-; 	sta GRP1			;+18	13
-; 	
-; 	lda LastRowL
-; 	sta PF2				;+6		19
-; 
-;     ;--don't draw base sometimes	
-;     lda GameStatus
-;     and #DRAWBASE
-;     beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
-; 	
-; 	lda #$80
-; 	sta PF2				;+5		31
-; 	dey
-; 	bne KernelLastRowLoop		;+5		36
-; 	beq DoneWithKernelLastRowLoop   ;is this necessary?
-; DoNotDrawBase
-;     sta.w PF2           ;+4
-;     dey
-;     bne KernelLastRowLoop
-; DoneWithKernelLastRowLoop
-; 	sty PF2		;AKSHUALLY don't display base on last row
-; 	ldx Temp
-; 	txs			;+8		44
-; 
-; 	sty ENABL	;+3		47
-; 	sty GRP0	;+3		50
-; 	ldy #$FF	;+2		52
-; 	ldx #0		;+2		54
-; 	sta WSYNC
-; 	sty PF2		;+3		57
-; 	sty PF1		;+3		60
-; 	stx GRP1	
-; 	stx ENAM0
-; 	stx ENAM1
-; ;	sta PF0
-; 	
-; ;     sta HMCLR
-; 	lda #104
-; ; 	jsr PositionASpriteNoHMOVESubroutine
-;     jsr PositionASpriteSubroutine	
-; 
-; 	lda #112
-; 	inx
-; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-;     jsr PositionASpriteSubroutine	
-;     
-; 	lda #60
-; 	inx
-; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-;     jsr PositionASpriteSubroutine	
-; 
-; 	lda #66
-; 	inx
-; ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-;     jsr PositionASpriteSubroutine	
-; 
-; 	
-; 	;--done displaying maze
-; 	;--set up score, tanks remaining, lives remaining etc
-; 
-; 	sta WSYNC
-; ; 	sta HMOVE
-; 	ldy #0
-; 	sty PF0
-; 	sty PF1
-; 	sty PF2
-; 	sty COLUPF
-; 	sty REFP0
-; 	sty REFP1
-; 	sty VDELP0
-; 	sty VDELBL
-; 	lda #THREECOPIESCLOSE
-; 	sta NUSIZ0
-; 	lda #TWOCOPIESCLOSE
-; 	sta NUSIZ1
-; 	
-; 	lda #TANKSREMAININGCOLOR
-; 	sta COLUP0
-; 	sta COLUP1
-; 	sta HMCLR
-; 	
-; 
-; 	lda #>DigitDataMissile
-; 	sta Player0Ptr+3
-; 	sta Player1Ptr+1
-; 	lda MazeNumber
-; 	lsr
-; 	lsr
-; 	lsr
-; 	lsr
-; 	tay
-; 	lda DigitDataMissileLo,Y
-; 	sta Player0Ptr+2
-; 	lda MazeNumber
-; 	and #$0F
-; 	tay
-; 	lda DigitDataMissileLo,Y
-; 	sta Player1Ptr
-; 
-; 	lda #$FF
-; 	sta PF0
-; 	sta PF2		;this masks the missiles before we want them to show
-; 				;we will use the actual mask inside the loop below
-; 	
-; 	lda TanksRemaining
-; 	lsr
-; 	tax
-; 
-; 	lda TanksRemainingPF1Mask,X
-; 	sta PF1
-; 	
-; 	lda #2
-; 	sta ENAM0
-; 	sta ENAM1
-; 	ldy #8
-; 	bne BottomKernelLoopInner	;	branch always
-; 	
-; BottomKernelLoopMiddle			;		19
-; 	dey							;+2		21
-; 	
-; 	lda TanksRemaining
-; 	lsr
-; 	adc #0						;+7		28
-; 	
-; 	tax							;+2		30
-; 	lda TanksRemainingPF1Mask,X
-; 	sta PF1
-; 	lda TanksRemainingPF2Mask,X
-; 	sta PF2						;14		44
-; 	
-; 	lda (Player0Ptr+2),Y		;+5
-; 	sta HMM0					;+3
-; 	asl							;+2
-; 	asl							;+2
-; 	ora #3						;+2
-; 	sta NUSIZ0					;+3		61
-; 
-; 	lda (Player1Ptr),Y			;+5		66
-; 	sta HMM1					;+3		69	
-; 	asl							;+2		71
-; 	asl							;+2		73
-; 	ora #3						;+2		75
-; 	sta NUSIZ1					;+3		 2
-; 
-; 	sta HMOVE					;+3		 5
-; 
-; 	
-; 	bne BottomKernelLoopInnerMiddle	;	 8		branch always
-; 	
-; BottomKernelLoopInner			;		38
-; 	lda (Player0Ptr+2),Y		;+5
-; 	sta HMM0					;+3
-; 	asl							;+2
-; 	asl							;+2
-; 	ora #3						;+2
-; 	sta NUSIZ0					;+3		55
-; 
-; 	lda (Player1Ptr),Y			;+5		
-; 	sta HMM1					;+3			
-; 	asl							;+2
-; 	asl							;+2		
-; 	ora #3						;+2
-; 	sta NUSIZ1					;+3		72
-; 
-; 	sta WSYNC
-; 	
-; 	sta HMOVE					;+3		 3
-; BottomKernelLoopInnerMiddle		;		 8
-; 	
-; 
-; 	lda TanksRemainingGfx,Y		;+4	
-; 	sta GRP0			
-; 	sta GRP1					;+6		13
-; 	
-; 	cpy #4						
-; 	beq BottomKernelLoopMiddle	;+5		18
-; 								;		17
-; 	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
-; 	;	which is necessary to mask the missiles before we are ready to display them
-; 	lda TanksRemainingPF2Mask,X
-; 	sta PF2
-; 	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
-; 	dey
-; 	bpl BottomKernelLoopInner	;+5		33
-; 
-; 	
-; BottomKernelLoopDone
-; 	sta WSYNC
-; 	iny
-; 	sty ENAM0
-; 	sty ENAM1
-; 	sty GRP0
-; 	sty GRP1
-; 	sty GRP0
-; 	sty PF0
-; 	sty PF1
-; 	sty PF2
-; 
-; 	rts
 
 
 ;----------------------------------------------------------------------------
@@ -1666,7 +1058,7 @@ EnemyNotInCenterColumns
     adc #COLUMNWIDTH*3
     sec
     sbc TankX
-    cmp #(COLUMNWIDTH*7)+1
+    cmp #(COLUMNWIDTH*6)+1
     bcc FireEnemyBulletNow
     bcs EnemyNotAllowedToShootVertically    ;branch always
 EnemyShootingHorizontal    
@@ -1677,7 +1069,7 @@ EnemyShootingHorizontal
     adc #ROWHEIGHT*3
     sec
     sbc TankY
-    cmp #(ROWHEIGHT*7)+1
+    cmp #(ROWHEIGHT*6)+1
     bcs EnemyNotAllowedToShootHorizontally
 
     ;%
@@ -4805,29 +4197,29 @@ DoneWithKernelLastRowLoop
 
 	sta WSYNC
 ; 	sta HMOVE
-	ldy #0
-	sty PF0
+	ldy #0                  ;+2
+	sty PF0                 
 	sty PF1
 	sty PF2
 	sty COLUPF
 	sty REFP0
 	sty REFP1
 	sty VDELP0
-	sty VDELBL
+	sty VDELBL              ;+24    26
 	lda #THREECOPIESCLOSE
 	sta NUSIZ0
 	lda #TWOCOPIESCLOSE
-	sta NUSIZ1
+	sta NUSIZ1              ;+10    36
 	
 	lda #TANKSREMAININGCOLOR
 	sta COLUP0
 	sta COLUP1
-	sta HMCLR
+	sta HMCLR               ;+11    47
 	
 
 	lda #>DigitDataMissile
 	sta Player0Ptr+3
-	sta Player1Ptr+1
+	sta Player1Ptr+1        ;+8     55
 	lda MazeNumber
 	lsr
 	lsr
@@ -4842,91 +4234,99 @@ DoneWithKernelLastRowLoop
 	lda DigitDataMissileLo,Y
 	sta Player1Ptr
 
+	
+    ;this masks the missiles before we want them to show
+    ;we will use the actual mask inside the loop below	
 	lda #$FF
 	sta PF0
-	sta PF2		;this masks the missiles before we want them to show
-				;we will use the actual mask inside the loop below
+	sta PF2                     
+	
+	sta WSYNC                   ;
+	SLEEP 8                     ;+8      8
+
 	
 	lda TanksRemaining
 	lsr
-	tax
+	tax                         ;+7     15
 
 	lda TanksRemainingPF1Mask,X
-	sta PF1
+	sta PF1                     ;+7     22
 	
 	lda #2
 	sta ENAM0
-	sta ENAM1
+	sta ENAM1                   ;+8     30
 	ldy #8
-	bne BottomKernelLoopInner	;	branch always
+	bne BottomKernelLoopInner	;+5     35	branch always
 	
-BottomKernelLoopMiddle			;		19
-	dey							;+2		21
+BottomKernelLoopMiddle			;		18
+	dey							;+2		20
 	
 	lda TanksRemaining
 	lsr
-	adc #0						;+7		28
+	adc #0						;+7		27
 	
-	tax							;+2		30
+	tax							;+2		29
 	lda TanksRemainingPF1Mask,X
 	sta PF1
 	lda TanksRemainingPF2Mask,X
-	sta PF2						;14		44
+	sta PF2						;14		43
 	
 	lda (Player0Ptr+2),Y		;+5
 	sta HMM0					;+3
 	asl							;+2
 	asl							;+2
 	ora #3						;+2
-	sta NUSIZ0					;+3		61
+	sta NUSIZ0					;+3		60
 
-	lda (Player1Ptr),Y			;+5		66
-	sta HMM1					;+3		69	
-	asl							;+2		71
-	asl							;+2		73
-	ora #3						;+2		75
-	sta NUSIZ1					;+3		 2
+	lda (Player1Ptr),Y			;+5		65
+	sta HMM1					;+3		68	
+	asl							;+2		70
+	asl							;+2		72
+	ora #3						;+2		74
+	sta NUSIZ1					;+3		 1
 
-	sta HMOVE					;+3		 5
+	sta HMOVE					;+3		 4
 
+	lda TanksRemainingGfx,Y		;+4	     8
+	sta GRP0			
+	sta GRP1					;+6		14
+
+	bne BottomKernelLoopInnerMiddle	;+3	17		branch always
 	
-	bne BottomKernelLoopInnerMiddle	;	 8		branch always
-	
-BottomKernelLoopInner			;		38
+BottomKernelLoopInner			;		35   
+    SLEEP 4                     ;+4     39   
 	lda (Player0Ptr+2),Y		;+5
 	sta HMM0					;+3
 	asl							;+2
 	asl							;+2
 	ora #3						;+2
-	sta NUSIZ0					;+3		55
+	sta NUSIZ0					;+3		56      ;this is too early sometimes and causes errant collisions
 
 	lda (Player1Ptr),Y			;+5		
 	sta HMM1					;+3			
 	asl							;+2
 	asl							;+2		
 	ora #3						;+2
-	sta NUSIZ1					;+3		72
+	sta NUSIZ1					;+3		73      
 
-	sta WSYNC
+	sta WSYNC                   ;+3     76      
 	
 	sta HMOVE					;+3		 3
-BottomKernelLoopInnerMiddle		;		 8
-	
 
-	lda TanksRemainingGfx,Y		;+4	
+	lda TanksRemainingGfx,Y		;+4	            
 	sta GRP0			
-	sta GRP1					;+6		13
+	sta GRP1					;+6		13      
 	
 	cpy #4						
-	beq BottomKernelLoopMiddle	;+5		18
-								;		17
+	beq BottomKernelLoopMiddle	;+5		18     
+BottomKernelLoopInnerMiddle     ;       17
 	;--PF1 is set once per half loop, this is set here because we enter the loop with PF2=$FF
 	;	which is necessary to mask the missiles before we are ready to display them
 	lda TanksRemainingPF2Mask,X
 	sta PF2
-	SLEEP 4						;+10	28		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)
+	SLEEP 6						;+13	30		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)--- OR?????
 	dey
-	bpl BottomKernelLoopInner	;+5		33
+	bpl BottomKernelLoopInner	;+5		35      
 
 	
 BottomKernelLoopDone
@@ -5366,6 +4766,37 @@ TopLeftCornerNotEnclosed
 	sta PF1Right+MAZEROWS-4
 TopRightCornerNotEnclosed
 
+    
+    ;--more escape routes, this time for the right side
+    lda PF1Right+MAZEROWS-6
+    and #%11001111
+    sta PF1Right+MAZEROWS-6
+    lda PF1Right+MAZEROWS-8
+    and #%11001111
+    sta PF1Right+MAZEROWS-8
+    lda PF1Right+MAZEROWS-7
+    and #%00001100
+    beq SkipCreatingConnectingPassageRight
+    lda PF1Right+MAZEROWS-7
+    and #%11001111
+    sta PF1Right+MAZEROWS-7
+SkipCreatingConnectingPassageRight
+    ;--more escape routes, this time for the left side
+    lda PF1Left+MAZEROWS-6
+    and #%11001111
+    sta PF1Left+MAZEROWS-6
+    lda PF1Left+MAZEROWS-8
+    and #%11001111
+    sta PF1Left+MAZEROWS-8
+    lda PF1Left+MAZEROWS-7
+    and #%00001100
+    beq SkipCreatingConnectingPassageLeft
+    lda PF1Left+MAZEROWS-7
+    and #%11001111
+    sta PF1Left+MAZEROWS-7
+SkipCreatingConnectingPassageLeft
+    
+    
 	
 	;--make base reappear
 	lda GameStatus
@@ -5644,19 +5075,6 @@ NoBulletToBaseCollision
     lda TankCollisionRotationTables+1,X
     sta MiscPtr+1
 	
-; 	lda FrameCounter
-; 	and #1
-; 	asl
-; 	tax
-; 	lda CollisionRotationTables,X
-; 	sta MiscPtr
-; 	lda CollisionRotationTables+1,X
-; 	sta MiscPtr+1
-; 	lda CollisionRotationTables+4,X
-; 	sta MiscPtr+2
-; 	lda CollisionRotationTables+5,X
-; 	sta MiscPtr+3
-
 
     ldy #3
 TankCollisionLoop
