@@ -116,8 +116,8 @@ BulletNotUp              3435              (R )
 BulletOffScreen          3474              (R )
 BulletOnLeftLastRow      3759              (R )
 BulletOnScreen           347f              (R )
-BULLETRIGHT              0000              (R )
 BulletRight              1960              (R )
+BULLETRIGHT              0000              (R )
 BulletRightBank2         3cbf              (R )
 BULLETSOUND              0001              (R )
 BULLETSOUNDFREQ          000d              (R )
@@ -125,8 +125,8 @@ BULLETSOUNDLENGTH        000c              (R )
 BULLETSOUNDTONE          0003              (R )
 BULLETSPEEDHOR           0001                  
 BULLETSPEEDVER           0001                  
-BulletUp                 1954              (R )
 BULLETUP                 0003              (R )
+BulletUp                 1954              (R )
 BulletUpBank2            3cb3              (R )
 BulletX                  009c              (R )
 BulletY                  00a0              (R )
@@ -698,8 +698,8 @@ TankNotOnscreen          127b              (R )
 TankNotOnScreenCannotDie 36d7              (R )
 TankNotOnScreenDoNotIncreaseSpeed 3833              (R )
 TankNotTurning           14ee              (R )
-TANKOFFSCREEN            007f              (R )
 TankOffScreen            364a              (R )
+TANKOFFSCREEN            007f              (R )
 TankOffScreenCannotBeKilled 372b                  
 TankOffscreenCannotShoot 122d              (R )
 TankOnScreen             364d              (R )
@@ -719,6 +719,7 @@ TankRightAnimated3b      3b72
 TankRightAnimated4       3b7a              (R )
 TankRightAnimated4b      3b81                  
 TankRightFrame           3d7c              (R )
+TankShootingVertically   11fd                  
 TANKSPEED                000e              (R )
 TANKSPEED0               0000              (R )
 TANKSPEED1               0001                  

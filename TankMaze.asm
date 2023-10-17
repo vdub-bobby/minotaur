@@ -1643,6 +1643,7 @@ ShootFromTank
     cmp #MAZEAREAHEIGHT+2
     bcs TankOffscreenCannotShoot
 
+    
     ;--what kind of logic can we use for shooting?
     ;-- how about - only allow horizontal firing if on bottom row (at base) or if player tank is within ... 3 rows?
     ;               and only allow vertical firing if in center two columns (at base) or if player tank is within ...3 columns?
@@ -1653,11 +1654,12 @@ ShootFromTank
     bcs EnemyShootingHorizontal
     ;--else shooting vertical
     ;--is tank in center two columns? (X between 72 and 80)
+TankShootingVertically
     lda TankX,Y
     cmp #72
     bcc EnemyNotInCenterColumns    
     cmp #80
-    bcs FireEnemyBulletNow
+    bcc FireEnemyBulletNow
 EnemyNotInCenterColumns
     ;--now see if close to player tank
     clc
@@ -1667,7 +1669,7 @@ EnemyNotInCenterColumns
     cmp #(COLUMNWIDTH*7)+1
     bcc FireEnemyBulletNow
     bcs EnemyNotAllowedToShootVertically    ;branch always
-EnemyShootingHorizontal    ;--just don't shoot horizontally for now so I can see if everything is working
+EnemyShootingHorizontal    
     lda TankY,Y
     cmp #ROWHEIGHT+1
     beq FireEnemyBulletNow
@@ -1677,6 +1679,7 @@ EnemyShootingHorizontal    ;--just don't shoot horizontally for now so I can see
     sbc TankY
     cmp #(ROWHEIGHT*7)+1
     bcs EnemyNotAllowedToShootHorizontally
+
     ;%
 ;     lda TankStatus,Y
 ;     lsr     ;--get TANKINPLAY flag into carry
@@ -5346,20 +5349,20 @@ ClearSideEntryPointsLoop
 	and #%00001100
 	beq TopLeftCornerNotEnclosed
 	lda PF1Left+MAZEROWS-3
-	and #%00111111
+	and #%11001111
 	sta PF1Left+MAZEROWS-3
 	lda PF1Left+MAZEROWS-4
-	and #%00111111
+	and #%11001111
 	sta PF1Left+MAZEROWS-4
 TopLeftCornerNotEnclosed
 	lda PF1Right+MAZEROWS-2 ;top right
 	and #%00001100
 	beq TopRightCornerNotEnclosed
 	lda PF1Right+MAZEROWS-3
-	and #%00111111
+	and #%11001111
 	sta PF1Right+MAZEROWS-3
 	lda PF1Right+MAZEROWS-4
-	and #%00111111
+	and #%11001111
 	sta PF1Right+MAZEROWS-4
 TopRightCornerNotEnclosed
 
