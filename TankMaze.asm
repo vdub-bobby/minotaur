@@ -5120,8 +5120,6 @@ NotFirstPass
 	lda Temp+2
 	sta RandomNumber
 
-	;--use MazeNumber as seed of random number generator
-	;--save current random number so we can restore it when we are done.
 
 	lda #>PF1Left
 	sta MiscPtr+1
@@ -5151,6 +5149,13 @@ GenerateMazePasses
 	tax
 	dex ;--now start on random number between 13 and 14 
 	
+	;--if on first pass (top row), always start with X=15
+; 	lda MazeGenerationPass
+; 	eor #MAZEGENERATIONPASSES+1
+; 	sta Temp+2                      ;holds zero if on first pass, non-zero otherwise
+; 	bne MakeMazeLoopOuter
+; 	ldx #15
+	
 MakeMazeLoopOuter	
 	stx Temp
 	stx Temp+1
@@ -5169,26 +5174,30 @@ MakeMazeLoopInner
 	pla
 	and (MiscPtr),Y	
 	sta (MiscPtr),Y
-	
-	lda #<PF1Left
-	sta MiscPtr
 
 	;--are we at the end of our horizontal path?  compare random number to constant
-	jsr UpdateRandomNumberBank2
-	;lda RandomNumber
+	jsr UpdateRandomNumberBank2 ;returns with RandomNumber in A
 	cmp #MAZEPATHCUTOFF
 	bcc EndOfRun
 	;--not at the end of the run, so loop around
 	dec Temp+1
 	dex
-; 	bpl MakeMazeLoopInner
-    bne MakeMazeLoopInner  ;<--don't go all the way to the left edge
+; 	bmi EndOfRun
+;     lda Temp+2  ;holds zero if first pass
+;     bne DoNotCarveAllTheWayToLeftInner
+;     ;--top row, carve all the way to the left
+;     beq MakeMazeLoopInner ;branch always
+; DoNotCarveAllTheWayToLeftInner
+;     txa
+; ; 	bpl MakeMazeLoopInner
+    bne MakeMazeLoopInner  ;<--don't go all the way to the left edge (again, unless we are on the first row)
+	
     
 
 	;--need to carve a passage downward if we reach this spot:
 EndOfRun
 	;--don't carve passage downward if we're on the bottom row
-	cpy #0
+	tya
 	beq EndRunBeginNextRun
 	;--otherwise, find a random passage to carve
 	;--Temp holds starting block number (X)
@@ -5201,25 +5210,26 @@ EndOfRun
 	;--this routine tries to find a random place in our new passage to carve downwards
 ;  	jsr UpdateRandomNumberBank2
 	;--new routine:
-	;	decrease length by 1, then remove random bits
-	dec Temp+1
-	and Temp+1
+	;	decrease length by 1, then remove random bits.  
+;	dec Temp+1      ;this is unnecessary, so removed.
+	lda Temp+1
+	and RandomNumber
 	sta Temp+1
 OnlyOnePlaceToCarve
 	lda Temp
 	sec
 	sbc Temp+1
-	sta Temp+1
+	sta Temp+1      ;now Temp+1 holds column to carve down in
 	txa
-	pha
+	pha             ;save X index
 	ldx Temp+1
-	cpx #1
-	beq NoCarveDownInColumn1
-	cpx #14
-	beq NoCarveDownInColumn14
+	lda AllowCarveDownTable,X
+	beq NoCarveDownInThisColumn
 	lda PFMaskLookupBank2,X
 	eor #$FF
 	pha
+	lda #<PF1Left
+	sta MiscPtr
 	lda PFRegisterLookupBank2,X
 	clc
 	adc MiscPtr
@@ -5237,25 +5247,23 @@ OnlyOnePlaceToCarve
 AtBottomRow
 	iny	
 	iny		;restore Y to current row index
-NoCarveDownInColumn1
-NoCarveDownInColumn14
+NoCarveDownInThisColumn
 	pla		;get block index back into X
 	tax
 	dex
-	stx Temp
-	stx Temp+1
-	lda #<PF1Left
-	sta MiscPtr
 	dex
 	bmi DoneWithRow
-; 	bpl MakeMazeLoopOuter
+
+;     lda Temp+2  ;holds zero if first pass
+;     bne DoNotCarveAllTheWayToLeft
+;     ;--top row, carve all the way to the left
+;     beq MakeMazeLoopOuter ;branch always
+; ;     txa
+; ;     bpl MakeMazeLoopOuter
+; DoNotCarveAllTheWayToLeft
+;     txa
     bne MakeMazeLoopOuter ;<--don't carve all the way to the left edge
 EndRunBeginNextRun
-	dex
-	stx Temp
-	stx Temp+1
-; 	lda #<PF1Left
-; 	sta MiscPtr         ;<--is this necessary?
 
 	
 DoneWithRow
@@ -5332,6 +5340,28 @@ ClearSideEntryPointsLoop
 	dey
 	bpl ClearSideEntryPointsLoop
 
+	
+	;--if top corner entry points are enclosed, add escape routes downward
+	lda PF1Left+MAZEROWS-2 ;top left
+	and #%00001100
+	beq TopLeftCornerNotEnclosed
+	lda PF1Left+MAZEROWS-3
+	and #%00111111
+	sta PF1Left+MAZEROWS-3
+	lda PF1Left+MAZEROWS-4
+	and #%00111111
+	sta PF1Left+MAZEROWS-4
+TopLeftCornerNotEnclosed
+	lda PF1Right+MAZEROWS-2 ;top right
+	and #%00001100
+	beq TopRightCornerNotEnclosed
+	lda PF1Right+MAZEROWS-3
+	and #%00111111
+	sta PF1Right+MAZEROWS-3
+	lda PF1Right+MAZEROWS-4
+	and #%00111111
+	sta PF1Right+MAZEROWS-4
+TopRightCornerNotEnclosed
 
 	
 	;--make base reappear
@@ -5379,13 +5409,17 @@ SetNewLevelTankDelay
 NotCompletelyDoneWithMaze
 	;--restore original random number
 	lda RandomNumber
-	sta Temp+2
+	sta Temp+2          ;save current random number in maze generation (this means maze generation starts random but each seed is consistent)
 	pla
 	sta RandomNumber
 	
 	jmp ReturnFromBSSubroutine2
 	
-		
+AllowCarveDownTable ;can't carve downward in the outer two columns
+    .byte 0, 0, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 0, 0		
 ;****************************************************************************
 
 EntryPointRowOffsetTable
