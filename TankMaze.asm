@@ -578,10 +578,10 @@ ScorePtr ds 12
 
 Start
 ;	sta $1FF8
-;     nop
-;     nop
-;     nop
-	jmp *+3
+    nop
+    nop
+    nop
+; 	jmp *+3
     CLEAN_START
 
 ;--Some Initial Setup
@@ -5521,14 +5521,14 @@ PutTitleGraphicsInPlayfieldLoop
 	sta MiscPtr+1
 	
 	txa
-	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)-1
 	bcc DrawTitleScreenModerately
 	;--else slower
 	lda FrameCounter
 	and #$1F
 	bne SkipDrawingTitleScreenThisFrame
 DrawTitleScreenModerately	
-	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)
+	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)-1
 	bcc DrawTitleScreenFast
 	lda FrameCounter
 	and #$F
@@ -6333,8 +6333,8 @@ ReturnFromBSSubroutine2
 	lsr
 	lsr             ;+10
 	tax             ;+2
-; 	nop $1FF8,X     ;+4
-    nop $1FF8
+	nop $1FF8,X     ;+4
+;     nop $1FF8
 
 	rts             ;+6     32
 
@@ -6344,5 +6344,5 @@ ReturnFromBSSubroutine2
 
 	org $2FFC
 	rorg $3FFC
-	.word Start2
+	.word (Start2 & $1FFF)|$1000
 	.word BankSwitchSubroutine2
