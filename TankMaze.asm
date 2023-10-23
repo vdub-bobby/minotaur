@@ -904,15 +904,11 @@ SetUpTankInitialValues
 	dex
 	bpl SetUpTankInitialValues
 	
-	sta RandomNumber
+	sta RandomNumber        ;seed with non-zero number, using 127 (TANKOFFSCREEN) for now
 	
 	lda #GAMEOFF|TITLESCREEN
 	sta GameStatus
 
-	
-	lda #WALLCOLOR
-	sta COLUPF
-	
 	if DEBUGPFPRIORITY = 1
 	    lda #REFLECTEDPF|DOUBLEWIDTHBALL
 	else
@@ -3464,13 +3460,13 @@ RotationEvenBank1
 	rorg $1F00
 	
 BankSwitchSubroutine1 
-	plp
-	tsx
-	dec $01,X
-	lda ($01,X)
+	plp             ;BRK pushed flags onto stack, pull off and discard
+	tsx         
+	dec $01,X       
+	lda ($01,X)     ;low byte of routine we are jumping to
 	sta MiscPtr
 	inc $01,X
-	lda ($01,X)
+	lda ($01,X)     ;high byte of routine we are jumping to
 	sta MiscPtr+1
 	lsr
 	lsr
@@ -3478,24 +3474,20 @@ BankSwitchSubroutine1
 	lsr
 	lsr
 	tax
-	nop $1FF8,X
-;     nop $1FF9
+	nop $1FF8,X     ;uses top 3 bits of address to determine which bank to switch to
 
 	jmp (MiscPtr)
 	
 ReturnFromBSSubroutine1
 	tsx
-	inx
-	inx
-	lda $00,X      ;get high byte of return address
+	lda $02,X      ;get high byte of return address
 	lsr
 	lsr
 	lsr
 	lsr
 	lsr
 	tax
-	nop $1FF8,X
-;     nop $1FF9
+	nop $1FF8,X     ;uses top 3 bits of address to determine which bank to switch to
 	
 	rts    
 
@@ -6324,9 +6316,7 @@ BankSwitchSubroutine2
 	
 ReturnFromBSSubroutine2
 	tsx             ;+2
-	inx                 
-	inx             ;+4
-	lda $00,X       ;+4     get high byte of return address
+	lda $02,X       ;+4     get high byte of return address
 	lsr
 	lsr
 	lsr
