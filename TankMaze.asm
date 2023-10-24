@@ -22,12 +22,11 @@
     Bank 1:
         startup routine
         main game loop
-        kernel routine
         VBLANK routine
             if game over: checks trigger to see if we should start a new game
             move enemy tanks
             move bullets (bank 2)
-            kernel setup
+            kernel setup (moved to beginning of kernel (in bank 2))
         Overscan routine
             checks collisions (bank 2)
             move player tank
@@ -40,9 +39,9 @@
             SetInitialEnemyTankSpeedRoutine
             MoveEnemyTanksSubroutine
             SoundSubroutine
-            PositionASpriteSubroutine
-            PositionASpriteNoHMOVESubroutine
-            DivideByTwoSubroutine
+            PositionASpriteSubroutine (no longer needed)
+            PositionASpriteNoHMOVESubroutine (no longer needed)
+            DivideByTwoSubroutine (no longer needed)
             UpdateRandomNumber
             EliminateDiagonalSubroutine
             TankFractionalAddition
@@ -55,6 +54,7 @@
         data
         bank switching logic
     Bank 2:
+        kernel routine
         various subroutines:
             DrawTitleScreenSubroutine
             MoveBulletSubroutine
@@ -69,34 +69,36 @@
             BulletHitTank / PlayerHitTank
             StartSoundSubroutineBank2
             IsBlockAtPositionBank2
+            PositionASpriteSubroutineBank2
         data
         bank switching logic
 
     Note:
         I used the bankswitching schema I came up with many moons ago, which uses the BRK vector and is super easy to use and allows 
         subroutines to be moved from one bank to another without having to go fiddle with jump tables or whatever.  ON THE OTHER HAND
-        it is extremely slow:  it uses 64 cycles to jump to a routine in another bank and then it takes 32 cycles to return.
+        it is extremely slow:  it uses 65 cycles to jump to a routine in another bank and then it takes 28 cycles to return.
         It also trashes the X and A registers.
 
 
 	To do:
+	Music?  Have a free channel but basically zero RAM left.  Could probably squeeze one byte of RAM out.
 	DONE: Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
 		could free up some space by going through things with a fine-toothed comb, but ...
 		it would be a big stretch even to get the bare minimum for a game in there.
 		anything extra, like music, or a fancier title screen, or a more-complicated enemy-tank AI routine
 		is going to require more space.  
-	Biggest thing at this point is figure out ramping difficulty
+	DONE BUT NEEDS TO BE FINE-TUNED Biggest thing at this point is figure out ramping difficulty
 		IDEAS:
-			faster tanks at higher levels  DONE
-			more frequent shooting by enemy tanks DONE
-			more aggressive tank movement routines IN PROGRESS
-			smarter shooting by enemy tanks HMM
-
-	IN PROGRESS: Figure out better AI for tank movement/firing routines 
+			DONE faster tanks at higher levels
+			IN PROGRESS more frequent shooting by enemy tanks
+			DONE more aggressive tank movement routines 
+			MOSTLY DONE smarter shooting by enemy tanks 
+    Have player tank use different graphic
+	DONE: Figure out better AI for tank movement/firing routines 
         Stole routines from Pac-Man.  Seems to work pretty well, want to make the player respawn delay longer, but counter bits are already maxed so may need to fiddle with code.
         Reason I have this here is because when player is dead the enemy tanks head for the base.  Maybe it's ok, at higher levels maybe they move fast enough that it will make a difference?
 	Add explosion graphics  or ????
-	Title/splash screen?  STARTED... still needs work.
+	DONE? Title/splash screen?  
 	Power-Ups - ???
 		keep this simple: 
 			speed
@@ -104,24 +106,27 @@
 			"bomb" that destroys all tanks on screen (and all walls?)
 			something that slows all enemies down?
 			other?
-
-	Other TODOs:
-      fix scanline count
-		DONE: tank:tank collisions	
-		DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
-		DONE: don't give points for enemy tank actions
-		DONE replace placeholder font
-		IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
-		PAL60 version
-		2-player?  (unlikely but...)
-		Other...?
-		sound tweaking/improvements
-      Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
-      Tank movement algorithm could use tweaking, tanks still run into each other too often.
-	
+			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
+			    would need a byte of RAM (or nibble?) for this
+    fix scanline count
+    	DONE: tank:tank collisions	
+    	DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
+    	DONE: don't give points for enemy tank actions
+    	DONE replace placeholder font
+    	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+    	PAL60 version
+    	2-player?  (unlikely but...)
+    	Other...?
+    	sound tweaking/improvements
+    MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
+    MOSTLY DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
+	Game Over logic of some kind
+	Logic for when levels wrap
 	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 
 	BUG KILLING!
+	    Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
+	        seems to happen at higher levels, not sure of cause.
         Occasionally (cause?) the a tank respawns when it shouldn't.
         Tanks kill each other when entering the screen.  Need to see if this can be fixed.
 		scanline count is wonky, need to tighten up various subroutines that take too long
@@ -958,10 +963,6 @@ NoVerticalTankMovement
 	tax						;get tank index back into X
 	pla						;pull new tank direction off stack into A
 	
-; 	eor #$FF	;flip bits
-; 	jsr EliminateDiagonalSubroutine
-; 	eor #$FF
-	
 	rts
 
 ;****************************************************************************	
@@ -1473,11 +1474,7 @@ RegularMovement
 	lda TankX
 	cmp #16
 	bcs PlayerOnScreen
-    lda #80
-    pha
-    lda #0
-    pha
-    beq ChooseTankDirection
+	bcc AimForBase  ;branch always
 	
 PlayerOnScreen
 	cpx #1
@@ -1510,6 +1507,7 @@ FoundAbsoluteYDifference
     cmp #CLYDEDISTANCE ;tanks are 8 pixels wide by 7-pixels tall (sort of).  7-tank lengths, using 7.5 pixels as a tank length = 53 pixels
     bcs EnemyTankIsFarAimForPlayer
     ;--else aim for base
+AimForBase
     lda #80
     pha
     lda #0
@@ -1646,6 +1644,8 @@ ReturnFromTankMovementSubroutine
 	
 ;****************************************************************************
 
+/*
+
     ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
     if ((* + 5) & $FF00) != ((* + 9) & $FF00)
         echo "---Aligned PositionASpriteSubroutine -", $FF - ((* + 4) & $FF), "bytes left at location", *
@@ -1672,7 +1672,7 @@ DivideLoop			;				this loop can't cross a page boundary!!!
 	sta HMOVE
 Return					;label for cycle-burning code   
 	rts                 ;+9      9
-
+*/
 	
 /*	
 PositionASpriteNoHMOVESubroutine
@@ -2521,221 +2521,8 @@ DoneWithMovementChecks
 
 	rts
 
-;----------------------------------------------------------------------------
 
-
-; KernelSetupSubroutine
-; 
-; 
-; 	;rotate Tanks through Players and Missiles
-; 	
-; 	lda FrameCounter
-; 	and #1
-; 	asl
-; 	tax
-; 	lda RotationTablesBank1,X   ;"RotationTables" if we move back to bank 2
-; 	sta MiscPtr
-; 	lda RotationTablesBank1+1,X
-; 	sta MiscPtr+1
-; 	ldy #3
-; RotationLoop
-; 	lax (MiscPtr),Y
-; 	lda TankX,Y
-; 	sta PlayerX,X
-; 	lda TankY,Y
-; 	sta PlayerY,X
-; 	txa
-; 	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
-; 	bne MissileNotPlayer   
-; PlayerNotMissile
-; 	;--get correct tank gfx ptr set up
-; 	txa
-; 	asl
-; 	asl
-; ; 	tax		;we need X * 4
-; 	sta Temp		;save X index
-; 	;--if Y = 0 then we are doing player tank.  Check if not moving.
-; 	tya ;set flags based on Y
-; 	bne NotPlayerTankSkipNotMovingCheck
-; 	;--how do we know if tank is not moving?  
-; 	lda TankStatus
-; 	and #TANKSPEED
-; 	bne PlayerTankMovingSetRegularGraphicsPointers
-; ; 	lda #0
-; 	.byte $2C   ;--skip two bytes 
-; 	;--end
-; PlayerTankMovingSetRegularGraphicsPointers
-; NotPlayerTankSkipNotMovingCheck
-; 	;--get index into tank graphics image
-; 	lda FrameCounter
-; 	lsr
-; 	and #%00000110
-; 	tax
-; 
-; 
-; 	lda TankStatus,Y
-; 	and #TANKUP
-; 	beq TankNotFacingUp
-; 	
-; 	lda TankUpFrame,X
-; 	pha
-; 	lda TankUpFrame+1,X
-; 	jmp SetTankGfxPtr
-; TankNotFacingUp
-; 	lda TankStatus,Y
-; 	and #TANKDOWN
-; 	beq TankNotFacingDown
-; 	lda TankDownFrame,X
-; 	pha
-; 	lda TankDownFrame+1,X
-; 	jmp SetTankGfxPtr
-; TankNotFacingDown
-; 	lda TankStatus,Y
-; 	and #TANKRIGHT
-; 	beq TankNotFacingRight
-; 	lda TankRightFrame,X
-; 	pha
-; 	lda TankRightFrame+1,X
-; 	jmp SetTankGfxPtr
-; TankNotFacingRight
-; 	lda TankRightFrame,X
-; 	pha
-; 	lda TankRightFrame+1,X
-; SetTankGfxPtr
-;     ldx Temp
-; 	sta Player0Ptr+1,X
-; 	sta Player0Ptr+3,X
-; 	pla
-; 	sec
-; 	sbc TankY,Y
-; 	sta Player0Ptr,X
-; 	clc
-; 	adc #TANKHEIGHT
-; 	sta Player0Ptr+2,X
-; 	jmp EndRotationLoop
-; MissileNotPlayer	
-; 	;--adjust missile width and position
-; 	txa
-; 	and #1
-; 	tax		;get correct index
-; 	lda MissileX,X
-; 	sec
-; 	sbc #2
-; 	sta MissileX,X
-; 	lda #OCTWIDTHMISSILE
-; 	sta NUSIZ0,X
-; 	lda #TANKHEIGHT-2
-; 	sta MissileHeight,X
-; EndRotationLoop
-; 	dey
-; 	bmi DoneWithRotationLoop
-; 	jmp RotationLoop
-; DoneWithRotationLoop
-; 	
-; 	
-; 	lda #TANKAREAHEIGHT
-; 	sec
-; 	sbc PlayerY+1
-; 	adc #TANKHEIGHT
-; 	asl
-; 	sta PlayerYTemp
-; 
-; 	lda PlayerY
-; 	sta Player0Top
-; 	sec
-; 	sbc #TANKHEIGHT	
-; 	ora #$80
-; 	sta Player0Bottom
-; 	lda PlayerY
-; 	cmp #TANKAREAHEIGHT
-; 	bcc NoSpecialAdjustmentToPlayer0Top
-; 	lda Player0Bottom
-; 	sta Player0Top	
-; 
-; NoSpecialAdjustmentToPlayer0Top
-; 
-; 
-; 
-; 	ldx #1
-; PreKernelSetupLoop2
-; 	lda #TANKAREAHEIGHT+1
-; 	sec
-; 	sbc MissileY,X
-; 	adc MissileHeight,X
-; 	sta MissileYTemp,X
-; 	
-; 	lda MissileX,X
-; 	clc
-; 	adc #3
-; 	sta MissileX,X
-; 	dex
-; 	bpl PreKernelSetupLoop2
-; 	
-; 	
-; 	;--if missile Y is above the playable area, need to adjust down by ... 1 line?
-; 	ldx #1
-; AdjustMissileYLoop
-; 	lda MissileYTemp,X
-; 	cmp #TANKHEIGHT-2
-; 	bcs NoAdjustMissileY 
-; 	adc #1
-; 	sta MissileYTemp,X
-; NoAdjustMissileY
-; 	dex
-; 	bpl AdjustMissileYLoop
-; 	
-; 	
-; 	lda FrameCounter
-; 	and #$0F
-; 	sta Temp        ;used below for cycling base color
-; 	;bullet flicker rotation:
-; 	and #3
-; 	tax
-; 	lda BulletX,X
-; 	sta BallX
-; 	lda BulletY,X
-; 	sta BallY
-; 
-; 
-; 	;--cycle BaseColor
-; 	lda #(BASECOLOR)&($F0)
-; 	ora Temp
-; 	sta Temp+1
-; 	
-; 	;--set up score pointers
-; 	
-; 	ldx #10
-; SetupScorePtrsLoop
-; 	txa
-; 	lsr
-; 	lsr
-; 	tay
-; 	lda Score,Y
-; 	pha
-; 	and #$0F
-; 	tay
-; 	lda DigitDataLo,Y
-; 	sta ScorePtr,X
-; 	pla
-; 	lsr
-; 	lsr
-; 	lsr
-; 	lsr
-; 	tay
-; 	lda DigitDataLo,Y
-; 	sta ScorePtr-2,X
-; 	lda #>DigitData
-; 	sta ScorePtr+1,X
-; 	sta ScorePtr-1,X
-; 	dex
-; 	dex
-; 	dex
-; 	dex
-; 	bpl SetupScorePtrsLoop
 	
-	
-	
-	rts
 
 
 ;----------------------------------------------------------------------------
@@ -2812,284 +2599,11 @@ DoneWithMovementChecks
 	
 
 	
-	PAGEALIGN 2
+	PAGEALIGN 1
 	
 	
     
-    
-; DigitDataMissile
-; 
-; 
-; 
-; 
-; MissileOne
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTTWO|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
-; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; 
-; 
-; 
-; 
-; 
-; 
-; 
-; MissileThree
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; 
-; MissileFour
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; MissileFive
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; 
-; 
-; 
-; 
-; 
-; 
-; MissileSeven
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; MissileSix
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; MissileNine    
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-;     .byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;  	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; MissileEight
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 
-; MissileZero
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; ;	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; MissileTwo
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte LEFTTHREE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
-	
-
-
-;     ALIGNGFXDATA 1
-; 	
-; TankGfxVertical
-;    
-;       
-;         
-;      ;--animation for upward facing tank:   
-; TankUpAnimated1
-; 		.byte 0
-;         .byte #%11011011;--
-;         .byte #%00111100;--
-;         .byte #%11111111;--
-;         .byte #%00011000;--
-;         .byte #%11011011;--
-;         .byte #%00011000;--
-; TankUpAnimated1b
-; 		.byte 0
-;         .byte #%00000011;--
-;         .byte #%11111100;--
-;         .byte #%00111111;--
-;         .byte #%11111100;--
-;         .byte #%00011011;--
-;         .byte #%11011000;--
-;         .byte 0
-; TankUpAnimated2
-; 		.byte 0
-; 		.byte #%11011000;--
-; 		.byte #%00111111;--
-; 		.byte #%11111100;--
-; 		.byte #%00011011;--
-; 		.byte #%11011000;--
-; 		.byte #%00011011;--
-; TankUpAnimated2b
-; 		.byte 0
-;         .byte #%11000011;--
-;         .byte #%00111100;--
-;         .byte #%11111111;--
-;         .byte #%00011000;--
-;         .byte #%11011011;--
-;         .byte #%00011000;--
-; 		.byte 0
-; TankUpAnimated3
-; 		.byte 0
-; 		.byte #%00011000;--
-; 		.byte #%11111111;--
-; 		.byte #%00111100;--
-; 		.byte #%11011011;--
-; 		.byte #%00011000;--
-; 		.byte #%11011011;--
-; TankUpAnimated3b
-; 		.byte 0
-;         .byte #%11000000;--
-;         .byte #%00111111;--
-;         .byte #%11111100;--
-;         .byte #%00011011;--
-;         .byte #%11011000;--
-;         .byte #%00011011;--
-; 		.byte 0
-; TankUpAnimated4
-; 		.byte 0
-; 		.byte #%00011011;--
-; 		.byte #%11111100;--
-; 		.byte #%00111111;--
-; 		.byte #%11011000;--
-; 		.byte #%00011011;--
-; 		.byte #%11011000;--
-; TankUpAnimated4b
-; 		.byte 0
-;         .byte #%00000000;--
-;         .byte #%11111111;--
-;         .byte #%00111100;--
-;         .byte #%11011011;--
-;         .byte #%00011000;--
-;         .byte #%11011011;--
-; 		.byte 0
-; TankDownAnimated1
-;         .byte 0
-;         .byte #%11011000;--
-;         .byte #%00011011;--
-;         .byte #%11011000;--
-;         .byte #%00111111;--
-;         .byte #%11111100;--
-;         .byte #%00000011;--
-; TankDownAnimated1b
-; 		.byte 0
-; 		.byte #%00011000;--
-; 		.byte #%11011011;--
-; 		.byte #%00011000;--
-; 		.byte #%11111111;--
-; 		.byte #%00111100;--
-; 		.byte #%11011011;--
-; 		.byte 0
-; TankDownAnimated2
-;         .byte 0
-;         .byte #%00011000;--
-;         .byte #%11011011;--
-;         .byte #%00011000;--
-;         .byte #%11111111;--
-;         .byte #%00111100;--
-;         .byte #%11000011;--
-; TankDownAnimated2b
-; 		.byte 0
-; 		.byte #%00011011;--
-; 		.byte #%11011000;--
-; 		.byte #%00011011;--
-; 		.byte #%11111100;--
-; 		.byte #%00111111;--
-; 		.byte #%11011000;--
-; 		.byte 0
-; TankDownAnimated3
-;         .byte 0
-;         .byte #%00011011;--
-;         .byte #%11011000;--
-;         .byte #%00011011;--
-;         .byte #%11111100;--
-;         .byte #%00111111;--
-;         .byte #%11000000;--
-; TankDownAnimated3b
-; 		.byte 0
-; 		.byte #%11011011;--
-; 		.byte #%00011000;--
-; 		.byte #%11011011;--
-; 		.byte #%00111100;--
-; 		.byte #%11111111;--
-; 		.byte #%00011000;--
-; 		.byte 0
-; TankDownAnimated4
-;         .byte 0
-;         .byte #%11011011;--
-;         .byte #%00011000;--
-;         .byte #%11011011;--
-;         .byte #%00111100;--
-;         .byte #%11111111;--
-;         .byte #%00000000;--       	
-; TankDownAnimated4b
-; 		.byte 0
-; 		.byte #%11011000;--
-; 		.byte #%00011011;--
-; 		.byte #%11011000;--
-; 		.byte #%00111111;--
-; 		.byte #%11111100;--
-; 		.byte #%00011011;--
-; 		.byte 0
-		
 
 PFRegisterLookup
 	.byte 0, 0, 0, 0
@@ -3123,208 +2637,8 @@ TankFractionalAddition
 
 ;****************************************************************************
 	
-; 		PAGEALIGN 3
-; 	
-; DigitData
-; Zero
-;         .byte #%01101100;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%01101100;--
-; One
-;         .byte #%00011000;--
-;         .byte #%00011000;--
-;         .byte #%00011000;--
-;         .byte #%00011000;--
-;         .byte #%00011000;--
-;         .byte #%00111000;--
-;         .byte #%00011000;--
-; Two
-;         .byte #%11111110;--
-;         .byte #%11000000;--
-;         .byte #%01111000;--
-;         .byte #%00011110;--
-;         .byte #%00000110;--
-;         .byte #%11000110;--
-;         .byte #%01111100;--
-; Three
-;         .byte #%01111100;--
-;         .byte #%11000110;--
-;         .byte #%00000110;--
-;         .byte #%00001100;--
-;         .byte #%00000110;--
-;         .byte #%11000110;--
-;         .byte #%01111100;--
-; Four
-;         .byte #%00001100;--
-;         .byte #%00001100;--
-;         .byte #%11101110;--
-;         .byte #%11001100;--
-;         .byte #%01101100;--
-;         .byte #%00101100;--
-;         .byte #%00001100;--
-; Five
-;         .byte #%01111100;--
-;         .byte #%11000110;--
-;         .byte #%00000110;--
-;         .byte #%00000110;--
-;         .byte #%11111100;--
-;         .byte #%11000000;--
-;         .byte #%11111110;--
-; Six
-;         .byte #%01101100;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%11101100;--
-;         .byte #%11000000;--
-;         .byte #%11000000;--
-;         .byte #%01101100;--
-; Seven
-;         .byte #%00110000;--
-;         .byte #%00110000;--
-;         .byte #%00011000;--
-;         .byte #%00001100;--
-;         .byte #%00000110;--
-;         .byte #%00000110;--
-;         .byte #%11111110;--
-; Eight
-;         .byte #%01101100;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%01101100;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%01101100;--
-; Nine
-;         .byte #%01101100;--
-;         .byte #%00000110;--
-;         .byte #%00000110;--
-;         .byte #%01101110;--
-;         .byte #%11000110;--
-;         .byte #%11000110;--
-;         .byte #%01101100;--
-; 
-; 	
-; 
-;     ALIGNGFXDATA 2
-; 		
-; TankGfxHorizontal
-; TankRightAnimated1
-;         .byte 0
-;         .byte #%01100110;--
-;         .byte #%00110000;--
-;         .byte #%01111111;--
-;         .byte #%01111000;--
-;         .byte #%11001100;--
-;         .byte #%11001100;--
-; TankRightAnimated1b
-; 		.byte 0
-; 		.byte #%01100110;--
-; 		.byte #%01100110;--
-; 		.byte #%01111000;--
-; 		.byte #%01111111;--
-; 		.byte #%00110000;--
-; 		.byte #%11001100;--
-; 		.byte 0
-; TankRightAnimated2
-;         .byte 0
-;         .byte #%11001100;--
-;         .byte #%00110000;--
-;         .byte #%01111111;--
-;         .byte #%01111000;--
-;         .byte #%10011001;--
-;         .byte #%10011001;--
-; TankRightAnimated2b
-; 		.byte 0
-; 		.byte #%11001100;--
-; 		.byte #%11001100;--
-; 		.byte #%01111000;--
-; 		.byte #%01111111;--
-; 		.byte #%00110000;--
-; 		.byte #%10011001;--
-; 		.byte 0
-; TankRightAnimated3
-;         .byte 0
-;         .byte #%10011001;--
-;         .byte #%00110000;--
-;         .byte #%01111111;--
-;         .byte #%01111000;--
-;         .byte #%00110011;--
-;         .byte #%00110011;--
-; TankRightAnimated3b
-; 		.byte 0
-; 		.byte #%10011001;--
-; 		.byte #%10011001;--
-; 		.byte #%01111000;--
-; 		.byte #%01111111;--
-; 		.byte #%00110000;--
-; 		.byte #%00110011;--
-; 		.byte 0
-; TankRightAnimated4
-;        	.byte 0
-;         .byte #%00110011;--
-;         .byte #%00110000;--
-;         .byte #%01111111;--
-;         .byte #%01111000;--
-;         .byte #%01100110;--
-;         .byte #%01100110;--
-; TankRightAnimated4b
-; 		.byte 0
-; 		.byte #%00110011;--
-; 		.byte #%00110011;--
-; 		.byte #%01111000;--
-; 		.byte #%01111111;--
-; 		.byte #%00110000;--
-; 		.byte #%01100110;--
-; 		.byte 0
-; 
-; 		
-; 		
-; 		
-; 		
-; 
-; TanksRemainingGfx
-; ;	.byte 0
-; 	.byte %11101110
-; 	.byte %11101110
-; 	.byte %11101110
-; 	.byte %01000100		
-; 	.byte 0
-; 	.byte %11101110
-; 	.byte %11101110
-; 	.byte %11101110
-; 	.byte %01000100		
-			
 
-	
 
-		
-	
-;--if we are aiming at RAM locations, how do we aim at the base?  Base X = 80, Y = 0
-
-	;
-
-	;tank 0 = player, so don't need entry for that
-	;tank 1 target = player position
-	;tank 2 target = random position
-	;tank 3 target = player position
-TankTargetX = *-1
-	.byte TankX, TankX, TankX
-TankTargetY = *-1
-	.byte TankY, TankY, TankY
-	
-	;--following is combined with target above (see routine for details)
-	;tank 0 = player, so don't need entry for that
-	;tank 1 target = player position
-	;tank 2 target = tank 1?  or switched to player
-	;tank 3 target = tank 1
-TankTargetAdjustX = *-1
-	.byte TankX, RandomNumber, TankX+1
-TankTargetAdjustY = *-1
-	.byte TankY, RandomNumber, TankY+1
 	
 ;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
 TankTargetAdjustmentX 
@@ -3372,45 +2686,6 @@ TanksRemainingSpeedBoost = * - 3
     .byte 6, 4, 2, 2, 0, 0, 0
     .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
 	
-; 	PAGEALIGN 4
-; 
-; 
-; 
-; 
-; 	
-; 	ds BLOCKHEIGHT+1 - (* & $FF)
-; BlockRowTable
-; DigitBlank
-; 	ds BLOCKHEIGHT, 0
-; 	ds BLOCKHEIGHT, 1
-; 	ds BLOCKHEIGHT, 2
-; 	ds BLOCKHEIGHT, 3
-; 	ds BLOCKHEIGHT, 4
-; 	ds BLOCKHEIGHT, 5
-; 	ds BLOCKHEIGHT, 6
-; 	ds BLOCKHEIGHT, 7
-; 	ds BLOCKHEIGHT, 8
-; 	ds BLOCKHEIGHT, 9
-; 	ds BLOCKHEIGHT, 10
-; 	ds BLOCKHEIGHT, 11
-; 	ds BLOCKHEIGHT, 12
-; 	ds BLOCKHEIGHT, 13
-; 	ds BLOCKHEIGHT, 14
-; 	ds BLOCKHEIGHT, 15
-; 	ds BLOCKHEIGHT, 16
-; 	ds BLOCKHEIGHT, 17
-; 	
-; 
-; 
-; DigitDataMissileLo
-; 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
-; 	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
-; 		
-; TanksRemainingPF1Mask
-; 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
-; 
-; TanksRemainingPF2Mask		
-; 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 
 
 TankDirection
@@ -3442,54 +2717,80 @@ NumberOfBitsSet
 MovementMask
 	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
 	
-RotationTablesBank1
-	.word RotationEvenBank1, RotationOddBank1	
-	
-RotationOddBank1
-	.byte 0	;and first 3 bytes of next table
-RotationEvenBank1
-	.byte 2, 1, 3, 0
-
+; RotationTablesBank1
+; 	.word RotationEvenBank1, RotationOddBank1	
+; 	
+; RotationOddBank1
+; 	.byte 0	;and first 3 bytes of next table
+; RotationEvenBank1
+; 	.byte 2, 1, 3, 0
+; 
 
 	
 ;------------------------------------------------------------------------------------------
 	
-    echo "----", ($1F00-*), " bytes left (ROM) at end of Bank 1"
+    echo "----", ($1FD5-*), " bytes left (ROM) at end of Bank 1"
 
-	org $1F00
-	rorg $1F00
+	org $1FD5
+	rorg $1FD5
 	
+	;BRK vector comes here, call with:
+	;   BRK
+	;   .word AddressOfRoutine
+	;routines can be moved to any bank (even the same bank as the calling routine) 
+	;without changing how they are called.  
+	;Banks must be RORGed to different (odd-numbered) banks ($1000, $3000, $5000, etc)
+	;and first bank must be at $1000, second at $3000, etc.
+	;Routines must return with:
+	;   JMP ReturnFromBSSubroutine1 ;see below
+	;Advantages:
+	;   no jump tables to maintain
+	;   routines can be moved from one bank to another with changing bank switching code
+	;   bank switching code is fairly compact, approx 38 bytes.
+	;   code to call a routine that may (or may not!) be in another bank is extemely compact,
+	;       takes no more room than a regular JSR
+	;   code to call a routine that may be in another bank is very readable, almost as readable
+	;       as a regular JSR
+	;   uses no RAM
+	;Disadvantages
+	;   38 bytes per bank can add up, hand-coded bank switching logic could potentially be more compact, at the expense of some clarity/flexibility
+	;   bank switch code uses (briefly) 3 bytes of stack space, more than a JSR call, and trashes accumulator and X register.
+	;   very slow:
+	;       regular subroutine call: 6 cycles for JSR, 6 cycles for RTS for 12 total to call and return
+	;       this bank-switching code:   65 cycles for call (BRK + code below), 29 to return for 94 cycles total
+	;       admittedly, the proper comparison isn't to a JSR/RTS combination, but rather to some other bank-switching code, and
+	;           there the comparison isn't quite as awful.  But still, the flexibility and clarity comes with a price.
 BankSwitchSubroutine1 
-	plp             ;BRK pushed flags onto stack, pull off and discard
-	tsx         
-	dec $01,X       
-	lda ($01,X)     ;low byte of routine we are jumping to
-	sta MiscPtr
-	inc $01,X
-	lda ($01,X)     ;high byte of routine we are jumping to
-	sta MiscPtr+1
+	plp             ;+4         BRK pushed flags onto stack, pull off and discard
+	tsx             ;+2     6
+	dec $01,X       ;+6    
+	lda ($01,X)     ;+6         low byte of routine we are jumping to
+	sta MiscPtr     ;+3     21
+	inc $01,X       ;+6
+	lda ($01,X)     ;+6         high byte of routine we are jumping to
+	sta MiscPtr+1   ;+3     36
+   	lsr
 	lsr
 	lsr
 	lsr
 	lsr
-	lsr
-	tax
-	nop $1FF8,X     ;uses top 3 bits of address to determine which bank to switch to
+	tax             ;+12    48
+	nop $1FF8,X     ;+5     53  uses top 3 bits of address to determine which bank to switch to
 
-	jmp (MiscPtr)
+	jmp (MiscPtr)   ;+5     58
 	
 ReturnFromBSSubroutine1
-	tsx
-	lda $02,X      ;get high byte of return address
+	tsx             ;+2
+	lda $02,X       ;+4      6  get high byte of return address
 	lsr
 	lsr
 	lsr
 	lsr
 	lsr
-	tax
-	nop $1FF8,X     ;uses top 3 bits of address to determine which bank to switch to
-	
-	rts    
+	tax             ;+12    18
+	nop $1FF8,X     ;+5     23  uses top 3 bits of address to determine which bank to switch to
+	rts             ;+6     29
+EndBankSwitchRoutine1
 
 	org $1FFC
     rorg $1FFC
@@ -3915,7 +3216,7 @@ PositioningLoop	;--just players
 	jmp BeginMainMazeKernel ;+3     33
 
 	
-    PAGEALIGN 6
+    PAGEALIGN 2
 	
 Switch0
 	lda Player0Bottom
@@ -4935,22 +4236,6 @@ TankOnScreen
     rts
 
 ;****************************************************************************
-; 
-; CollisionRotationTables
-; 	.word TankCollisionRegisterEven-1, TankCollisionRegisterOdd-1 
-; 	.word TankCollisionBitEven-1, TankCollisionBitOdd-1
-			
-	
-; TankCollisionRegisterOdd
-; 	.byte CXM0P, CXPPMM, CXM1P
-; ; 	.byte CXM0P, CXM1P, CXPPMM
-; TankCollisionBitOdd
-; 	.byte $40, $80, $80
-; TankCollisionRegisterEven
-; 	.byte CXM0P, CXPPMM, CXM0P
-; ; 	.byte CXM0P, CXM0P, CXPPMM
-; TankCollisionBitEven
-; 	.byte $80, $40, $40 ; $40, $40	
 	
 	
 ;byte holds
@@ -5661,10 +4946,10 @@ IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
 
     ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
     if ((* + 5) & $FF00) != ((* + 9) & $FF00)
-        echo "---Aligned PositionASpriteSubroutine -", $FF - ((* + 4) & $FF), "bytes left at location", *
+        echo "---Aligned PositionASpriteSubroutineBank2 -", $FF - ((* + 4) & $FF), "bytes left at location", *
         ds $FF - ((* + 4) & $FF)
     else
-        echo "---Aligned PositionASpriteSubroutine not necessary"
+        echo "---Aligned PositionASpriteSubroutineBank2 not necessary"
     endif
     SUBROUTINE
 PositionASpriteSubroutineBank2
@@ -5690,7 +4975,7 @@ PositionASpriteSubroutineBank2
 ;------------------------------------------------------
 
 
-    PAGEALIGN 5
+    PAGEALIGN 3
     
 DigitDataMissile
 
@@ -5964,7 +5249,7 @@ TankDownAnimated4b
 
 		
 		
-		PAGEALIGN 3
+		PAGEALIGN 4
 	
 DigitData
 Zero
@@ -6142,7 +5427,7 @@ TanksRemainingGfx
 	
 	
 	
-	PAGEALIGN 4
+	PAGEALIGN 5
 
 
 
@@ -6289,10 +5574,10 @@ DigitDataLo
 
 ;****************************************************************************	
 
-    echo "----", ($3F00-*), " bytes left (ROM) at end of Bank 2"
+    echo "----", ($3FD5-*), " bytes left (ROM) at end of Bank 2"
 
-   	org $2F00
-	rorg $3F00
+   	org $2FD5
+	rorg $3FD5
 	
 BankSwitchSubroutine2 
 	plp             ;+4
