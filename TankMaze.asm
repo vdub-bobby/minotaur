@@ -122,11 +122,11 @@
     MOSTLY DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
 	Game Over logic of some kind
 	Logic for when levels wrap
-	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
-
+	
 	BUG KILLING!
 	    FIXED, MAYBE Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
-	        seems to happen at higher levels, not sure of cause.
+	        seems to happen at higher levels, not sure of cause.  Think cause is when bullets are travelling down and hit BulletY==0 and 
+	        BulletX is not set to zero also.
         Occasionally (cause?) the a tank respawns when it shouldn't.
         Tanks kill each other when entering the screen.  Need to see if this can be fixed.
 		scanline count is wonky, need to tighten up various subroutines that take too long
@@ -242,6 +242,13 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 FIRSTCOLUMNX    =   16
 
 
+
+;--constants for game over routine
+;--TankMovementCounter is reused for this routine
+WALLDONEFLASHING = %10000000
+GAMEOVERWAITBITS = %01111111
+
+GAMEOVERWAIT    =   65 ;number of frames/4, can only use bottom 7 bits (0-127)
     
 ;--some constants used by the tank AI routine
 TANKAISWITCH	=	64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
@@ -585,7 +592,7 @@ PF2Right ds MAZEROWS-1
 PF1Right ds MAZEROWS-1
 LastRowL ds 1
 LastRowR ds 1
-Temp ds 3
+Temp ds 4
 MiscPtr 
 ScorePtr ds 12
 
@@ -732,6 +739,92 @@ OverscanRoutine
 	lda #OVERSCAN_TIMER
 	sta TIM64T
 	
+	
+	lda GameStatus
+	and #GAMEOVER
+	beq GameNotOver
+	;--if game is over, do some stuff
+	lda TankMovementCounter
+	and #WALLDONEFLASHING
+	bne DoneMakingWallsFlash
+	;--play some sound?
+	lda TankMovementCounter
+	lsr
+	lsr
+; 	sta Temp
+; 	lda #31
+; 	sec
+; 	sbc Temp
+	sta AUDF0
+	lda #BUZZSOUND
+	sta AUDC0
+	lda #7
+	sta AUDV0
+	inc TankMovementCounter ;used to make walls flash
+	;--now need to see if we have just finished flashing
+	lda TankMovementCounter
+	and #WALLDONEFLASHING
+	beq WallsStillFlashing  ;branch always
+    ;--walls done flashing:
+    ;   remove tanks from screen
+    ;   wait a bit, and then go back to title screen routine
+	jsr MoveAllTanksOffScreenSubroutine
+	;   reuse TankMovementCounter as a wait counter
+	lda #WALLDONEFLASHING|GAMEOVERWAIT
+	sta TankMovementCounter
+	lda #30
+	sta AUDF0   ;--actually, set freq back to 29 not 31
+DoneMakingWallsFlash
+    lda FrameCounter
+    and #3
+    bne GameOverRoutineStillGoing
+    dec TankMovementCounter ;--decrement wait
+	lda TankMovementCounter
+	and #GAMEOVERWAITBITS
+	beq GameOverRoutineDone
+	;--still ongoing, so a little fiddling with the sound
+	cmp #(GAMEOVERWAIT/4)*3
+	bcs NoChangeToGameOverSound
+	ldx #31
+	stx AUDF0
+	cmp #32
+	bcs NoChangeToGameOverVolume
+	cmp #24
+	bcc NoChangeToGameOverVolume
+	and #7
+	sta AUDV0
+	
+	bcs GameOverRoutineStillGoing   ;branch always
+	
+GameOverRoutineDone
+    ;to go back to title screen routine, need to:
+    ;   update GameStatus bits
+    ;   set MazeGenerationPass appropriately
+    ;   clear the screen
+	lda GameStatus
+	and #~GAMEOVER      ;clear game over bit
+	ora #TITLESCREEN    ;set title screen bit
+	sta GameStatus
+	lda #TitleGraphicsEnd-TitleGraphics-1
+	sta MazeGenerationPass
+	ldx #MAZEROWS-2
+	lda #0
+ClearMazeLoop
+	sta PF1Left,X
+	sta PF2Left,X
+	sta PF2Right,X
+	sta PF1Right,X
+	dex 
+	bpl ClearMazeLoop
+	sta LastRowL
+	sta LastRowR
+	;--also turn off sound
+	sta AUDV0
+GameOverRoutineStillGoing
+NoChangeToGameOverVolume
+NoChangeToGameOverSound
+WallsStillFlashing
+GameNotOver
 	
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
@@ -896,6 +989,7 @@ StartNewLevel
 	and #~TITLESCREEN	;--turn off title screen
 	sta GameStatus
 	
+MoveAllTanksOffScreenSubroutine     ;called from gameover routine
 	;--move tanks off screen, immobilize 
 	ldx #3
 	ldy #0  ;no direction, no speed, and TANKINPLAY = 0
@@ -3012,6 +3106,8 @@ NoAdjustMissileY
 	lda BulletY,X
 	sta BallY
 
+	
+	
 
 	;--cycle BaseColor
 	lda #(BASECOLOR)&($F0)
@@ -3163,9 +3259,30 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
     	ora #WALLCOLOR&$F0
 .tankaidebugend
     ELSE
+        lda GameStatus
+        and #GAMEOVER
+        beq RegularWallColor
+        lda TankMovementCounter
+        asl ;--get WALLDONEFLASHING bit into carry
+        bcc WallFlashingColor
+        lda #0
+WallFlashingColor
+        lsr
+;         lsr
+;         lsr
+;         lsr
+;         lsr
+        and #$0F
+        ora #(WALLCOLOR&$F0)
+        bne SetWallColor
+RegularWallColor
         lda #WALLCOLOR
+SetWallColor        
     ENDIF
 
+    sta WSYNC   ;--timing, this is required for now due to branches immediately above
+    
+    sta Temp+3
 	sta COLUPF
 	;--do this above...the rest we do during the wall below.  
 	ldx #4
@@ -3388,7 +3505,7 @@ KernelLastRowLoop			;		36
 	sta GRP0				;+15	57
 BackFromSwitch0b
 	
-	lda #WALLCOLOR
+	lda Temp+3;#WALLCOLOR
 	sta COLUPF				;+5		62
 	
 
@@ -3420,7 +3537,7 @@ DoDraw10b
 	lda LastRowL
 	sta PF2					;+6		34
 	
-	SLEEP 6					;		40
+	SLEEP 5					;		40
 
 	
 	lda LastRowR
@@ -3732,7 +3849,8 @@ BulletNotUp
 	sbc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
 	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
-    bcs BulletOnScreen                      ;branch always
+	beq BulletOffScreen                     ;if Y value is zero, then bullet is also offscreen
+    bne BulletOnScreen                      ;branch always
 BulletNotDown
 	tya	
 	cmp BulletRightBank2,X
@@ -4319,6 +4437,8 @@ CollisionsSubroutine
     ora #GAMEOVER|GAMEOFF
     sta GameStatus
     lda #0
+    ;--reset TankMovementCounter, (re)used to make walls flash
+    sta TankMovementCounter
     ;--kill sounds just for my own sanity
     sta AUDV0
     sta AUDV1
