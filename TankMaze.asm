@@ -125,7 +125,7 @@
 	right now stack uses 16 bytes, so I am basically out of RAM.  Need to reduce stack usage, or find other savings.
 
 	BUG KILLING!
-	    Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
+	    FIXED, MAYBE Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
 	        seems to happen at higher levels, not sure of cause.
         Occasionally (cause?) the a tank respawns when it shouldn't.
         Tanks kill each other when entering the screen.  Need to see if this can be fixed.
@@ -140,10 +140,10 @@
         FIXED: Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
             but when other tank dies, movement doesn't happen as quickly as it seems like it should.
         MAYBE FIXED: Possible for tanks to get stuck in this situation: (W=wall, T=tank):
-            ww w
-            wT w
-            wwTw
-            wwww
+            WW W
+            WT W
+            WWTW
+            WWWW
             and neither tank can move because a tank is in the way.
                 preferred solution: force tanks that don't move for more than 1/2 second to shoot (in a random direction?) to blast out a wall.
                 alternative solution: have tanks that don't move for more than 1/2 second to die.
@@ -230,10 +230,10 @@ ENEMYTANK3DELAY	=	14
 PLAYERRESPAWNDELAY = 14
 
 
-STARTINGENEMYTANKCOUNT	=	 20
+; STARTINGENEMYTANKCOUNT	=	 20 ;--no longer used
 
 
-LEVELENDTANKSPEEDBOOST  =   4
+LEVELENDTANKSPEEDBOOST  =   4   ;when <= 3 tanks remaining, all on-screen tanks have speed boost applied immediately.
 
 TANKONSCREENLEFT    =   16
 TANKONSCREENRIGHT   =   136
@@ -243,12 +243,15 @@ FIRSTCOLUMNX    =   16
 
 
     
-
-TANKAISWITCH	=	64;64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
+;--some constants used by the tank AI routine
+TANKAISWITCH	=	64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
                                 ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
 CLYDEDISTANCE   =   30            ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
 PINKYADJUSTMENTX    =   16          ;4 tiles in Pac-Man, equivalent in Minotaur is 2 tiles... I think.  In pixels X = 16.
 PINKYADJUSTMENTY    =   14          ; in pixels Y = 14
+
+
+;--tank starting locations
 PLAYERSTARTINGX	=	8
 PLAYERSTARTINGY =   TANKHEIGHT+1
 
@@ -258,8 +261,6 @@ ENEMY11STARTINGX	=	64
 ENEMY12STARTINGX	=	88
 ENEMY21STARTINGX	=	128
 ENEMY22STARTINGX	=	40
-
-
 
 ENEMY0STARTINGX2	=	144
 ENEMY1STARTINGX2	=	144
@@ -284,11 +285,29 @@ ENEMYSTARTINGYMIDLOW = (BLOCKHEIGHT * ENEMYSTARTINGYMIDLOWROW) + 1
 ENEMYSTARTINGYLOWROW = 3
 ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 
+
+
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
 
-
-PLAYERTANKSPEED	=	TANKSPEED2;3
+;--tank speed constants
+;--the way these are used:
+;   tank speed is in lower nibble (these bits: %00001110)
+;   the speed is shifted into the upper nibble (<<<<), ORAd with %00011111,
+;   and then added to TankFractional,X.  When TankFractional,X wraps, Tank 
+;   position (TankX,X or TankY,X) is updated.
+;   So, speed of 14 (%00001110) which is the highest, will *almost* wrap every time
+;   and the Tank will basically move 1 pixel per update.  Which brings us to...
+;   Player tank is moved every frame, but enemy tanks are moved every four frames.
+;   Which means approximate speed ranges are as follows:
+;               Player tank         Enemy tanks
+;   TANKSPEED0  1 px / 8 frames     1 px / 32 frames
+;   TANKSPEED2  1 px / 4 frames     1 px / 16 frames
+;   TANKSPEED4  1 px / 2.7 frames   1 px / 10.7 frames
+;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
+;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
+;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
+PLAYERTANKSPEED	=	TANKSPEED2      
 ENEMYTANKBASESPEED0	=   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED6
 ENEMYTANKBASESPEED2	=	TANKSPEED4
@@ -304,7 +323,6 @@ ENEMYBULLETSOUND        =   5
 WALLSOUND               =   6
 PLAYERTANKENGINESOUND   =   7
 
-;   sound values
 PLAYERTANKVOLUME	=	8
 
 
@@ -331,8 +349,8 @@ SHORTBRICKSOUNDLENGTH	=	7
 LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
-WALLSOUNDTONE       =   SQUARESOUND
-WALLSOUNDFREQ       =   8
+WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
+WALLSOUNDFREQ       =   4;8
 WALLSOUNDLENGTH     =   8
 
 ;--end SOUND CONSTANTS
@@ -993,14 +1011,15 @@ FindAvailableEnemyBallLoop
 	;bmi NoAvailableEnemyBalls  ;<--remove since we just exit immediately.  save 3 cycles (and 1 byte)
 	rts
 FoundAvailableEnemyBall
+    ;fix X index (enemy bullets indexed at 2 & 3)
 	inx
 	inx
 	;--shoot more often as levels increase
 	ldy MazeNumber
-    cpy #16
-    bcc MazeNumberSixteenOrLess
-    ldy #16
-MazeNumberSixteenOrLess    
+    cpy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
+    bcc MazeNumberLessThanBulletDebounceLimit
+    ldy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
+MazeNumberLessThanBulletDebounceLimit    
 	lda Debounce    ;was EnemyDebounce
 	and #~ENEMYDEBOUNCEBITS ;this probably isn't necessary, but being safe for now
     ora EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
@@ -2672,11 +2691,13 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 30, 28, 25, 22
-    .byte 20, 19, 18, 17
-    .byte 15, 13, 12, 11
-    .byte 10, 7, 2, 1	
-
+    .byte 30, 20, 19, 18
+    .byte 17, 16, 15, 14
+    .byte 13, 12, 11, 10
+    .byte 9, 8, 7, 6
+    .byte 5, 4, 3, 2
+    .byte 1	
+EnemyBulletDebounceEnd
     
 
 TanksRemainingSpeedBoost = * - 3 
@@ -3679,19 +3700,16 @@ MoveBulletsLoop
     rol Temp    ;get carry into Temp
     adc #BULLETFRACTIONALSPEED
     rol Temp    ;get carry into Temp
+    ;--only actually save this change every four frames.
     cpx #0
     bne NoUpdateBulletFractionalThisFrame
     sta BulletFractional
 NoUpdateBulletFractionalThisFrame
     ldy Temp
-;     bne MoveBulletsThisFrame    ;this is in effect a branch always....unless we make bullets really really slow (<1 pixel per FOUR frames)
-;     jmp ReturnFromBSSubroutine2
-; MoveBulletsThisFrame
-;     ldy Temp
     lda NumberOfBitsSetBank2,Y       ;this is how many pixels to move
     sta Temp
-	lda BulletY,X
-	;cmp #BALLOFFSCREEN
+	lda BulletX,X
+	;cmp #BALLOFFSCREEN     == 0
 	beq NoBulletMovement;BulletOffScreen;
 	lda BulletDirection
 	and BulletDirectionMask,X
@@ -3713,8 +3731,8 @@ BulletNotUp
 	sec
 	sbc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
-	bcc BulletOffScreen                      ;if we are less than zero, then bullet is offscreen
-    bcs BulletOnScreen
+	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
+    bcs BulletOnScreen                      ;branch always
 BulletNotDown
 	tya	
 	cmp BulletRightBank2,X
