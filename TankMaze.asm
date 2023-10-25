@@ -627,13 +627,13 @@ Start
 ;----------------------------------------------------------------------------
 ;--------------------GAME MAIN LOOP------------------------------------------
 ;----------------------------------------------------------------------------
-MainGameLoop
-
-	jsr VBLANKRoutine
-	brk
-	.word KernelRoutineGame
-	jsr OverscanRoutine
-	jmp MainGameLoop
+; MainGameLoop
+; 
+; 	jsr VBLANKRoutine
+; 	brk
+; 	.word KernelRoutineGame
+; 	jsr OverscanRoutine
+; 	jmp MainGameLoop
 
 
 
@@ -724,8 +724,10 @@ EndVBLANK
 
 
 
-	rts
+; 	rts
 
+	brk
+	.word KernelRoutineGame
 	
 	
 ;----------------------------------------------------------------------------
@@ -915,8 +917,8 @@ EndOverscan
 	
 ;	sta WSYNC		;last line...I think?
 
-	rts
-	
+; 	rts
+	jmp VBLANKRoutine
 	
 ;----------------------------------------------------------------------------
 ;----------------------------End Main Routines-------------------------------
