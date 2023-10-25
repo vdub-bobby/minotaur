@@ -769,6 +769,13 @@ OverscanRoutine
     ;   remove tanks from screen
     ;   wait a bit, and then go back to title screen routine
 	jsr MoveAllTanksOffScreenSubroutine
+    ldx #3
+    lda #0
+RemoveBulletsFromScreenGameOverLoop
+	sta BulletX,X
+	sta BulletY,X
+	dex
+	bpl RemoveBulletsFromScreenGameOverLoop
 	;   reuse TankMovementCounter as a wait counter
 	lda #WALLDONEFLASHING|GAMEOVERWAIT
 	sta TankMovementCounter
@@ -802,7 +809,7 @@ GameOverRoutineDone
     ;   set MazeGenerationPass appropriately
     ;   clear the screen
 	lda GameStatus
-	and #~GAMEOVER      ;clear game over bit
+	and #~(GAMEOVER|DRAWBASE)      ;clear game over and draw base bits
 	ora #TITLESCREEN    ;set title screen bit
 	sta GameStatus
 	lda #TitleGraphicsEnd-TitleGraphics-1
@@ -820,6 +827,8 @@ ClearMazeLoop
 	sta LastRowR
 	;--also turn off sound
 	sta AUDV0
+	sta TanksRemaining
+	sta MazeNumber
 GameOverRoutineStillGoing
 NoChangeToGameOverVolume
 NoChangeToGameOverSound
@@ -4436,13 +4445,15 @@ CollisionsSubroutine
     lda GameStatus
     ora #GAMEOVER|GAMEOFF
     sta GameStatus
-    lda #0
     ;--reset TankMovementCounter, (re)used to make walls flash
+    lda #4
     sta TankMovementCounter
     ;--kill sounds just for my own sanity
+    lda #0
     sta AUDV0
     sta AUDV1
-    
+    ;and return, so player doesn't get 5 points for shooting his own base lol
+	jmp ReturnFromBSSubroutine2
 NoBulletToBaseCollision
     
     
