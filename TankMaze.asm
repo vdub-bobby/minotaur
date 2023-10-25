@@ -249,6 +249,9 @@ WALLDONEFLASHING = %10000000
 GAMEOVERWAITBITS = %01111111
 
 GAMEOVERWAIT    =   65 ;number of frames/4, can only use bottom 7 bits (0-127)
+GAMEOVERSOUND   =   BUZZSOUND
+GAMEOVERVOLUME  =   7
+GAMEOVERSTARTFREQ   =   5
     
 ;--some constants used by the tank AI routine
 TANKAISWITCH	=	64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
@@ -357,7 +360,7 @@ LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
-WALLSOUNDFREQ       =   4;8
+WALLSOUNDFREQ       =   8;8
 WALLSOUNDLENGTH     =   8
 
 ;--end SOUND CONSTANTS
@@ -758,9 +761,9 @@ OverscanRoutine
 ; 	sec
 ; 	sbc Temp
 	sta AUDF0
-	lda #BUZZSOUND
+	lda #GAMEOVERSOUND
 	sta AUDC0
-	lda #7
+	lda #GAMEOVERVOLUME
 	sta AUDV0
 	inc TankMovementCounter ;used to make walls flash
 	;--now need to see if we have just finished flashing
@@ -2982,15 +2985,22 @@ PlayerNotMissile
 	lda TankStatus
 	and #TANKSPEED
 	bne PlayerTankMovingSetRegularGraphicsPointers
-; 	lda #0
-	.byte $2C   ;--skip two bytes 
+	lda #8
+    bne TankGfxIndexSet ;branch always
 	;--end
 PlayerTankMovingSetRegularGraphicsPointers
+    lda FrameCounter
+    and #%00001100
+    lsr
+    adc #8
+    bne TankGfxIndexSet ;branch always
+
 NotPlayerTankSkipNotMovingCheck
 	;--get index into tank graphics image
 	lda FrameCounter
 	lsr
-	and #%00000110
+	and #%00000110      ;0, 2, 4, 6
+TankGfxIndexSet
 	tax
 
 
@@ -4448,7 +4458,7 @@ CollisionsSubroutine
     ora #GAMEOVER|GAMEOFF
     sta GameStatus
     ;--reset TankMovementCounter, (re)used to make walls flash
-    lda #4
+    lda #GAMEOVERSTARTFREQ
     sta TankMovementCounter
     ;--kill sounds just for my own sanity
     lda #0
@@ -5125,7 +5135,58 @@ PositionASpriteSubroutineBank2
 ;---------------------DATA-----------------------------
 ;------------------------------------------------------
 
+DigitDataMissileLo
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
+	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
+		
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
 
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+		
+
+RotationTables
+	.word RotationEven, RotationOdd	
+
+RotationOdd
+	.byte 0	;and first 3 bytes of next table
+RotationEven
+	.byte 2, 1, 3, 0
+
+
+	
+BulletDirectionMask
+	.byte %11, %11<<2, %11<<4, %11<<6
+
+BulletDirectionClearBank2
+BulletUpBank2
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDownBank2
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeftBank2
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRightBank2
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+	
+	
+	
+PFRegisterLookupBank2
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+	
+	
+PFMaskLookupBank2
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	
+	
+	
     PAGEALIGN 3
     
 DigitDataMissile
@@ -5608,55 +5669,7 @@ DigitBlank
 	
 
 
-DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
-	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
-		
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
 
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
-		
-
-RotationTables
-	.word RotationEven, RotationOdd	
-
-RotationOdd
-	.byte 0	;and first 3 bytes of next table
-RotationEven
-	.byte 2, 1, 3, 0
-
-
-	
-BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
-
-BulletDirectionClearBank2
-BulletUpBank2
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDownBank2
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeftBank2
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRightBank2
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
-	
-	
-	
-PFRegisterLookupBank2
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-	
-	
-PFMaskLookupBank2
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
 	
 	
 StartingTankXPosition
@@ -5713,15 +5726,230 @@ PFPointer
 
 TankUpFrame
 	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
+PlayerTankUpFrame
+	.word PlayerTankUp4+TANKHEIGHT, PlayerTankUp3+TANKHEIGHT, PlayerTankUp2+TANKHEIGHT, PlayerTankUp1+TANKHEIGHT
+
 TankDownFrame
 	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
+PlayerTankDownFrame
+	.word PlayerTankDown4+TANKHEIGHT, PlayerTankDown3+TANKHEIGHT, PlayerTankDown2+TANKHEIGHT, PlayerTankDown1+TANKHEIGHT
 TankRightFrame
 	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
-
+PlayerTankRightFrame
+	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
 	
 DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+	
+    ALIGNGFXDATA 3
+;---Graphics Data from PlayerPal 2600---
+;--graphics data for player tank.  needs to be split and aligned
+PlayerTankRight1
+        .byte 0
+        .byte #%11011101;--       
+        .byte #%00110000;--        
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%00000011;--        
+        .byte #%01110111;--        
+PlayerTankRight1b
+        .byte 0
+        .byte #%11011101;--
+        .byte #%10000101;--
+        .byte #%01111000;--
+        .byte #%01111111;--
+        .byte #%00110000;--
+        .byte #%01110111;--
+        .byte 0
+PlayerTankRight2    = *-1
+;         .byte 0
+        .byte #%10111011;--
+        .byte #%00110000;--
+        .byte #%01111111;--
+        .byte #%01111000;--
+        .byte #%10000110;--
+        .byte #%11101110;--
+PlayerTankRight2b
+        .byte 0
+        .byte #%10111011;--      
+        .byte #%10000011;--
+        .byte #%01111000;--
+        .byte #%01111111;--        
+        .byte #%00110000;--        
+        .byte #%11101110;--
+        .byte 0
+PlayerTankRight3    = *-1
+      ;  .byte 0
+        .byte #%01110111;--2
+        .byte #%00110000;--4
+        .byte #%01111111;--6
+        .byte #%01111000;--8
+        .byte #%10000101;--10
+        .byte #%11011101;--12
+PlayerTankRight3b
+        .byte 0
+        .byte #%01110111;--1
+        .byte #%00000111;--3
+        .byte #%01111000;--5
+        .byte #%01111111;--7
+        .byte #%00110000;--9
+        .byte #%11011101;--11
+        .byte 0        
+PlayerTankRight4    = *-1
+        .byte #%11101110;--2
+        .byte #%00110000;--4
+        .byte #%01111111;--6
+        .byte #%01111000;--8
+        .byte #%10000011;--0
+        .byte #%10111011;--2
+
+PlayerTankRight4b
+        .byte 0
+        .byte #%11101110;--1
+        .byte #%10000110;--3
+        .byte #%01111000;--5
+        .byte #%01111111;--7
+        .byte #%00110000;--9
+        .byte #%10111011;--1
+        .byte 0        
+        
+        
+        
+        
+        
+PlayerTankDown1 = * - 1       ;uses .byte 0 from previous table and the 0 in the following byte
+        .byte #%00011011;--2
+        .byte #%11011000;--4
+        .byte #%00011011;--6
+        .byte #%10111100;--8
+        .byte #%00111101;--0
+        .byte #%11000000;--2
+PlayerTankDown1b
+        .byte 0
+        .byte #%11011011;--1
+        .byte #%11011011;--3
+        .byte #%11011011;--5
+        .byte #%10111101;--7
+        .byte #%10111101;-9
+        .byte #%11011011;--1
+        .byte 0        
+PlayerTankDown2 =   * - 1
+        .byte #%11011011;--2
+        .byte #%11011011;--4
+        .byte #%11011011;--6
+        .byte #%10111101;--8
+        .byte #%10111101;--0
+        .byte #%11000011;--2
+PlayerTankDown2b
+        .byte 0
+        .byte #%11011000;--1
+        .byte #%00011011;--3
+        .byte #%11011000;--5
+        .byte #%00111101;--7
+        .byte #%10111100;--9
+        .byte #%00011011;--1
+        .byte 0        
+PlayerTankDown3 = * - 1
+        .byte #%11011000;--2
+        .byte #%00011011;--4
+        .byte #%11011000;--6
+        .byte #%00111101;--8
+        .byte #%10111100;--0
+        .byte #%00000011;--2
+PlayerTankDown3b
+        .byte 0
+        .byte #%11011011;--1
+        .byte #%11011011;--3
+        .byte #%11011011;--5
+        .byte #%10111101;--7
+        .byte #%10111101;--9
+        .byte #%11011011;--1
+        .byte 0
+PlayerTankDown4 = * - 1
+        .byte #%11011011;--2
+        .byte #%11011011;--4
+        .byte #%11011011;--6
+        .byte #%10111101;--8
+        .byte #%10111101;--0
+        .byte #%11000011;--2
+PlayerTankDown4b
+        .byte 0
+        .byte #%00011011;--1
+        .byte #%11011000;--3
+        .byte #%00011011;--5
+        .byte #%10111100;--7
+        .byte #%00111101;--9
+        .byte #%11011000;--1
+        .byte 0
+
+PlayerTankUp1   = * - 1
+        .byte #%11011011;--2
+        .byte #%10111101;--4
+        .byte #%10111101;--6
+        .byte #%11011011;--8
+        .byte #%11011011;--0
+        .byte #%11011011;--2
+
+PlayerTankUp1b
+        .byte 0
+        .byte #%11000000;--1
+        .byte #%00111101;--3
+        .byte #%10111100;--5
+        .byte #%00011011;--7
+        .byte #%11011000;--9
+        .byte #%00011011;--1
+        .byte 0        
+PlayerTankUp2   = * - 1
+        .byte #%00011011;--2
+        .byte #%10111100;--4
+        .byte #%00111101;--6
+        .byte #%11011000;--8
+        .byte #%00011011;--0
+        .byte #%11011000;--2
+PlayerTankUp2b
+        .byte 0
+        .byte #%11000011;--1
+        .byte #%10111101;--3
+        .byte #%10111101;--5
+        .byte #%11011011;--7
+        .byte #%11011011;--9
+        .byte #%11011011;--1
+        .byte 0
+PlayerTankUp3   = * - 1
+        .byte #%11011011;--2
+        .byte #%10111101;--4
+        .byte #%10111101;--6
+        .byte #%11011011;--8
+        .byte #%11011011;--0
+        .byte #%11011011;--2
+PlayerTankUp3b
+        .byte 0
+        .byte #%00000011;--1
+        .byte #%10111100;--3
+        .byte #%00111101;--5
+        .byte #%11011000;--7
+        .byte #%00011011;--9
+        .byte #%11011000;--1
+        .byte 0
+PlayerTankUp4   = * - 1
+        .byte #%11011000;--2
+        .byte #%00111101;--4
+        .byte #%10111100;--6
+        .byte #%00011011;--8
+        .byte #%11011000;--0
+        .byte #%00011011;--2
+PlayerTankUp4b
+        .byte 0
+        .byte #%11000011;--1
+        .byte #%10111101;--3
+        .byte #%10111101;--5
+        .byte #%11011011;--7
+        .byte #%11011011;--9
+        .byte #%11011011;--1
+        .byte 0
+	
+	
 
 ;****************************************************************************	
 
