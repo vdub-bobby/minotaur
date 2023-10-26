@@ -14,7 +14,7 @@
 17.NotOnBottomRow        3a26              (R )
 18.DivideLoop            3a4d              (R )
 2.CLEAR_STACK            1009              (R )
-20.marker                3b4c              (R )
+20.marker                3b4b              (R )
 22.marker                3c46              (R )
 24.marker                3e49              (R )
 3.CheckForEnemyTankDownLoop 179f              (R )
@@ -406,21 +406,21 @@ MazeNumberLessThanBulletDebounceLimit 1238              (R )
 MAZEPATHCUTOFF           0064              (R )
 MAZEROWS                 000b              (R )
 MiscPtr                  00ef              (R )
-MissileEight             3b38              (R )
+MissileEight             3b37              (R )
 MissileFive              3b1b              (R )
 MissileFour              3b12              (R )
 MissileHeight            00b0              (R )
-MissileNine              3b33              (R )
+MissileNine              3b32              (R )
 MissileNotPlayer         3095              (R )
 MissileOne               3b00              (R )
 MissileSeven             3b24              (R )
-MissileSix               3b2d              (R )
+MissileSix               3b2c              (R )
 MissileThree             3b09              (R )
-MissileTwo               3b43              (R )
+MissileTwo               3b42              (R )
 MissileX                 00a8              (R )
 MissileY                 00ad              (R )
 MissileYTemp             00b5              (R )
-MissileZero              3b3e              (R )
+MissileZero              3b3d              (R )
 MoreThanFourTanksRemainingStill 3981              (R )
 MoreThanOneAllowedDirection 13e3              (R )
 MoreThanTwoAllowedDirections 13e3                  
@@ -711,14 +711,14 @@ TANKCOLOR2               008c              (R )
 TankDirection            198e              (R )
 TANKDIRECTION            00f0              (R )
 TANKDOWN                 0020              (R )
-TankDownAnimated1        3b89              (R )
-TankDownAnimated1b       3b90                  
-TankDownAnimated2        3b98              (R )
-TankDownAnimated2b       3b9f                  
-TankDownAnimated3        3ba7              (R )
-TankDownAnimated3b       3bae                  
-TankDownAnimated4        3bb6              (R )
-TankDownAnimated4b       3bbd                  
+TankDownAnimated1        3b85              (R )
+TankDownAnimated1b       3b8c                  
+TankDownAnimated2        3b93              (R )
+TankDownAnimated2b       3b9a                  
+TankDownAnimated3        3ba1              (R )
+TankDownAnimated3b       3ba8                  
+TankDownAnimated4        3baf              (R )
+TankDownAnimated4b       3bb6                  
 TankDownFrame            3e1f              (R )
 TankFractional           0098              (R )
 TankFractionalAddition   1928              (R )
@@ -756,12 +756,12 @@ TankReverseDirection     1359
 TANKRIGHT                0080              (R )
 TankRightAnimated1       3c4d              (R )
 TankRightAnimated1b      3c54                  
-TankRightAnimated2       3c5c              (R )
-TankRightAnimated2b      3c63                  
-TankRightAnimated3       3c6b              (R )
-TankRightAnimated3b      3c72                  
-TankRightAnimated4       3c7a              (R )
-TankRightAnimated4b      3c81                  
+TankRightAnimated2       3c5b              (R )
+TankRightAnimated2b      3c62                  
+TankRightAnimated3       3c69              (R )
+TankRightAnimated3b      3c70                  
+TankRightAnimated4       3c77              (R )
+TankRightAnimated4b      3c7e                  
 TankRightFrame           3e2f              (R )
 TankShootingVertically   1272                  
 TANKSPEED                000e              (R )
@@ -783,7 +783,7 @@ TANKSPEED8               0008
 TANKSPEED9               0009                  
 TanksRemaining           0089              (R )
 TANKSREMAININGCOLOR      00aa              (R )
-TanksRemainingGfx        3c89              (R )
+TanksRemainingGfx        3c86              (R )
 TanksRemainingPF1Mask    3a6b              (R )
 TanksRemainingPF2Mask    3a76              (R )
 TanksRemainingSpeedBoost 197a                  
@@ -793,12 +793,12 @@ TankTargetAdjustmentY    193f              (R )
 TANKUP                   0010              (R )
 TankUpAnimated1          3b4d              (R )
 TankUpAnimated1b         3b54                  
-TankUpAnimated2          3b5c              (R )
-TankUpAnimated2b         3b63                  
-TankUpAnimated3          3b6b              (R )
-TankUpAnimated3b         3b72                  
-TankUpAnimated4          3b7a              (R )
-TankUpAnimated4b         3b81                  
+TankUpAnimated2          3b5b              (R )
+TankUpAnimated2b         3b62                  
+TankUpAnimated3          3b69              (R )
+TankUpAnimated3b         3b70                  
+TankUpAnimated4          3b77              (R )
+TankUpAnimated4b         3b7e                  
 TankUpFrame              3e0f              (R )
 TankX                    008c              (R )
 TankY                    0090              (R )

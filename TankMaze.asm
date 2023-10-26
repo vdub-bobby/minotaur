@@ -5136,8 +5136,9 @@ PositionASpriteSubroutineBank2
 ;------------------------------------------------------
 
 DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree, <MissileFour
-	.byte <MissileFive, <MissileSix, <MissileSeven, <MissileEight, <MissileNine
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree
+	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
+	.byte <MissileEight, <MissileNine
 		
 TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
@@ -5190,10 +5191,6 @@ PFMaskLookupBank2
     PAGEALIGN 3
     
 DigitDataMissile
-
-
-
-
 MissileOne
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5204,14 +5201,6 @@ MissileOne
 	.byte RIGHTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)				
 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
-
-
-
-
-
-
 MissileThree
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5222,8 +5211,6 @@ MissileThree
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
 MissileFour
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5234,7 +5221,6 @@ MissileFour
 	.byte LEFTONE|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte LEFTONE|(DOUBLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTWO|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
 MissileFive
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5245,13 +5231,6 @@ MissileFive
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-
-
-
-
-
-
-
 MissileSeven
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5261,7 +5240,7 @@ MissileSeven
 	.byte LEFTONE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
-	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
+; 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 MissileSix
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
@@ -5318,9 +5297,6 @@ MissileTwo
     ALIGNGFXDATA 1
 	
 TankGfxVertical
-   
-      
-        
      ;--animation for upward facing tank:   
 TankUpAnimated1
 		.byte 0
@@ -5339,8 +5315,8 @@ TankUpAnimated1b
         .byte #%00011011;--
         .byte #%11011000;--
         .byte 0
-TankUpAnimated2
-		.byte 0
+TankUpAnimated2 = * - 1
+; 		.byte 0
 		.byte #%11011000;--
 		.byte #%00111111;--
 		.byte #%11111100;--
@@ -5356,8 +5332,8 @@ TankUpAnimated2b
         .byte #%11011011;--
         .byte #%00011000;--
 		.byte 0
-TankUpAnimated3
-		.byte 0
+TankUpAnimated3 = * - 1
+; 		.byte 0
 		.byte #%00011000;--
 		.byte #%11111111;--
 		.byte #%00111100;--
@@ -5373,8 +5349,8 @@ TankUpAnimated3b
         .byte #%11011000;--
         .byte #%00011011;--
 		.byte 0
-TankUpAnimated4
-		.byte 0
+TankUpAnimated4 = * - 1
+; 		.byte 0
 		.byte #%00011011;--
 		.byte #%11111100;--
 		.byte #%00111111;--
@@ -5390,8 +5366,8 @@ TankUpAnimated4b
         .byte #%00011000;--
         .byte #%11011011;--
 		.byte 0
-TankDownAnimated1
-        .byte 0
+TankDownAnimated1 = * - 1
+;         .byte 0
         .byte #%11011000;--
         .byte #%00011011;--
         .byte #%11011000;--
@@ -5407,8 +5383,8 @@ TankDownAnimated1b
 		.byte #%00111100;--
 		.byte #%11011011;--
 		.byte 0
-TankDownAnimated2
-        .byte 0
+TankDownAnimated2 = * - 1
+;         .byte 0
         .byte #%00011000;--
         .byte #%11011011;--
         .byte #%00011000;--
@@ -5424,8 +5400,8 @@ TankDownAnimated2b
 		.byte #%00111111;--
 		.byte #%11011000;--
 		.byte 0
-TankDownAnimated3
-        .byte 0
+TankDownAnimated3 = * - 1
+;         .byte 0
         .byte #%00011011;--
         .byte #%11011000;--
         .byte #%00011011;--
@@ -5441,8 +5417,8 @@ TankDownAnimated3b
 		.byte #%11111111;--
 		.byte #%00011000;--
 		.byte 0
-TankDownAnimated4
-        .byte 0
+TankDownAnimated4 = * - 1
+;         .byte 0
         .byte #%11011011;--
         .byte #%00011000;--
         .byte #%11011011;--
@@ -5567,8 +5543,8 @@ TankRightAnimated1b
 		.byte #%00110000;--
 		.byte #%11001100;--
 		.byte 0
-TankRightAnimated2
-        .byte 0
+TankRightAnimated2 = * - 1
+;         .byte 0
         .byte #%11001100;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -5584,8 +5560,8 @@ TankRightAnimated2b
 		.byte #%00110000;--
 		.byte #%10011001;--
 		.byte 0
-TankRightAnimated3
-        .byte 0
+TankRightAnimated3 = * - 1
+;         .byte 0
         .byte #%10011001;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -5601,8 +5577,8 @@ TankRightAnimated3b
 		.byte #%00110000;--
 		.byte #%00110011;--
 		.byte 0
-TankRightAnimated4
-       	.byte 0
+TankRightAnimated4 = * - 1
+;        	.byte 0
         .byte #%00110011;--
         .byte #%00110000;--
         .byte #%01111111;--
