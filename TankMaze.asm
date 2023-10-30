@@ -93,7 +93,8 @@
 			IN PROGRESS more frequent shooting by enemy tanks
 			DONE more aggressive tank movement routines 
 			MOSTLY DONE smarter shooting by enemy tanks 
-    Have player tank use different graphic
+    IN PROGRESS: Have player tank use different graphic.  This is done but not sure how I feel about the actual graphic.
+    Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
 	DONE: Figure out better AI for tank movement/firing routines 
         Stole routines from Pac-Man.  Seems to work pretty well, want to make the player respawn delay longer, but counter bits are already maxed so may need to fiddle with code.
         Reason I have this here is because when player is dead the enemy tanks head for the base.  Maybe it's ok, at higher levels maybe they move fast enough that it will make a difference?
@@ -124,19 +125,20 @@
 	Logic for when levels wrap
 	
 	BUG KILLING!
-	    FIXED, MAYBE Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
+	    Game Over routine gets stuck and never finishes.... ???
+	    FIXED: Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
 	        seems to happen at higher levels, not sure of cause.  Think cause is when bullets are travelling down and hit BulletY==0 and 
 	        BulletX is not set to zero also.
-        Occasionally (cause?) the a tank respawns when it shouldn't.
+        Occasionally (cause?) a tank respawns when it shouldn't.
         Tanks kill each other when entering the screen.  Need to see if this can be fixed.
 		scanline count is wonky, need to tighten up various subroutines that take too long
 	    FIXED: remove bullets from screen during level transitions
         FIXED: Tanks still firing when offscreen.  
             UPDATE: I think this is when tank 3 shoots downward a "ghost" shot occurs from offscreen. 
             UPDATE UPDATE: that was incorrect, it was due to out-of-bounds conditions not being checked properly when bullets move downward
-        FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
-        FIXED I THINK: Also not exactly a bug (??) but tanks still run into each other a lot.
-        Also not exactly a bug (??) but tank shooting needs to be improved.
+        FIXED AGAIN I THINK: FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+        FIXED I THINK: Also not exactly a bug (??) but tanks still run into each other a lot.  This is fixed EXCEPT for when tanks enter the screen.
+        FIXED: Also not exactly a bug (??) but tank shooting needs to be improved.
         FIXED: Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
             but when other tank dies, movement doesn't happen as quickly as it seems like it should.
         MAYBE FIXED: Possible for tanks to get stuck in this situation: (W=wall, T=tank):
@@ -194,7 +196,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 41       ;--this jitters a bit
+VBLANK_TIMER = 42       ;--this jitters a bit
 OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
@@ -228,7 +230,7 @@ ENEMYTANK2DELAY	=	10
 ENEMYTANK3DELAY	=	14
 
 PLAYERRESPAWNDELAY = 14
-
+PLAYERINITIALDELAY  =   6
 
 ; STARTINGENEMYTANKCOUNT	=	 20 ;--no longer used
 
@@ -254,9 +256,9 @@ GAMEOVERVOLUME  =   7
 GAMEOVERSTARTFREQ   =   5
     
 ;--some constants used by the tank AI routine
-TANKAISWITCH	=	64      ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
-                                ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
-CLYDEDISTANCE   =   30            ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
+TANKAISWITCH	=	64              ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
+                                    ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
+CLYDEDISTANCE   =   30              ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
 PINKYADJUSTMENTX    =   16          ;4 tiles in Pac-Man, equivalent in Minotaur is 2 tiles... I think.  In pixels X = 16.
 PINKYADJUSTMENTY    =   14          ; in pixels Y = 14
 
@@ -360,7 +362,7 @@ LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	200
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
-WALLSOUNDFREQ       =   8;8
+WALLSOUNDFREQ       =   10;8
 WALLSOUNDLENGTH     =   8
 
 ;--end SOUND CONSTANTS
@@ -709,9 +711,6 @@ InBetweenLevels
     bne DoNotReadConsoleSwitchesWhileGeneratingMaze
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
-; 	brk
-; 	.word KernelSetupSubroutine
-;     jsr KernelSetupSubroutine
 
 WaitForVblankEnd
 	lda INTIM
@@ -724,10 +723,6 @@ OverTimeVBLANK				;this nonsense is here just so I can trap an overtime conditio
 	nop
 		
 EndVBLANK	
-
-
-
-; 	rts
 
 	brk
 	.word KernelRoutineGame
@@ -1277,7 +1272,7 @@ MoveEnemyTanksSubroutine
 MoveAnEnemyTank
 	tax
 
-	;jsr IsTankOnScreenBank0     ;%%%
+	;jsr IsTankOnScreenBank0     
 	lda TankStatus,X
 	and #TANKINPLAY	
 	bne TankOnscreenMoveIt         
@@ -1299,8 +1294,8 @@ TankNotOnscreen
 	lda Temp
 	cmp TanksRemaining
 	bcs DoNotBringTankOnscreenYet
-	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 4.
-	and #3
+	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
+	and #7;
 	bne DoNotBringTankOnscreenYet
 	lda TankStatus,X
 	sec
@@ -1376,6 +1371,9 @@ EnemyTankPossibleReversal
 	lda TankMovementCounter
 	bne NoTankReversal
 TankReverseDirection
+    ;--only reverse if tank is fully on screen
+    jsr IsTankOnScreen
+    bne NoTankReversal
 	lda TankStatus,X
 	lsr
 	lsr
@@ -4289,6 +4287,12 @@ SetNewLevelTankDelay
     sta TankStatus,X
     dex
     bpl SetNewLevelTankDelay
+    
+    ;--cheap hack to make player show up faster
+    and #~TANKRESPAWNWAIT  ;clear the wait
+    ora #PLAYERINITIALDELAY
+    ;lda #TANKRIGHT;(PLAYERRESPAWNDELAY-4)
+    sta TankStatus
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
