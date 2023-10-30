@@ -125,7 +125,8 @@
 	Logic for when levels wrap
 	
 	BUG KILLING!
-	    Game Over routine gets stuck and never finishes.... ???
+	    FIXED: Game Over routine gets stuck and never finishes.... ???  Was due to pressing trigger (or RESET/SELECT) during game over routine,
+	        which tried to sort of start a new game.  Fix is to not read trigger/console switches during game over routine
 	    FIXED: Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
 	        seems to happen at higher levels, not sure of cause.  Think cause is when bullets are travelling down and hit BulletY==0 and 
 	        BulletX is not set to zero also.
@@ -662,14 +663,14 @@ VSYNCWaitLoop
 	dec FrameCounter
 	
 	lda GameStatus
-	and #GAMEOFF|LEVELCOMPLETE
+	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER
 	beq GameOnVBLANK	
 	and #GAMEOFF
 	beq InBetweenLevels
 	lda GameStatus
-	and #GENERATINGMAZE
+	and #GENERATINGMAZE|GAMEOVER
 	bne GameAlreadyStarted
-	;--if game not on and NOT generating a level already read joystick button to start game
+	;--if game not on and NOT generating a level and NOT in game over routine already read joystick button to start game
 	lda INPT4
 	bmi NoTriggerToStartGameClearTriggerDebounce
 	;--trigger IS pressed, now check debounce
@@ -707,8 +708,8 @@ InBetweenLevels
 	
 
     lda GameStatus
-    and #GENERATINGMAZE
-    bne DoNotReadConsoleSwitchesWhileGeneratingMaze
+    and #GENERATINGMAZE|GAMEOVER
+    bne DoNotReadConsoleSwitchesWhileGeneratingMaze ;also not while game over routine is running
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
 
@@ -780,7 +781,7 @@ RemoveBulletsFromScreenGameOverLoop
 	lda #WALLDONEFLASHING|GAMEOVERWAIT
 	sta TankMovementCounter
 	lda #30
-	sta AUDF0   ;--actually, set freq back to 29 not 31
+	sta AUDF0   ;--set freq back to 30 not 31
 DoneMakingWallsFlash
     lda FrameCounter
     and #3
