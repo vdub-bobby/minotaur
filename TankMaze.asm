@@ -366,6 +366,48 @@ WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
 WALLSOUNDFREQ       =   10;8
 WALLSOUNDLENGTH     =   8
 
+
+;--music constants
+
+;-note bits:
+ARTICULATION_BIT	=	%00000001
+VOLUME_BITS         =   %00001110
+FREQUENCY_BITS      =   %11110000       ;--lookup into a table, probably.
+
+VOLUME0     =   0
+VOLUME2     =   2
+VOLUME4     =   4
+VOLUME6     =   6
+VOLUME8     =   8
+VOLUME10    =   10
+VOLUME12    =   12
+VOLUME14    =   14
+
+SQUARE_19   =   $00
+SQUARE_20   =   $10
+SQUARE_23   =   $20
+SQUARE_26   =   $30
+SQUARE_31   =   $40
+
+PATTERNEND  =   255
+
+PERCUSSIONCUTOFF    =   3
+PERCUSSIONVOLUME    =   VOLUME4
+
+ARTICULATE      =   ARTICULATION_BIT
+
+SNARESOUND	=	NOISESOUND
+KICKSOUND	=	BUZZSOUND
+HIHATSOUND	=	NOISESOUND
+SNARE2SOUND	=	NOISESOUND
+
+SNAREPITCH	=	6
+KICKPITCH	=	30
+HIHATPITCH	=	1
+SNARE2PITCH	=	12
+
+
+
 ;--end SOUND CONSTANTS
 
 WALLDESTRUCTIONSCORE    =   $0005
@@ -598,6 +640,9 @@ PF2Right ds MAZEROWS-1
 PF1Right ds MAZEROWS-1
 LastRowL ds 1
 LastRowR ds 1
+
+SongIndex ds 1
+
 Temp ds 4
 MiscPtr 
 ScorePtr ds 12
@@ -660,6 +705,9 @@ VSYNCWaitLoop
 	lda #VBLANK_TIMER
 	sta TIM64T
 	
+
+	
+	
 	dec FrameCounter
 	
 	lda GameStatus
@@ -705,7 +753,6 @@ InBetweenLevels
 	jsr SoundSubroutine
 	
 	jsr UpdateRandomNumber  ;--once per frame
-	
 
     lda GameStatus
     and #GENERATINGMAZE|GAMEOVER
@@ -827,7 +874,7 @@ ClearMazeLoop
 	sta LastRowL
 	sta LastRowR
 	;--also turn off sound
-	sta AUDV0
+; 	sta AUDV0
 	sta TanksRemaining
 	sta MazeNumber
 GameOverRoutineStillGoing
@@ -896,6 +943,7 @@ NotGeneratingMaze
 	bmi GameNotOnOverscan
 	lda FrameCounter
 	and #$7
+	cmp #1
 	bne WaitToDrawTitleScreen
 	brk
 	.word DrawTitleScreenSubroutine       ;moved this to bank 2
@@ -1030,6 +1078,8 @@ SetUpTankInitialValues
 	sta TankY,X
 	dex
 	bpl SetUpTankInitialValues
+	
+	stx SongIndex       ;just need to set top bit here so music starts OFF
 	
 	sta RandomNumber        ;seed with non-zero number, using 127 (TANKOFFSCREEN) for now
 	
@@ -1373,7 +1423,7 @@ EnemyTankPossibleReversal
 	bne NoTankReversal
 TankReverseDirection
     ;--only reverse if tank is fully on screen
-    jsr IsTankOnScreen
+    jsr IsTankOnScreenBank0
     bne NoTankReversal
 	lda TankStatus,X
 	lsr
@@ -1765,12 +1815,183 @@ SetChannel1Volume
 	dec Channel1Decay
 DoNotUpdateChannel1Decay	
 ReturnFromTankMovementSubroutine       
+    
+
+
+    ;--now play music.  
+MusicRoutine  
+    lda SongIndex
+    bpl MusicIsPlaying
+    rts
+MusicIsPlaying
+    ;First, determine which song
+    ;if on title screen play title screen song
+    lda GameStatus
+    and #TITLESCREEN
+    cmp #TITLESCREEN
+    bne NotOnTitleScreenAtAll
+    ;--else on title screen, but base shows so start playing drum beat
+    lda #<FanfarePattern
+    sta MiscPtr+2
+    lda #>FanfarePattern
+    sta MiscPtr+3
+    bne PlayMusic
+NotOnTitleScreenAtAll
+    lda #<FanfarePattern
+    sta MiscPtr+2
+    lda #>FanfarePattern
+    sta MiscPtr+3
+
+
+PlayMusic
+    lda FrameCounter
+    and #7                  ;tempo = 112.5 BPM, 16th note every seven frames
+    beq GetNewNote          
+    and #3
+    beq GetNewPercussion    ;percussion is all 32nds
+    ;--not on 32nd-note beat, so need to determine if we are playing percussion or playing note
+    cmp #PERCUSSIONCUTOFF
+    bcc PlayRegularNote
+    ;--otherwise, first see if percussion is playing
+;     rts ;--if above percussion cutoff, keep playing whatever we were playing
+;     ;--see if percussion should be playing
+;     jsr GetPercussionSound
+;     beq PlayRegularNote
+;     ;--else keep playing percussion
+    
+PlayRegularNote    
+    ;--else play regular tone
+    ldy SongIndex
+    lda (MiscPtr+2),Y
+    and #VOLUME_BITS
+    sta Temp
+    lda (MiscPtr+2),Y
+    lsr
+    bcc NoArticulation
+    lda FrameCounter
+    and #7
+    tax
+    lda Temp
+    sec
+    sbc ArticulationTable,X
+    .byte $2C   ;skip next two bytes
+NoArticulation
+    lda Temp
+    sta Temp+1
+    lda (MiscPtr+2),Y
+    lsr
+    lsr
+    lsr
+    lsr
+    tay
+    lda DistortionTable,Y
+    sta Temp+2
+    lda FrequencyTable,Y
+    sta Temp+3
+    jmp PlayMusicSound
+GetNewNote
+    inc SongIndex
+    ldy SongIndex
+BackToBeginningOfSong
+    lda (MiscPtr+2),Y
+    cmp #255
+    bne NotEndOfSong
+    ldy #0
+    sty SongIndex
+    beq BackToBeginningOfSong
+NotEndOfSong
+    and #VOLUME_BITS
+    sta Temp+1
+    lda (MiscPtr+2),Y
+    lsr
+    lsr
+    lsr
+    lsr
+    tay
+    lda DistortionTable,Y
+    sta Temp+2
+    lda FrequencyTable,Y
+    sta Temp+3
+GetNewPercussion
+    jsr GetPercussionSound  ;returns with A holding percussion value *AND* flags set based on what that value is
+    beq NoPercussion
+    tay
+    lda PercussionVolumeTable,Y
+    sta Temp+1
+    lda PercussionDistortionTable,Y
+    sta Temp+2
+    lda PercussionFrequencyTable,Y
+    sta Temp+3
+
+
+NotDownBeat
+
+
+PlayMusicSound
+    lda Temp+1
+    sta AUDV0
+    lda Temp+2
+    sta AUDC0
+    lda Temp+3
+    sta AUDF0
+DoNotEndPercussion
+NoPercussion
 	rts
 
 	
 ;****************************************************************************
-
-/*
+GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
+                    ;uses Temp, MiscPtr, MiscPtr+1
+                    ;depends on MiscPtr+2 pointing at melody data
+    ldy SongIndex
+    lda (MiscPtr+2),Y
+    ;--if non-zero value (i.e., a note), play beat with kick
+    ;   if zero (i.e., no melody), play beat without kick
+    beq SnareBeatsOnly
+    ldy #2
+    .byte $2C   ;skip 2 bytes
+SnareBeatsOnly
+    ldy #0
+    lda SongIndex
+    and #$0F
+    cmp #12
+    bcc BeatPattern
+    ;--else fill
+    lda FillPatternTable,Y
+    sta MiscPtr
+    lda FillPatternTable+1,Y
+    sta MiscPtr+1
+    bne LoadDrumPattern ;branch always
+BeatPattern
+    lda BeatPatternTable,Y
+    sta MiscPtr
+    lda BeatPatternTable+1,Y
+    sta MiscPtr+1
+LoadDrumPattern 
+    lda SongIndex   
+    and #3
+    lsr         ;divide SongIndex by 2, but we will use the carry bit below!
+    tay
+    lda (MiscPtr),Y
+    bcs NoShiftToRhythmPattern  ;if SongIndex & 1 == 1 then we want right nibble, else we want left nibble
+    lsr
+    lsr
+    lsr
+    lsr
+NoShiftToRhythmPattern
+    sta Temp
+    lda FrameCounter
+    and #%00000100
+    bne SixteenthUpBeat
+    lsr Temp
+    lsr Temp
+SixteenthUpBeat
+    lda #%00000011
+    and Temp
+    
+    rts
+    
+    /*
 
     ;--this is to make sure the "DivideLoop" doesn't cross a page boundary.
     if ((* + 5) & $FF00) != ((* + 9) & $FF00)
@@ -2853,7 +3074,147 @@ MovementMask
 ; RotationEvenBank1
 ; 	.byte 2, 1, 3, 0
 ; 
+NoMusicPattern  ;used for melody (0=VOLUME0) and rhythm (0, 0) = one beat of no drums
+    ;has to be 16 bytes long if we want to use it for background (no melody) over
+    ;the 4-bar drum track.
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 0, 0
+NoMusicPatternEnd
+    .byte 255
+    
+    
+FanfarePattern
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|SQUARE_19
+    .byte VOLUME6|SQUARE_19
+    .byte VOLUME6|SQUARE_19
+    .byte VOLUME6|SQUARE_19|ARTICULATE
+    .byte VOLUME6|SQUARE_20
+    .byte VOLUME6|SQUARE_20
+    .byte VOLUME6|SQUARE_20
+    .byte VOLUME6|SQUARE_20|ARTICULATE
 
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE    
+    
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|SQUARE_31
+    .byte VOLUME6|SQUARE_31
+    .byte VOLUME6|SQUARE_31
+    .byte VOLUME6|SQUARE_31|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+FanfarePatternEnd
+    .byte 255
+
+FillPatternTable
+    .word DrumFillSnaresOnly1, DrumFillWithKick1
+BeatPatternTable
+    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+
+ ;bits: each byte is four 32nds, reading left to right, 2-bit groups
+    ;00 = no percussion
+    ;01 = snare 1
+    ;02 = snare 2
+    ;03 = kick
+DrumBeatSnaresOnly1 
+    .byte %10000000, %10000100
+    ;.byte 0, 0
+DrumFillSnaresOnly1
+    .byte %10000100, %10000100
+    ;.byte 0, 0
+
+DrumBeatWithKick1 
+    .byte %11000000, %10000100
+DrumFillWithKick1
+    .byte %11000100, %10000100
+    
+    
+
+    ;for the following three tables, zero is not used as in index into them
+PercussionVolumeTable = * - 1
+    .byte PERCUSSIONVOLUME, PERCUSSIONVOLUME, PERCUSSIONVOLUME
+PercussionDistortionTable = * - 1
+    .byte SNARESOUND, SNARE2SOUND, KICKSOUND
+PercussionFrequencyTable = * - 1
+    .byte SNAREPITCH, SNARE2PITCH, KICKPITCH
+    
+ArticulationTable   ;--routine as currently written will never read the first and fourth values
+	.byte 0,4, 2, 0
+	.byte 0,0,0,0
+    
+DistortionTable
+    .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
+    .byte SQUARESOUND
+
+FrequencyTable
+    .byte 19, 20, 23, 26
+    .byte 31
 	
 ;------------------------------------------------------------------------------------------
 	
@@ -4304,16 +4665,6 @@ NotCompletelyDoneWithMaze
 	
 	jmp ReturnFromBSSubroutine2
 	
-AllowCarveDownTable ;can't carve downward in the outer two columns
-    .byte 0, 0, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 0, 0		
-;****************************************************************************
-
-EntryPointRowOffsetTable
-    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
-    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
 
 ;****************************************************************************
 
@@ -4873,7 +5224,6 @@ TopRowEnemyTankRespawn
 	sta TankStatus,X
 	;--remove remaining enemy tanks from screen
 	lda #0		
-	sta AUDV0
 	sta AUDV1
 	jsr MoveEnemyTanksOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
@@ -4968,13 +5318,13 @@ PutTitleGraphicsInPlayfieldLoop
 	bcc DrawTitleScreenModerately
 	;--else slower
 	lda FrameCounter
-	and #$1F
+	and #$18
 	bne SkipDrawingTitleScreenThisFrame
 DrawTitleScreenModerately	
 	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)-1
 	bcc DrawTitleScreenFast
 	lda FrameCounter
-	and #$F
+	and #$8
 	bne SkipDrawingTitleScreenThisFrame
 DrawTitleScreenFast
 	txa
@@ -5004,6 +5354,8 @@ PlayLongSound
 	lda GameStatus
 	ora #DRAWBASE
 	sta GameStatus
+    lda #(FanfarePatternEnd-FanfarePattern-1)       ;need to start on last note so we can immediately wrap to first note.
+    sta SongIndex
 	ldy #LONGEXPLOSIONSOUND
 PlayShortSound
 	jsr StartSoundSubroutineBank2
@@ -5140,8 +5492,22 @@ PositionASpriteSubroutineBank2
 ;---------------------DATA-----------------------------
 ;------------------------------------------------------
 
+
+AllowCarveDownTable ;can't carve downward in the outer two columns
+    .byte 0, 0, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 0, 0		
+
+    
+EntryPointRowOffsetTable
+    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
+    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
+
+
 DigitDataMissileLo
 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree
+	
 	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
 	.byte <MissileEight, <MissileNine
 		
