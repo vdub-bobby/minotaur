@@ -803,11 +803,11 @@ OverscanRoutine
 ; 	lda #31
 ; 	sec
 ; 	sbc Temp
-	sta AUDF0
+	sta AUDF1
 	lda #GAMEOVERSOUND
-	sta AUDC0
+	sta AUDC1
 	lda #GAMEOVERVOLUME
-	sta AUDV0
+	sta AUDV1
 	inc TankMovementCounter ;used to make walls flash
 	;--now need to see if we have just finished flashing
 	lda TankMovementCounter
@@ -828,7 +828,7 @@ RemoveBulletsFromScreenGameOverLoop
 	lda #WALLDONEFLASHING|GAMEOVERWAIT
 	sta TankMovementCounter
 	lda #30
-	sta AUDF0   ;--set freq back to 30 not 31
+	sta AUDF1   ;--set freq back to 30 not 31
 DoneMakingWallsFlash
     lda FrameCounter
     and #3
@@ -841,13 +841,13 @@ DoneMakingWallsFlash
 	cmp #(GAMEOVERWAIT/4)*3
 	bcs NoChangeToGameOverSound
 	ldx #31
-	stx AUDF0
+	stx AUDF1
 	cmp #32
 	bcs NoChangeToGameOverVolume
 	cmp #24
 	bcc NoChangeToGameOverVolume
 	and #7
-	sta AUDV0
+	sta AUDV1
 	
 	bcs GameOverRoutineStillGoing   ;branch always
 	
@@ -931,6 +931,7 @@ LevelCompleteNow
 	beq NotGeneratingMaze
 	lda FrameCounter
 	and #7
+	cmp #1
 	bne NotGeneratingMaze
 	brk
 	.word GenerateMazeSubroutine
@@ -1804,6 +1805,13 @@ SoundSubroutine
 	;   in other words, all sounds effects have a static volume (=7) until the last 7 frames (approx 1/10 of a second)
 	;       at which point the sound volume linearly fades out to zero
 	
+	;--skip this if game over
+	lda GameStatus
+	and #GAMEOVER
+	beq PlaySoundGameNotOver
+	rts
+	
+PlaySoundGameNotOver
 	lda Channel1Decay
  	cmp #$07
  	bcc SetChannel1Volume
@@ -1820,8 +1828,15 @@ ReturnFromTankMovementSubroutine
 
     ;--now play music.  
 MusicRoutine  
-    lda SongIndex
-    bpl MusicIsPlaying
+    ;--no music while maze is generating.  which besides being aesthetically what I want, also keeps the 
+    ;   maze-generation routine from being screwed up, since it uses Temp+2 (misnamed or misused in this case)
+    ;   to save the random seed *across frames*
+    lda GameStatus
+    and #GENERATINGMAZE
+    beq MusicIsPlaying
+MusicIsNotPlaying
+    lda #0
+    sta AUDV0
     rts
 MusicIsPlaying
     ;First, determine which song
@@ -1830,13 +1845,27 @@ MusicIsPlaying
     and #TITLESCREEN
     cmp #TITLESCREEN
     bne NotOnTitleScreenAtAll
-    ;--else on title screen, but base shows so start playing drum beat
+    ;--else on title screen, but start playing drum beat once base shows
+    lda GameStatus
+    and #DRAWBASE
+    beq MusicIsNotPlaying
     lda #<FanfarePattern
     sta MiscPtr+2
     lda #>FanfarePattern
     sta MiscPtr+3
     bne PlayMusic
 NotOnTitleScreenAtAll
+    ;--during level start?
+    lda GameStatus
+    and #GENERATINGMAZE|GAMEOFF|DRAWBASE|LEVELCOMPLETE
+    cmp #DRAWBASE       ;not generating maze, game is on, base is drawn, and level is not complete
+    bne DoNotPlayLevelStartMusic
+    lda #<LevelStartFanfarePattern
+    sta MiscPtr+2
+    lda #>LevelStartFanfarePattern
+    sta MiscPtr+3
+    bne PlayMusic   ;branch always
+DoNotPlayLevelStartMusic
     lda #<FanfarePattern
     sta MiscPtr+2
     lda #>FanfarePattern
@@ -1896,9 +1925,12 @@ BackToBeginningOfSong
     lda (MiscPtr+2),Y
     cmp #255
     bne NotEndOfSong
-    ldy #0
-    sty SongIndex
-    beq BackToBeginningOfSong
+    ;--change.  If 255, next byte tells us what to change songindex to.
+    iny
+    lda (MiscPtr+2),Y
+    sta SongIndex
+    tay
+    jmp BackToBeginningOfSong
 NotEndOfSong
     and #VOLUME_BITS
     sta Temp+1
@@ -1940,6 +1972,7 @@ NoPercussion
 
 	
 ;****************************************************************************
+    SUBROUTINE
 GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
                     ;uses Temp, MiscPtr, MiscPtr+1
                     ;depends on MiscPtr+2 pointing at melody data
@@ -1948,10 +1981,22 @@ GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
     ;--if non-zero value (i.e., a note), play beat with kick
     ;   if zero (i.e., no melody), play beat without kick
     beq SnareBeatsOnly
-    ldy #2
-    .byte $2C   ;skip 2 bytes
+    lda #2
 SnareBeatsOnly
-    ldy #0
+    sta Temp
+    ;now pick randomly from various related drum beats
+    lda RandomNumber
+    and #3
+    tay
+    lda Temp
+    clc
+.loop
+    dey
+    bmi .loopdone
+    adc #4
+    bne .loop
+.loopdone
+    tay    
     lda SongIndex
     and #$0F
     cmp #12
@@ -3074,16 +3119,6 @@ MovementMask
 ; RotationEvenBank1
 ; 	.byte 2, 1, 3, 0
 ; 
-NoMusicPattern  ;used for melody (0=VOLUME0) and rhythm (0, 0) = one beat of no drums
-    ;has to be 16 bytes long if we want to use it for background (no melody) over
-    ;the 4-bar drum track.
-    .byte 0, 0, 0, 0
-    .byte 0, 0, 0, 0
-    .byte 0, 0, 0, 0
-    .byte 0, 0, 0, 0
-NoMusicPatternEnd
-    .byte 255
-    
     
 FanfarePattern
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
@@ -3170,11 +3205,49 @@ FanfarePattern
     .byte VOLUME6|SQUARE_26
     .byte VOLUME6|SQUARE_26|ARTICULATE
 FanfarePatternEnd
-    .byte 255
+    .byte 255, 0
 
+    
+    
+LevelStartFanfarePattern
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|SQUARE_26
+    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23
+    .byte VOLUME6|SQUARE_23|ARTICULATE
+LevelStartFanfarePatternB  ;used for melody (0=VOLUME0) and rhythm (0, 0) = one beat of no drums
+    ;has to be 16 bytes long if we want to use it for background (no melody) over
+    ;the 4-bar drum track.
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+LevelStartFanfarePatternEnd
+    .byte 255, (LevelStartFanfarePatternEnd-LevelStartFanfarePatternB)&$FF
+
+    
+    
+     
 FillPatternTable
     .word DrumFillSnaresOnly1, DrumFillWithKick1
+    .word DrumFillSnaresOnly1, DrumFillWithKick1
+    .word DrumFillSnaresOnly1, DrumFillWithKick1
+    .word DrumFillSnaresOnly1, DrumFillWithKick1
 BeatPatternTable
+    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
 
  ;bits: each byte is four 32nds, reading left to right, 2-bit groups
@@ -3187,7 +3260,10 @@ DrumBeatSnaresOnly1
     ;.byte 0, 0
 DrumFillSnaresOnly1
     .byte %10000100, %10000100
-    ;.byte 0, 0
+DrumFillSnaresOnly2
+    .byte %10000100, %10001001
+DrumFillSnaresOnly3
+    .byte %10011001, %10011001
 
 DrumBeatWithKick1 
     .byte %11000000, %10000100
@@ -4607,17 +4683,19 @@ SkipCreatingConnectingPassageRight
 SkipCreatingConnectingPassageLeft
     
     
+
 	
-	;--make base reappear
+	
+	
+	;--and clear GAMEOFF flag and turn off maze generation flag, and make base reappear
 	lda GameStatus
+	and #~(GENERATINGMAZE|GAMEOFF)
 	ora #DRAWBASE
 	sta GameStatus
 	
-	;--and clear GAMEOFF flag and turn off maze generation flag
-	lda GameStatus
-	and #~(GENERATINGMAZE|GAMEOFF)
-	sta GameStatus
-	
+	;--set music to correct starting location
+    lda #255;(LevelStartFanfarePatternEnd-LevelStartFanfarePattern-1)
+    sta SongIndex
 
 	;--set starting tank position
 	
@@ -4816,7 +4894,7 @@ CollisionsSubroutine
     ;--reset TankMovementCounter, (re)used to make walls flash
     lda #GAMEOVERSTARTFREQ
     sta TankMovementCounter
-    ;--kill sounds just for my own sanity
+    ;--kill sounds just for my own sanity -this may no longer be necessary
     lda #0
     sta AUDV0
     sta AUDV1
@@ -5354,7 +5432,7 @@ PlayLongSound
 	lda GameStatus
 	ora #DRAWBASE
 	sta GameStatus
-    lda #(FanfarePatternEnd-FanfarePattern-1)       ;need to start on last note so we can immediately wrap to first note.
+    lda #255;(FanfarePatternEnd-FanfarePattern-1)       ;need to start on last note so we can immediately wrap to first note.
     sta SongIndex
 	ldy #LONGEXPLOSIONSOUND
 PlayShortSound
