@@ -644,7 +644,7 @@ LastRowR ds 1
 
 SongIndex ds 1
 
-Temp ds 3
+Temp ds 4
 MiscPtr 
 ScorePtr ds 12
 
@@ -1851,9 +1851,9 @@ MusicIsPlaying
     lda GameStatus
     and #DRAWBASE
     beq MusicIsNotPlaying
-    lda #<FanfarePattern
+    lda #<TitleScreenSong
     sta MiscPtr+2
-    lda #>FanfarePattern
+    lda #>TitleScreenSong
     sta MiscPtr+3
     bne PlayMusic
 NotOnTitleScreenAtAll
@@ -1862,15 +1862,16 @@ NotOnTitleScreenAtAll
     and #GENERATINGMAZE|GAMEOFF|DRAWBASE|LEVELCOMPLETE
     cmp #DRAWBASE       ;not generating maze, game is on, base is drawn, and level is not complete
     bne DoNotPlayLevelStartMusic
-    lda #<LevelStartFanfarePattern
+    lda #<LevelStartSong
     sta MiscPtr+2
-    lda #>LevelStartFanfarePattern
+    lda #>LevelStartSong
     sta MiscPtr+3
     bne PlayMusic   ;branch always
 DoNotPlayLevelStartMusic
-    lda #<FanfarePattern
+    ;--this is default and is incorrect, need additional logic or different default here.
+    lda #<TitleScreenSong
     sta MiscPtr+2
-    lda #>FanfarePattern
+    lda #>TitleScreenSong
     sta MiscPtr+3
 
 
@@ -1879,7 +1880,9 @@ PlayMusic
     and #7                  ;tempo = 112.5 BPM, 16th note every seven frames
     beq GetNewNote          
     and #3
-    beq GetNewPercussion    ;percussion is all 32nds
+    bne NoPercussionDownBeat    ;percussion is all 32nds
+    jmp GetNewPercussion
+NoPercussionDownBeat
     ;--not on 32nd-note beat, so need to determine if we are playing percussion or playing note
     cmp #PERCUSSIONCUTOFF
     bcc PlayRegularNote
@@ -1892,11 +1895,24 @@ PlayMusic
     
 PlayRegularNote    
     ;--else play regular tone
-    ldy SongIndex
+    lda SongIndex
+    and #$F0
+    lsr
+    lsr
+    lsr
+    tay
     lda (MiscPtr+2),Y
+    sta MiscPtr+4
+    iny
+    lda (MiscPtr+2),Y
+    sta MiscPtr+5
+    lda SongIndex
+    and #$0F
+    tay
+    lda (MiscPtr+4),Y
     and #VOLUME_BITS
     sta Temp
-    lda (MiscPtr+2),Y
+    lda (MiscPtr+4),Y
     lsr
     bcc NoArticulation
     lda FrameCounter
@@ -1909,7 +1925,7 @@ PlayRegularNote
 NoArticulation
     lda Temp
     sta Temp+1
-    lda (MiscPtr+2),Y
+    lda (MiscPtr+4),Y
     lsr
     lsr
     lsr
@@ -1922,9 +1938,17 @@ NoArticulation
     jmp PlayMusicSound
 GetNewNote
     inc SongIndex
-    ldy SongIndex
 BackToBeginningOfSong
+    lda SongIndex
+    and #$F0
+    lsr
+    lsr
+    lsr
+    tay
     lda (MiscPtr+2),Y
+    cmp #255
+    bne NotEndOfSong
+    iny
     cmp #255
     bne NotEndOfSong
     ;--change.  If 255, next byte tells us what to change songindex to.
@@ -1941,10 +1965,25 @@ NotEndOfSong
     lda RandomNumber
     sta RandomNumberSaved
 NoChangeToSavedRandomNumber
-    lda (MiscPtr+2),Y       ;have to reload, kind of inefficient
+       ;have to reload, kind of inefficient
+    lda SongIndex
+    and #$F0
+    lsr
+    lsr
+    lsr
+    tay
+    lda (MiscPtr+2),Y
+    sta MiscPtr+4
+    iny
+    lda (MiscPtr+2),Y
+    sta MiscPtr+5
+    lda SongIndex
+    and #$0F
+    tay
+    lda (MiscPtr+4),Y    
     and #VOLUME_BITS
     sta Temp+1
-    lda (MiscPtr+2),Y
+    lda (MiscPtr+4),Y
     lsr
     lsr
     lsr
@@ -1986,8 +2025,21 @@ NoPercussion
 GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
                     ;uses Temp, MiscPtr, MiscPtr+1
                     ;depends on MiscPtr+2 pointing at melody data
-    ldy SongIndex
+    lda SongIndex
+    and #$F0
+    lsr
+    lsr
+    lsr
+    tay
     lda (MiscPtr+2),Y
+    sta MiscPtr+4
+    iny
+    lda (MiscPtr+2),Y
+    sta MiscPtr+5
+    lda SongIndex
+    and #$0F
+    tay
+    lda (MiscPtr+4),Y
     ;--if non-zero value (i.e., a note), play beat with kick
     ;   if zero (i.e., no melody), play beat without kick
     beq SnareBeatsOnly
@@ -3131,28 +3183,29 @@ MovementMask
 ; 	.byte 2, 1, 3, 0
 ; 
     
+
+TitleScreenSong
+    .word SilencePattern
+    .word SilencePattern
+    .word SilencePattern
+    .word SilencePattern
+    .word Fanfare1Pattern
+    .word Fanfare2Pattern
+    .word Fanfare1Pattern
+    .word Fanfare3Pattern
+    .word $FFFF
+    .byte 2<<4
+
+
 FanfarePattern
+SilencePattern
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+ 
     
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    
-    
+Fanfare1Pattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3169,7 +3222,7 @@ FanfarePattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
-    
+Fanfare2Pattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3187,23 +3240,7 @@ FanfarePattern
     .byte VOLUME6|SQUARE_20
     .byte VOLUME6|SQUARE_20|ARTICULATE
 
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE    
-    
+Fanfare3Pattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3220,9 +3257,13 @@ FanfarePattern
     .byte VOLUME6|SQUARE_26
     .byte VOLUME6|SQUARE_26
     .byte VOLUME6|SQUARE_26|ARTICULATE
-FanfarePatternEnd
-    .byte 255, 32
-
+    
+    
+LevelStartSong
+    .word Fanfare1Pattern
+    .word SilencePattern
+    .word $FFFF
+    .byte 1<<4
     
     
 LevelStartFanfarePattern
@@ -3242,15 +3283,6 @@ LevelStartFanfarePattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
-LevelStartFanfarePatternB  ;used for melody (0=VOLUME0) and rhythm (0, 0) = one beat of no drums
-    ;has to be 16 bytes long if we want to use it for background (no melody) over
-    ;the 4-bar drum track.
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-LevelStartFanfarePatternEnd
-    .byte 255, (LevelStartFanfarePatternEnd-LevelStartFanfarePatternB)&$FF
 
     
     
@@ -4714,7 +4746,7 @@ SkipCreatingConnectingPassageLeft
 	sta GameStatus
 	
 	;--set music to correct starting location
-    lda #255;(LevelStartFanfarePatternEnd-LevelStartFanfarePattern-1)
+    lda #255
     sta SongIndex
 
 	;--set starting tank position
@@ -4915,9 +4947,13 @@ CollisionsSubroutine
     lda #GAMEOVERSTARTFREQ
     sta TankMovementCounter
     ;--kill sounds just for my own sanity -this may no longer be necessary
+;     lda #0
+;     sta AUDV0
+;     sta AUDV1
+    ;--kill music (AUDV0) and sound effects (Channel1Decay variable)
     lda #0
     sta AUDV0
-    sta AUDV1
+    sta Channel1Decay
     ;and return, so player doesn't get 5 points for shooting his own base lol
 	jmp ReturnFromBSSubroutine2
 NoBulletToBaseCollision
