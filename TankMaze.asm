@@ -589,6 +589,7 @@ RESET		=	%00000001
 FrameCounter ds 1
 TankMovementCounter ds 1
 RandomNumber ds 1
+RandomNumberSaved ds 1  ;used to save the random number for more than one frame
 
 MazeNumber ds 1
 MazeGenerationPass ds 1
@@ -643,7 +644,7 @@ LastRowR ds 1
 
 SongIndex ds 1
 
-Temp ds 4
+Temp ds 3
 MiscPtr 
 ScorePtr ds 12
 
@@ -1829,8 +1830,9 @@ ReturnFromTankMovementSubroutine
     ;--now play music.  
 MusicRoutine  
     ;--no music while maze is generating.  which besides being aesthetically what I want, also keeps the 
-    ;   maze-generation routine from being screwed up, since it uses Temp+2 (misnamed or misused in this case)
-    ;   to save the random seed *across frames*
+    ;   maze-generation routine from being screwed up, since it uses RandomNumberSaved, which is also used by
+    ;   maze-generation routine, to save the random seed *across frames*
+    ;--save RandomNumber every measure
     lda GameStatus
     and #GENERATINGMAZE
     beq MusicIsPlaying
@@ -1932,6 +1934,14 @@ BackToBeginningOfSong
     tay
     jmp BackToBeginningOfSong
 NotEndOfSong
+    ;--when getting new note, save new random number at beginning of every measure (i.e., when SongIndex & $F = 0)
+    lda SongIndex
+    and #$F
+    bne NoChangeToSavedRandomNumber
+    lda RandomNumber
+    sta RandomNumberSaved
+NoChangeToSavedRandomNumber
+    lda (MiscPtr+2),Y       ;have to reload, kind of inefficient
     and #VOLUME_BITS
     sta Temp+1
     lda (MiscPtr+2),Y
@@ -1985,7 +1995,8 @@ GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
 SnareBeatsOnly
     sta Temp
     ;now pick randomly from various related drum beats
-    lda RandomNumber
+;     lda RandomNumber
+    lda RandomNumberSaved
     and #3
     tay
     lda Temp
@@ -3125,18 +3136,23 @@ FanfarePattern
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    
+    
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3205,7 +3221,7 @@ FanfarePattern
     .byte VOLUME6|SQUARE_26
     .byte VOLUME6|SQUARE_26|ARTICULATE
 FanfarePatternEnd
-    .byte 255, 0
+    .byte 255, 32
 
     
     
@@ -3241,8 +3257,8 @@ LevelStartFanfarePatternEnd
      
 FillPatternTable
     .word DrumFillSnaresOnly1, DrumFillWithKick1
-    .word DrumFillSnaresOnly1, DrumFillWithKick1
-    .word DrumFillSnaresOnly1, DrumFillWithKick1
+    .word DrumFillSnaresOnly2, DrumFillWithKick2
+    .word DrumFillSnaresOnly3, DrumFillWithKick3
     .word DrumFillSnaresOnly1, DrumFillWithKick1
 BeatPatternTable
     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
@@ -3250,26 +3266,30 @@ BeatPatternTable
     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
 
- ;bits: each byte is four 32nds, reading left to right, 2-bit groups
+ ;bits: each byte is four 32nds, reading left to right, 2-bit groups.
+ ;  two-byte groups are each one beat
     ;00 = no percussion
     ;01 = snare 1
     ;02 = snare 2
     ;03 = kick
 DrumBeatSnaresOnly1 
     .byte %10000000, %10000100
-    ;.byte 0, 0
+
 DrumFillSnaresOnly1
     .byte %10000100, %10000100
 DrumFillSnaresOnly2
-    .byte %10000100, %10001001
+    .byte %10001001, %10000100
 DrumFillSnaresOnly3
-    .byte %10011001, %10011001
+    .byte %10011001, %10000100
 
 DrumBeatWithKick1 
     .byte %11000000, %10000100
 DrumFillWithKick1
     .byte %11000100, %10000100
-    
+DrumFillWithKick2
+    .byte %11001001, %10000100
+DrumFillWithKick3
+    .byte %11011001, %10000100
     
 
     ;for the following three tables, zero is not used as in index into them
@@ -4406,7 +4426,7 @@ UpdateMazeNumber
 	jmp DoneWithFirstPass
 	
 NotFirstPass
-	lda Temp+2
+	lda RandomNumberSaved
 	sta RandomNumber
 
 
@@ -4737,7 +4757,7 @@ SetNewLevelTankDelay
 NotCompletelyDoneWithMaze
 	;--restore original random number
 	lda RandomNumber
-	sta Temp+2          ;save current random number in maze generation (this means maze generation starts random but each seed is consistent)
+	sta RandomNumberSaved          ;save current random number in maze generation (this means maze generation starts random but each seed is consistent)
 	pla
 	sta RandomNumber
 	
