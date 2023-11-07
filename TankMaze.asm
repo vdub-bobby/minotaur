@@ -197,7 +197,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 42       ;--this jitters a bit
+VBLANK_TIMER = 50       ;--this jitters a bit
 OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
@@ -766,18 +766,6 @@ InBetweenLevels
     bne DoNotReadConsoleSwitchesWhileGeneratingMaze ;also not while game over routine is running
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
-
-WaitForVblankEnd
-	lda INTIM
-; 	bpl WaitForVblankEnd
-	bmi OverTimeVBLANK
-	cmp #1
-	bne WaitForVblankEnd
-	beq EndVBLANK
-OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
-	nop
-		
-EndVBLANK	
 
 	brk
 	.word KernelRoutineGame
@@ -3771,6 +3759,19 @@ SetupScorePtrsLoop
 	lda #RIGHTEIGHT
 	sta HMM1
 
+
+WaitForVblankEnd
+	lda INTIM
+; 	bpl WaitForVblankEnd
+	bmi OverTimeVBLANK
+	cmp #1
+	bne WaitForVblankEnd
+	beq EndVBLANK
+OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+	nop
+EndVBLANK	
+
+	
 	
 	ldy #0
 	sta WSYNC
@@ -3866,6 +3867,8 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	lda RotationTables+1,X
 	sta MiscPtr+1
 	
+; 	sta WSYNC
+	
 	SUBROUTINE
 	if DEBUGTANKAICOUNTER = 1
         lda TankMovementCounter
@@ -3890,10 +3893,6 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
         lda #0
 WallFlashingColor
         lsr
-;         lsr
-;         lsr
-;         lsr
-;         lsr
         and #$0F
         ora #(WALLCOLOR&$F0)
         bne SetWallColor
@@ -3902,20 +3901,37 @@ RegularWallColor
 SetWallColor        
     ENDIF
 
-    sta WSYNC   ;--timing, this is required for now due to branches immediately above
     
     sta Temp+3
 	sta COLUPF
 	;--do this above...the rest we do during the wall below.  
-	ldx #4
-; PositioningLoopVBLANK	;--excluding players (and M1)
-	lda PlayerX,X
-	jsr PositionASpriteSubroutineBank2   ;        9
-; 	dex
-; 	cpx #3
-; 	bne PositioningLoopVBLANK
-	
 
+	
+    sta WSYNC   ;--timing, this is required for now due to branches immediately above
+	
+	
+	;---reflect P0/P1
+	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
+	ldy #3              ;+2     24
+SetREFPLoop
+	lax (MiscPtr),Y		;+5      5      get X index into graphics registers
+	lda TankStatus,Y    ;+4      9
+	and #TANKLEFT       ;+2     11
+	beq EndREFPLoop     ;+2/3   13/14    only if facing left do we reflect
+	cpx #2              ;+2     15
+	bcs EndREFPLoop     ;+2/3   17/18
+	lda #$FF            ;+2     19      1 or 0 (players) get reflected, 2 and 3 (missiles) do not
+	sta REFP0,X	        ;+4     23
+EndREFPLoop             ;       14/18/23
+	dey                 
+	bpl SetREFPLoop     ;+5     19/23/28
+    ;loop minimum time is 76 cycles.  maximum is 101
+    ;                   ;+76    98  (or 22)
+    ;                   ;+101   135 (or 59)
+
+	
+	
+    sta WSYNC
 	
 	ldx #$C0
 	lda #$FF                        ;+4     13
@@ -3925,37 +3941,29 @@ SetWallColor
 	sta PF1
 	sta PF2                         ;+9     22
 	
-	;---reflect P0/P1
-	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
-	ldy #3
-SetREFPLoop
-	lda TankStatus,Y
-	and #TANKLEFT
-	beq EndREFPLoop     ;--only if facing left do we reflect
-	lax (MiscPtr),Y		;get X index into graphics registers
-	cpx #2
-	bcs EndREFPLoop
-	lda #$FF            ;--1 or 0 (players) get reflected, 2 and 3 (missiles) do not
-	sta REFP0,X	
-EndREFPLoop
-	dey
-	bpl SetREFPLoop
-
+	ldx #4
+; PositioningLoopVBLANK	;--excluding players (and M1)
+	lda PlayerX,X
+	jsr PositionASpriteSubroutineBank2   ;        9
+; 	dex
+; 	cpx #3
+; 	bne PositioningLoopVBLANK
 	
+    ldy #255
 	sty VDELP0  ;Y is 255 following loop above
-	sty VDELBL    
+	sty VDELBL          ;+6
 
 	iny         ;Y = 0
-	sty VDELP1
-	
+	sty VDELP1          ;+5     11
+	;save stack pointer
 	tsx
-	stx Temp       ;save stack pointer
-		
+	stx Temp           ;+5      16
+		;%%%
 
 	ldx #3
 PositioningLoop	;--just players
 	lda PlayerX,X
-	jsr PositionASpriteSubroutineBank2
+	jsr PositionASpriteSubroutineBank2  ;this needs 14 cycles before end of scanline or it will wrap around and give an extra scanline
 	dex
 	bpl PositioningLoop     ;       13 cycles last time through
     
