@@ -415,6 +415,7 @@ SNARE2PITCH	=	12
 
 WALLDESTRUCTIONSCORE    =   $0005
 KILLTANKSCORE           =   $0100
+LEVELENDBRICKSCORE      =   $0010
 
 ;--GameStatus flags
 
@@ -943,12 +944,12 @@ FoundBrick
 	and PF1Left,X
 	sta PF1Left,X
 	;--play bling sound
-    ldy #WALLSOUND
+    ldy #SCORESOUND
 	jsr StartSoundSubroutine
 	;--and get points
-	lda #0
+	lda #>LEVELENDBRICKSCORE
 	sta Temp
-	lda #$10
+	lda #<LEVELENDBRICKSCORE
 	jsr IncreaseScoreSubroutineBank0
 	jmp .LevelNotComplete
 FoundAllBricks
@@ -3133,7 +3134,7 @@ PFRegisterLookup
 
 Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
-	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE,
+	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
 	.byte SCORESOUNDTONE
 
 Frequency
@@ -5440,11 +5441,26 @@ TopRowEnemyTankRespawn
 	;--increase score by some amount ...
 	;---what I'd like to do is give like 10 points or something for every brick remaining
 	;	but that could be complicated
-	;	for now, just add level * 100
+	;	for now, just add level * 1000
 	lda MazeNumber
+	asl
+	asl
+	asl
+	asl
 	sta Temp
 	lda #0
-	jsr IncreaseScoreSubroutine	
+	jsr IncreaseScoreSubroutine ;can only use this to add up to 9999 to the score.  
+	;--so add top digit of MazeNumber x 1000 to Score separately
+	lda MazeNumber
+	lsr
+	lsr
+	lsr
+	lsr
+	sed
+	clc
+	adc Score
+	sta Score
+	cld
 PlayerTankHit	
 LevelNotComplete
     ;--what I want to do here is IF the # of tanks remaining <= 3, 
