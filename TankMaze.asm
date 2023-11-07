@@ -230,6 +230,8 @@ ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
 ENEMYTANK2DELAY	=	10
 ENEMYTANK3DELAY	=	14
 
+TANKSCOREWAIT   =   6
+
 PLAYERRESPAWNDELAY = 14
 PLAYERINITIALDELAY  =   6
 
@@ -320,7 +322,7 @@ MAZEGENERATIONPASSES = MAZEROWS/2-1
 ;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
 ;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
 ;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
-PLAYERTANKSPEED	=	TANKSPEED2      
+PLAYERTANKSPEED	=	TANKSPEED2|1     
 ENEMYTANKBASESPEED0	=   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED6
 ENEMYTANKBASESPEED2	=	TANKSPEED4
@@ -1379,7 +1381,35 @@ MoveAnEnemyTank
 	;jsr IsTankOnScreenBank0     
 	lda TankStatus,X
 	and #TANKINPLAY	
-	bne TankOnscreenMoveIt         
+	beq TankNotInPlay
+	jmp TankOnscreenMoveIt 
+TankNotInPlay
+	;--first - is the tank dead and onscreen?  if so, check it's wait and move it offscreen
+	lda TankStatus,X
+	and #TANKDIRECTION  ;--if pointing UP, then it is still onscreen
+	cmp #TANKUP
+	bne TankOffScreen
+	;--tank is onscreen but dead and sitting there.
+	;   Decrement the wait, once it is done then move it offscreen
+	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
+	and #7;
+	bne DoNotMoveTankOffscreenYet
+	lda TankStatus,X
+	and #$0F
+	sec
+	sbc #2
+	ora #TANKUP
+	sta TankStatus,X
+	bpl DoNotMoveTankOffscreenYet	
+	;--move tank offscreen
+	txa ;save X
+	pha
+	brk 
+	.word TankRespawnRoutineWrapper
+	pla
+DoNotMoveTankOffscreenYet
+    rts
+TankOffScreen
 	;tank offscreen
 	;--only bring tank onscreen if there are enemy tanks remaining
 	;--how many tanks onscreen?
@@ -3563,7 +3593,18 @@ NotPlayerTankSkipNotMovingCheck
 TankGfxIndexSet
 	tax
 
-
+	
+	;--if tank is dead, use one specific gfx
+	lda TankStatus,Y
+	and #TANKINPLAY
+	bne TankInPlayUsualGraphics
+	;--else use 
+	lda #<(TankScoreImage+TANKHEIGHT)
+	pha
+	lda #>(TankScoreImage+TANKHEIGHT)
+    bne SetTankGfxPtr   ;branch always
+	
+TankInPlayUsualGraphics
 	lda TankStatus,Y
 	and #TANKUP
 	beq TankNotFacingUp
@@ -3571,7 +3612,7 @@ TankGfxIndexSet
 	lda TankUpFrame,X
 	pha
 	lda TankUpFrame+1,X
-	jmp SetTankGfxPtr
+	bne SetTankGfxPtr   ;branch always
 TankNotFacingUp
 	lda TankStatus,Y
 	and #TANKDOWN
@@ -4932,21 +4973,22 @@ IncreaseScoreSubroutine
 	rts
 
 ;****************************************************************************
+    SUBROUTINE
 IsTankOnScreen
     ;--X holds tank number to check
     ;--return in accumulator:  0 if offscreen, 1 if onscreen
     lda TankX,X
     cmp #TANKONSCREENLEFT
-    bcc TankOffScreen
+    bcc .TankOffScreen
     cmp #TANKONSCREENRIGHT+1
-    bcs TankOffScreen
+    bcs .TankOffScreen
     lda TankY,X
     cmp #TANKONSCREENTOP+2
-    bcc TankOnScreen    
-TankOffScreen
+    bcc .TankOnScreen    
+.TankOffScreen
     lda #0
     rts
-TankOnScreen
+.TankOnScreen
     lda #1
     rts
 
@@ -5086,6 +5128,10 @@ TankCollisionLoop
     ;--remove tank only if fully onscreen
     tya
     tax ;
+    ;--check if tank in play (can be on screen but not in play, if dead)
+    lda TankStatus,X        ;%%%
+    and #TANKINPLAY
+    beq TankAlreadyDeadCannotDie
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
     and #$FF    ;--sets flags
     beq TankNotOnScreenCannotDie
@@ -5106,6 +5152,7 @@ EnemyTankDied
     tya
     tax
     jsr PlayerHitTank   ;this routine uses X to index into which tank got hit.
+TankAlreadyDeadCannotDie
 TankNotOnScreenCannotDie    
 NoTankCollision
 PlayerTankDead
@@ -5159,6 +5206,11 @@ BulletCollisionM1
     lda M1CollisionTable,Y
     tax
 FoundDeadTankNowKill
+    ;--check if tank is already dead (but still on screen)
+    lda TankStatus,X
+    and #TANKINPLAY
+    beq TankAlreadyDeadCannotBeShot
+
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
 	lda FrameCounter
 	and #3
@@ -5175,7 +5227,7 @@ FoundDeadTankNowKill
 NoPointsForGettingShot		
 NoPointsForEnemyOwnGoals
 	jsr BulletHitTank
-
+TankAlreadyDeadCannotBeShot
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
 	
@@ -5344,24 +5396,16 @@ NoSoundForBrickExplosion
     
 ;****************************************************************************
 
+TankRespawnRoutineWrapper
+    tsx
+    lda $03,X
+    tax
+    jsr TankRespawnRoutine
+    jmp ReturnFromBSSubroutine2
 
 
 
-
-
-
-
-BulletHitTank
-	;--bullet did hit tank.
-	;	remove bullet and tank from screen
-	lda #BALLOFFSCREEN
-	sta BulletX,Y
-	sta BulletY,Y
-PlayerHitTank
-	;--save and restore Y in this routine
-	tya
-	pha
-
+TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy tanks)
 	txa
 	bne EnemyTankRespawnRoutine
     ;--stop player tank sound and use regular respawn for player tank
@@ -5408,7 +5452,26 @@ TopRowEnemyTankRespawn
 	lda StartingTankXPosition,Y
 	sta TankX,X
 	lda StartingTankStatus,X  
-	sta TankStatus,X
+
+    rts
+
+;****************************************************************************
+
+BulletHitTank
+	;--bullet did hit tank.
+	;	remove bullet and tank from screen
+	lda #BALLOFFSCREEN
+	sta BulletX,Y
+	sta BulletY,Y
+PlayerHitTank
+	;--save and restore Y in this routine
+	tya
+	pha
+
+	txa
+	bne EnemyTanksNotMovedOffScreen
+	jsr TankRespawnRoutine
+EnemyTanksNotMovedOffScreen
 
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
@@ -5416,6 +5479,9 @@ TopRowEnemyTankRespawn
 	txa
 	beq PlayerTankHit
 	
+    lda #TANKUP|TANKSCOREWAIT   ;has to be tank up because it isn't used when tanks respawn
+                                ;and is therefore an indication that tank hasn't respawned yet
+	sta TankStatus,X
 	;--decrease tanks remaining ONLY if enemy tank hit
 
 	dec TanksRemaining
@@ -6189,11 +6255,26 @@ TankRightAnimated4b
 		.byte #%01100110;--
 		.byte 0
 
-		
-		
-		
-		
 
+TankScoreImage = * - 1
+        .byte #%00000000;--2
+        .byte #%11101010;--4
+        .byte #%01010101;--6
+        .byte #%11001010;--8
+        .byte #%00000000;--10
+        .byte #%00000000;--12
+TankScoreImageb
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%00000000;--3
+        .byte #%01010101;--5
+        .byte #%01010101;--7
+        .byte #%01000000;--9
+        .byte #%00000000;--11
+        .byte 0
+        
+        
+        
 TanksRemainingGfx
 ;	.byte 0
 	.byte %11101110
@@ -6275,7 +6356,7 @@ NumberOfBitsSetBank2
 	
 	
 TitleGraphics
-    ;-----PF1--------PF2--------PF2--------PF1
+    ;-----PF1--------PF2--------PF2--------PF1------
     .byte %00001000, %11111100, %11111100, %00001000
     .byte %00001000, %10001100, %10001100, %00001000
     .byte %00001111, %11101111, %11101111, %00001111
