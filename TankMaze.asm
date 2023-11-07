@@ -335,6 +335,7 @@ LONGEXPLOSIONSOUND      =   4
 ENEMYBULLETSOUND        =   5
 WALLSOUND               =   6
 PLAYERTANKENGINESOUND   =   7
+SCORESOUND              =   8
 
 PLAYERTANKVOLUME	=	8
 
@@ -365,7 +366,9 @@ LONGEXPLOSIONLENGTH	=	200
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
 WALLSOUNDFREQ       =   10;8
 WALLSOUNDLENGTH     =   8
-
+SCORESOUNDTONE      =   SQUARESOUND
+SCORESOUNDFREQ      =   20
+SCORESOUNDLENGTH    =   4
 
 ;--music constants
 
@@ -903,10 +906,55 @@ GameNotOn
 	beq .LevelNotComplete
 	;--level complete
 	lda FrameCounter
-	and #$F
+	and #$7
 	bne .LevelNotComplete
 	lda GameStatus
 	and #LEVELCOMPLETETIMER
+	cmp #LEVELCOMPLETETIMER
+	bne ShortWaitUntilNextLevel
+	;--but first!  give points for all bricks remaining.
+	;--use RandomNumberSaved as counter.
+	ldx RandomNumberSaved
+	lda FrameCounter
+	and #$30
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+FindPFWithBricks
+	lda PF1Left,X
+	bne FoundPFWithBricks
+	inx
+	cpx #(MAZEROWS-1)*4+2
+	beq FoundAllBricks
+	bne FindPFWithBricks    ;branch always
+FoundPFWithBricks
+	and PFMaskLookup,Y
+	bne FoundBrick
+	dey
+	bpl FindPFWithBricks
+	ldy #3
+	bne FindPFWithBricks    ;branch always
+FoundBrick
+	;--clear the brick we just got points for
+	lda PFMaskLookup,Y
+	eor #$FF
+	and PF1Left,X
+	sta PF1Left,X
+	;--play bling sound
+    ldy #WALLSOUND
+	jsr StartSoundSubroutine
+	;--and get points
+	lda #0
+	sta Temp
+	lda #$10
+	jsr IncreaseScoreSubroutineBank0
+	jmp .LevelNotComplete
+FoundAllBricks
+	lda GameStatus
+	and #LEVELCOMPLETETIMER
+ShortWaitUntilNextLevel
 	tax
 	dex
 	bmi LevelCompleteNow
@@ -936,6 +984,8 @@ LevelCompleteNow
 	bne NotGeneratingMaze
 	brk
 	.word GenerateMazeSubroutine
+	ldy #SHORTBRICKSOUND
+	jsr StartSoundSubroutine
 NotGeneratingMaze
 	lda GameStatus
 	and #TITLESCREEN
@@ -1834,7 +1884,7 @@ MusicRoutine
     ;   maze-generation routine, to save the random seed *across frames*
     ;--save RandomNumber every measure
     lda GameStatus
-    and #GENERATINGMAZE
+    and #GENERATINGMAZE|LEVELCOMPLETE
     beq MusicIsPlaying
 MusicIsNotPlaying
     lda #0
@@ -2977,7 +3027,22 @@ DoneWithMovementChecks
 	rts
 
 
-	
+;****************************************************************************
+
+	;come in with amount to increase in A (units and tens) and Temp (100s and 1000s)
+IncreaseScoreSubroutineBank0
+	clc
+	sed
+	adc Score+2
+	sta Score+2
+	lda Score+1
+	adc Temp
+	sta Score+1
+	lda Score
+	adc #0
+	sta Score
+	cld
+	rts
 
 
 ;----------------------------------------------------------------------------
@@ -3067,13 +3132,19 @@ PFRegisterLookup
 	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
 
 Tone
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
+	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE,
+	.byte SCORESOUNDTONE
 
 Frequency
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
+	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
+	.byte SCORESOUNDFREQ
 
 SoundLength
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
+	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
+	.byte SCORESOUNDLENGTH
 
 	
 ;****************************************************************************
@@ -5352,6 +5423,8 @@ TopRowEnemyTankRespawn
 	lda GameStatus
 	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
 	sta GameStatus
+	lda #0
+	sta RandomNumberSaved   ;used to give points for bricks remaining
 	;--stop tank from moving
 	lda TankStatus,X
 	and #~TANKSPEED
