@@ -90,16 +90,16 @@
 	DONE BUT NEEDS TO BE FINE-TUNED Biggest thing at this point is figure out ramping difficulty
 		IDEAS:
 			DONE faster tanks at higher levels
-			IN PROGRESS more frequent shooting by enemy tanks
+			IN PROGRESS more frequent shooting by enemy tanks.  Possibly too frequent at higher levels.  Look at this.
 			DONE more aggressive tank movement routines 
 			MOSTLY DONE smarter shooting by enemy tanks 
-    IN PROGRESS: Have player tank use different graphic.  This is done but not sure how I feel about the actual graphic.
+    DONE: Have player tank use different graphic.  This is done but not sure how I feel about the actual graphic.
     Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
 	DONE: Figure out better AI for tank movement/firing routines 
         Stole routines from Pac-Man.  Seems to work pretty well, want to make the player respawn delay longer, but counter bits are already maxed so may need to fiddle with code.
         Reason I have this here is because when player is dead the enemy tanks head for the base.  Maybe it's ok, at higher levels maybe they move fast enough that it will make a difference?
-	Add explosion graphics  or ????
-	DONE? Title/splash screen?  
+	IN PROGRESS Add explosion graphics  or ????
+	DONE Title/splash screen?  
 	Power-Ups - ???
 		keep this simple: 
 			speed
@@ -110,18 +110,18 @@
 			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
 			    would need a byte of RAM (or nibble?) for this
     fix scanline count
-    	DONE: tank:tank collisions	
-    	DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
-    	DONE: don't give points for enemy tank actions
-    	DONE replace placeholder font
-    	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
-    	PAL60 version
-    	2-player?  (unlikely but...)
-    	Other...?
-    	sound tweaking/improvements
+	DONE: tank:tank collisions	
+	DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
+	DONE: don't give points for enemy tank actions
+	DONE replace placeholder font
+	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+	PAL60 version
+	2-player?  (unlikely but...)
+	Other...?
+	sound tweaking/improvements
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
     MOSTLY DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
-	Game Over logic of some kind
+	DONE: Game Over logic of some kind
 	Logic for when levels wrap
 	
 	BUG KILLING!
@@ -130,14 +130,15 @@
 	    FIXED: Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
 	        seems to happen at higher levels, not sure of cause.  Think cause is when bullets are travelling down and hit BulletY==0 and 
 	        BulletX is not set to zero also.
-        Occasionally (cause?) a tank respawns when it shouldn't.
-        Tanks kill each other when entering the screen.  Need to see if this can be fixed.
+        Occasionally (cause?) a tank respawns when it shouldn't.  Haven't seen this in a while, need to confirm this is an issue still.
+        Tanks kill each other often when entering the screen.  Need to see if this can be fixed.  More urgent now that dead tank graphic stays on screen and will kill the entering tank.
 		scanline count is wonky, need to tighten up various subroutines that take too long
 	    FIXED: remove bullets from screen during level transitions
         FIXED: Tanks still firing when offscreen.  
             UPDATE: I think this is when tank 3 shoots downward a "ghost" shot occurs from offscreen. 
             UPDATE UPDATE: that was incorrect, it was due to out-of-bounds conditions not being checked properly when bullets move downward
-        FIXED AGAIN I THINK: FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+        !!NOT FIXED!! FIXED AGAIN I THINK: FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+        
         FIXED I THINK: Also not exactly a bug (??) but tanks still run into each other a lot.  This is fixed EXCEPT for when tanks enter the screen.
         FIXED: Also not exactly a bug (??) but tank shooting needs to be improved.
         FIXED: Tanks get "stuck" for too long - appears to happen when tank movement is not allowed (correctly) due to presence of other tanks,
@@ -161,7 +162,7 @@
       FIXED: update spawn points to force player to move from bottom of screen ...
       FIXED: found bug that you can shoot tanks before they are on the screen (!)
       need to make AI more aggressively chasing "base"
-      IN PROGRESS: probably need to finally implement the "game over" logic for when a tank gets the base	
+      DONE: probably need to finally implement the "game over" logic for when a tank gets the base	
 
 */
 
@@ -198,7 +199,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 
 
 VBLANK_TIMER = 50       ;--this jitters a bit
-OVERSCAN_TIMER = 28     ;--this seems to be fine except during maze generation, on the last pass it takes too long
+OVERSCAN_TIMER = 33     ;--this seems to be fine except during maze generation, on the last pass it takes too long
                         ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
 
 
@@ -1238,6 +1239,10 @@ FindStuckTank
 	bne ShootFromTank   ;zero is player, so if non-zero we are fine, otherwise shoot from tank 1
 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
+    ;--if tank is not in play, don't shoot from it
+    lda TankStatus,Y
+    and #TANKINPLAY
+    beq TankNotInPlayCannotShoot
     ;--if tank offscreen, don't shoot from it
     lda TankX,Y
     cmp #16
@@ -1294,6 +1299,7 @@ FireEnemyBulletNow
 	;--start enemy bullet sound
 	ldy #ENEMYBULLETSOUND
 	jsr StartSoundSubroutine
+TankNotInPlayCannotShoot
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
 EnemyNotAllowedToShootVertically
@@ -3587,9 +3593,9 @@ TankGfxIndexSet
 	and #TANKINPLAY
 	bne TankInPlayUsualGraphics
 	;--else use 
-	lda #<(TankScoreImage+TANKHEIGHT)
+	lda #<(TankKilledImage+TANKHEIGHT)
 	pha
-	lda #>(TankScoreImage+TANKHEIGHT)
+	lda #>(TankKilledImage+TANKHEIGHT)
     bne SetTankGfxPtr   ;branch always
 	
 TankInPlayUsualGraphics
@@ -5145,7 +5151,7 @@ TankCollisionLoop
     beq TankNotOnScreenCannotDie
     ;--tank is onscreen
     tya ;--set flags based on which tank
-    bne EnemyTankDied
+    bne EnemyTankDied   ;only get points if player runs into tank, not if tanks run into each other.
  	;--add KILLTANKSCORE to score 
 	lda #>KILLTANKSCORE
 	sta Temp
@@ -5486,6 +5492,8 @@ EnemyTanksNotMovedOffScreen
 	
 	txa
 	beq PlayerTankHit
+	;--problem here is when tanks run into each other or shoot each other you don't get points but it is showing the points gfx
+	;   because 
 	
     lda #TANKUP|TANKSCOREWAIT   ;has to be tank up because it isn't used when tanks respawn
                                 ;and is therefore an indication that tank hasn't respawned yet
@@ -5509,7 +5517,6 @@ EnemyTanksNotMovedOffScreen
 	sta AUDV1
 	jsr MoveEnemyTanksOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
-	;--TODO stop sounds and/or play "level end" sound
 		
 	
 	;--increase score by some amount ...
@@ -6264,22 +6271,45 @@ TankRightAnimated4b
 		.byte 0
 
 
-TankScoreImage = * - 1
-        .byte #%00000000;--2
-        .byte #%11101010;--4
-        .byte #%01010101;--6
-        .byte #%11001010;--8
-        .byte #%00000000;--10
-        .byte #%00000000;--12
-TankScoreImageb
+		
+		
+TankKilledImage = * - 1
+        .byte #%01010100;--2
+        .byte #%00111011;--4
+        .byte #%01000100;--6
+        .byte #%01100101;--8
+        .byte #%01011100;--10
+        .byte #%10010001;--12
+        
+TankKilledImageb     
+        .byte 0   
+        .byte #%10010010;--1
+        .byte #%01001000;--3
+        .byte #%10100100;--5
+        .byte #%00000010;--7
+        .byte #%00100100;--9
+        .byte #%01001010;--11
         .byte 0
-        .byte #%00000000;--1
-        .byte #%00000000;--3
-        .byte #%01010101;--5
-        .byte #%01010101;--7
-        .byte #%01000000;--9
-        .byte #%00000000;--11
-        .byte 0
+        
+        
+        
+        
+; TankScoreImage = * - 1
+;         .byte #%00000000;--2
+;         .byte #%11101010;--4
+;         .byte #%01010101;--6
+;         .byte #%11001010;--8
+;         .byte #%00000000;--10
+;         .byte #%00000000;--12
+; TankScoreImageb
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%00000000;--3
+;         .byte #%01010101;--5
+;         .byte #%01010101;--7
+;         .byte #%01000000;--9
+;         .byte #%00000000;--11
+;         .byte 0
         
         
         
