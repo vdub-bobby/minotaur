@@ -670,7 +670,6 @@ Start
     nop
     nop
     nop
-; 	jmp *+3
     CLEAN_START
 
 ;--Some Initial Setup
@@ -895,20 +894,32 @@ GameNotOver
 GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	and #LEVELCOMPLETE
-	beq .LevelNotComplete
+	bne .LevelComplete
+	jmp .LevelNotComplete
+.LevelComplete
 	;--level complete
 	;--wait until level-ending explosion sound is mostly died down
 	lda Channel1Decay
 	cmp #SCORESOUNDLENGTH
-	bcs .LevelNotComplete
-	;--move player tank offscreen
-	lda #0
-	sta TankX
-	sta TankY
+	bcc .LevelExplosionComplete
+	jmp .LevelNotComplete
+.LevelExplosionComplete
+	;--move all tanks (and explosiong gfx) offscreen
+	;--move tanks offscreen
+	ldx #3
+	ldy #0
+	lda #ENEMYSTARTINGYTOP
+MoveTanksOffScreenLoop
+	sta TankX,X
+	sty TankY,X
+	dex
+	bpl MoveTanksOffScreenLoop
     ;--and then remove one brick every 4 frames and give points for it, while playing a "bling" sound
 	lda FrameCounter
 	and #$3
-	bne .LevelNotComplete
+	beq .RemoveBrick 
+	jmp .LevelNotComplete
+.RemoveBrick
 	lda GameStatus
 	and #LEVELCOMPLETETIMER
 	cmp #LEVELCOMPLETETIMER
@@ -953,7 +964,35 @@ FoundBrick
 	jsr IncreaseScoreSubroutineBank0
 	jmp .LevelNotComplete
 FoundAllBricks
-	lda GameStatus
+    ;--remove base and give score for level
+	;--play bling sound
+    ldy #SCORESOUND
+	jsr StartSoundSubroutine
+	;--add levelx1000 to score
+	lda MazeNumber
+	asl
+	asl
+	asl
+	asl
+	sta Temp
+	lda #0
+	jsr IncreaseScoreSubroutineBank0 ;can only use this to add up to 9999 to the score.  
+	;--so add top digit of MazeNumber x 1000 to Score separately
+	lda MazeNumber
+	lsr
+	lsr
+	lsr
+	lsr
+	sed
+	clc
+	adc Score
+	sta Score
+	cld
+
+	;--remove base
+    lda GameStatus
+    and #~DRAWBASE
+    sta GameStatus
 	and #LEVELCOMPLETETIMER
 ShortWaitUntilNextLevel
 	tax
@@ -5549,46 +5588,24 @@ EnemyTanksNotMovedOffScreen
 
 	dec TanksRemaining
 	bne LevelNotComplete
+	;--killed last tank, level is complete:
 	;--set levelcomplete flag
 	lda GameStatus
 	ora #LEVELCOMPLETE|LEVELCOMPLETETIMER
 	sta GameStatus
+	;--set RandomNumberSaved to zero (this is used for the points-for-bricks routine)
 	lda #0
-	sta RandomNumberSaved   ;used to give points for bricks remaining
-	;--stop tank from moving
-	lda TankStatus,X
+	sta RandomNumberSaved
+	;--stop player tank from moving
+	lda TankStatus
 	and #~TANKSPEED
-	sta TankStatus,X
-	;--remove remaining enemy tanks from screen
-	lda #0		
-	sta AUDV1
-	jsr MoveEnemyTanksOffScreen
+	sta TankStatus
+	;--kill 
+; 	lda #0		
+; 	sta AUDV1
 	jsr MoveBulletsOffScreen	;--returns with X=255
 		
 	
-	;--increase score by some amount ...
-	;---what I'd like to do is give like 10 points or something for every brick remaining
-	;	but that could be complicated
-	;	for now, just add level * 1000
-	lda MazeNumber
-	asl
-	asl
-	asl
-	asl
-	sta Temp
-	lda #0
-	jsr IncreaseScoreSubroutine ;can only use this to add up to 9999 to the score.  
-	;--so add top digit of MazeNumber x 1000 to Score separately
-	lda MazeNumber
-	lsr
-	lsr
-	lsr
-	lsr
-	sed
-	clc
-	adc Score
-	sta Score
-	cld
 PlayerTankHit	
 LevelNotComplete
     ;--what I want to do here is IF the # of tanks remaining <= 3, 
