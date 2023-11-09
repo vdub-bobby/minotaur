@@ -137,7 +137,8 @@
         FIXED: Tanks still firing when offscreen.  
             UPDATE: I think this is when tank 3 shoots downward a "ghost" shot occurs from offscreen. 
             UPDATE UPDATE: that was incorrect, it was due to out-of-bounds conditions not being checked properly when bullets move downward
-        !!NOT FIXED!! FIXED AGAIN I THINK: FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+        FIXED FOR REALS NOW I THINK.  !!NOT FIXED!! FIXED AGAIN I THINK: FIXED I THINK: Tanks can reverse before fully entering the maze and go back out (this happens at AISWITCH reversals)
+            Final fix 11.8.2023 - had branch with opposite condition, oops - so tanks ONLY reversed if they were offscreen.
         
         FIXED I THINK: Also not exactly a bug (??) but tanks still run into each other a lot.  This is fixed EXCEPT for when tanks enter the screen.
         FIXED: Also not exactly a bug (??) but tank shooting needs to be improved.
@@ -198,9 +199,8 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 50       ;--this jitters a bit
-OVERSCAN_TIMER = 33     ;--this seems to be fine except during maze generation, on the last pass it takes too long
-                        ;-- (maybe make all the cleanup stuff the very last pass instead of as part of the last pass)
+VBLANK_TIMER = 52       ;--this jitters a bit at times.
+OVERSCAN_TIMER = 31     ;--this seems to be fine 
 
 
 TANKHEIGHT	=	7
@@ -219,7 +219,7 @@ DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
 TANKSPEED       =   %00001110       ;ASL ASL ASL ASL ORA #$1F and then added to TankFractional
 TANKRESPAWNWAIT =   %00001110       ;shares bits with speed
-TANKINPLAY      =   %00000001       ;this is set when tank has respawned and is coming on screen or fully on screen.  cleared when tank is still waiting to be respawned.
+TANKINPLAY      =   %00000001       ;this is set when tank has respawned and is coming on screen or fully on screen.  cleared when tank is dead and/or still waiting to be respawned.
 
 TANKRIGHT		=	J0RIGHT
 TANKLEFT		=	J0LEFT
@@ -231,7 +231,7 @@ ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
 ENEMYTANK2DELAY	=	10
 ENEMYTANK3DELAY	=	14
 
-TANKSCOREWAIT   =   6
+TANKSCOREWAIT   =   2
 
 PLAYERRESPAWNDELAY = 14
 PLAYERINITIALDELAY  =   6
@@ -325,8 +325,8 @@ MAZEGENERATIONPASSES = MAZEROWS/2-1
 ;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
 PLAYERTANKSPEED	=	TANKSPEED2|1     
 ENEMYTANKBASESPEED0	=   TANKSPEED8
-ENEMYTANKBASESPEED1 = 	TANKSPEED6
-ENEMYTANKBASESPEED2	=	TANKSPEED4
+ENEMYTANKBASESPEED1 = 	TANKSPEED8
+ENEMYTANKBASESPEED2	=	TANKSPEED8
 
 ;--SOUND CONSTANTS
 ;   indexes into lookup table for sound effects
@@ -897,8 +897,17 @@ GameNotOn
 	and #LEVELCOMPLETE
 	beq .LevelNotComplete
 	;--level complete
+	;--wait until level-ending explosion sound is mostly died down
+	lda Channel1Decay
+	cmp #SCORESOUNDLENGTH
+	bcs .LevelNotComplete
+	;--move player tank offscreen
+	lda #0
+	sta TankX
+	sta TankY
+    ;--and then remove one brick every 4 frames and give points for it, while playing a "bling" sound
 	lda FrameCounter
-	and #$7
+	and #$3
 	bne .LevelNotComplete
 	lda GameStatus
 	and #LEVELCOMPLETETIMER
@@ -1236,8 +1245,9 @@ FindStuckTank
 	lda RandomNumber
 	and #3
 	tay
-	bne ShootFromTank   ;zero is player, so if non-zero we are fine, otherwise shoot from tank 1
-	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
+    beq DoNotShoot  ;change so evenly random between tanks, fire less often (by 25%)
+; 	bne ShootFromTank   ;zero is player, so if non-zero we are fine, otherwise shoot from tank 1
+; 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
     ;--if tank is not in play, don't shoot from it
     lda TankStatus,Y
@@ -1304,6 +1314,7 @@ TankOffscreenCannotShoot
 NoAvailableEnemyBalls
 EnemyNotAllowedToShootVertically
 EnemyNotAllowedToShootHorizontally
+DoNotShoot
 	;--then we're done
 	rts	
 	
@@ -1501,7 +1512,7 @@ EnemyTankPossibleReversal
 TankReverseDirection
     ;--only reverse if tank is fully on screen
     jsr IsTankOnScreenBank0
-    bne NoTankReversal
+    beq NoTankReversal
 	lda TankStatus,X
 	lsr
 	lsr
@@ -2645,6 +2656,29 @@ IsTankOnScreenBank0
     rts
 ;****************************************************************************
 
+
+    SUBROUTINE
+    
+IsTankPartiallyOnScreenBank0
+    ;--X holds tank number to check
+    ;--return in accumulator:  0 if offscreen, 1 if onscreen
+    lda TankX,X
+    cmp #TANKONSCREENLEFT-7
+    bcc .TankOffScreen
+    cmp #TANKONSCREENRIGHT+1+7
+    bcs .TankOffScreen
+    lda TankY,X
+    cmp #TANKONSCREENTOP+2+TANKHEIGHT-1
+    bcc .TankOnScreen    
+.TankOffScreen
+    lda #0
+    rts
+.TankOnScreen
+    lda #1
+    rts
+;****************************************************************************
+
+
 IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
 	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
@@ -2774,8 +2808,12 @@ CheckForEnemyTankSubroutine
     cpy Temp+1  ;--don't bother comparing tank to itself
     beq .NoCompareTankToItselfLeft
     ;--see if enemy tank is offscreen
-    lda TankStatus,Y
-    and #TANKINPLAY
+   
+;     lda TankStatus,Y
+;     and #TANKINPLAY
+
+;     jsr IsTankOnScreenBank0
+    jsr IsTankPartiallyOnScreenBank0
     beq .TankOffScreenIgnoreLeft
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
@@ -3614,7 +3652,7 @@ TankNotFacingUp
 	lda TankDownFrame,X
 	pha
 	lda TankDownFrame+1,X
-	jmp SetTankGfxPtr
+	bne SetTankGfxPtr   ;branch always
 TankNotFacingDown
 	lda TankStatus,Y
 	and #TANKRIGHT
@@ -3622,7 +3660,7 @@ TankNotFacingDown
 	lda TankRightFrame,X
 	pha
 	lda TankRightFrame+1,X
-	jmp SetTankGfxPtr
+	bne SetTankGfxPtr   ;branch always
 TankNotFacingRight
 	lda TankRightFrame,X
 	pha
@@ -3639,12 +3677,20 @@ SetTankGfxPtr
 	adc #TANKHEIGHT
 	sta Player0Ptr+2,X
 	jmp EndRotationLoop
-MissileNotPlayer	
+MissileNotPlayer
+    	
 	;--adjust missile width and position
 	txa
 	and #1
 	tax		;get correct index
-	lda MissileX,X
+    ;--if tank not in play, don't display missile
+    lda TankStatus,Y
+    and #TANKINPLAY
+    bne MissileOnScreen
+    lda #TANKAREAHEIGHT+20
+    sta MissileY,X
+MissileOnScreen
+  	lda MissileX,X
 	sec
 	sbc #2
 	sta MissileX,X
@@ -5466,6 +5512,7 @@ TopRowEnemyTankRespawn
 	lda StartingTankXPosition,Y
 	sta TankX,X
 	lda StartingTankStatus,X  
+	sta TankStatus,X
 
     rts
 
