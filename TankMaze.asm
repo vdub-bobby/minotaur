@@ -81,7 +81,30 @@
 
 
 	To do:
-	Music?  Have a free channel but basically zero RAM left.  Could probably squeeze one byte of RAM out.
+	Difficulty ramping.  Two things:
+	    1. Increase initial difficulty
+	    2. Tweak difficulty ramping.  Currently -
+	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
+                could we increase the maximum tank speed?  We can't move tanks more than once every 4 frames, but could we move >1 pixel at a time?
+                    could be possible except that we have to make sure they don't overrun intersections.  Which is an issue since bricks are 7 lines tall.
+                        what if we made them 8 lines tall
+	        tanks reach maximum fire rate at level 21
+	IN PROGRESS Add explosion graphics  or ????.  STILL TO DO: Player tank also should explode.  And make it so explosion graphic doesn't kill other tanks.
+    Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
+	Power-Ups - ???
+		keep this simple: 
+			speed
+			NIX - extra life
+			"bomb" that destroys all tanks on screen (and all walls?)
+			something that slows all enemies down?
+			other?
+			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
+			    would need a byte of RAM (or nibble?) for this
+    fix scanline count
+	Logic for when levels wrap
+    MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
+    DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
+	DONE: Music?  Have a free channel but basically zero RAM left.  Could probably squeeze one byte of RAM out.
 	DONE: Probably need to go to 8K.  Have about 1/2 a page left of ROM, and
 		could free up some space by going through things with a fine-toothed comb, but ...
 		it would be a big stretch even to get the bare minimum for a game in there.
@@ -94,22 +117,10 @@
 			DONE more aggressive tank movement routines 
 			MOSTLY DONE smarter shooting by enemy tanks 
     DONE: Have player tank use different graphic.  This is done but not sure how I feel about the actual graphic.
-    Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
 	DONE: Figure out better AI for tank movement/firing routines 
         Stole routines from Pac-Man.  Seems to work pretty well, want to make the player respawn delay longer, but counter bits are already maxed so may need to fiddle with code.
         Reason I have this here is because when player is dead the enemy tanks head for the base.  Maybe it's ok, at higher levels maybe they move fast enough that it will make a difference?
-	IN PROGRESS Add explosion graphics  or ????
 	DONE Title/splash screen?  
-	Power-Ups - ???
-		keep this simple: 
-			speed
-			NIX - extra life
-			"bomb" that destroys all tanks on screen (and all walls?)
-			something that slows all enemies down?
-			other?
-			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
-			    would need a byte of RAM (or nibble?) for this
-    fix scanline count
 	DONE: tank:tank collisions	
 	DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
 	DONE: don't give points for enemy tank actions
@@ -119,10 +130,7 @@
 	2-player?  (unlikely but...)
 	Other...?
 	sound tweaking/improvements
-    MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
-    MOSTLY DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
 	DONE: Game Over logic of some kind
-	Logic for when levels wrap
 	
 	BUG KILLING!
 	    FIXED: Game Over routine gets stuck and never finishes.... ???  Was due to pressing trigger (or RESET/SELECT) during game over routine,
@@ -231,7 +239,8 @@ ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
 ENEMYTANK2DELAY	=	10
 ENEMYTANK3DELAY	=	14
 
-TANKSCOREWAIT   =   2
+TANKDEADWAIT   =   2
+TANKDEADWAITPLAYER  =   8
 
 PLAYERRESPAWNDELAY = 14
 PLAYERINITIALDELAY  =   6
@@ -458,8 +467,13 @@ BASECOLOR		    =		GOLD
 SCORECOLOR          =       GRAY|$C
 WALLCOLOR			=		RED|$6
 TANKSREMAININGCOLOR =   TURQUOISE|$A
-TANKCOLOR1          =    GOLD|$A
+
+;--old colors: GOLD|A and BLUE2|C
+
+TANKCOLOR1          =    GOLD|$6
 TANKCOLOR2          =    BLUE2|$C
+TANKCOLOR3          =    RED|$4
+TANKCOLOR4          =    BROWN|$4
 
 ;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	100
@@ -1364,10 +1378,26 @@ SetInitialEnemyTankSpeedRoutine
     ;--come in here with X pointing to tank # (1-3)
     ;--and A holding new direction (in upper four bits)
 	sta TankStatus,X	;--first write new direction
-	;--tank starting speed and add level, add speed boost based on how many tanks are left, then subtract tank number (0-2).  Whole thing is capped at 15
-	lda NewTankSpeed,X
+	;--tank starting speed and add level, add speed boost based on how many tanks are left, then subtract tank number (0-2).  Whole thing is capped at 14
+	;--first, convert level (MazeNumber) from BCD to binary so we can add it below
+	lda MazeNumber
+	and #$F0
+	lsr
+	lsr
+	lsr
+	lsr
+	sta Temp
+	asl
+	asl
+	adc Temp
+	sta Temp
+	lda MazeNumber
+	and #$0F
+	adc Temp    ;now A holds binary conversion of MazeNumber
+	lsr
+	lsr         ;divide by four for slower ramping of enemy tank speed (maximum speed for all four tanks not reached until level 32)
 	clc
-	adc MazeNumber
+	adc NewTankSpeed,X
 	;--increase speed depending on tanks remaining
     ldy TanksRemaining
     adc TanksRemainingSpeedBoost,Y
@@ -1506,6 +1536,10 @@ DoNotBringTankOnscreenYet
 	rts
 
 PlayerTankMovementRoutine
+    ;--first, if TANKINPLAY is cleared, we wait
+    lda TankStatus
+    and #TANKINPLAY
+    beq WaitForPlayerExplosion
 	;--if tank off left edge of screen, we don't read joystick, we just wait (??) and then move it on to the maze from the left
 	lda TankX
 	cmp #16
@@ -1513,18 +1547,33 @@ PlayerTankMovementRoutine
 	;--wait only if TankX == 8
 	cmp #8
 	bne DoneWaitingBringPlayerTankOnScreen
+WaitForPlayerExplosion
 	lda TankStatus
 	and #TANKRESPAWNWAIT
-	beq AllFinishedWaitingStartPlayerRespawn
+	beq FinishedWaitingPlayerDelay
 	;--else still waiting
 	;--update counter every 8 frames
 	lda FrameCounter
 	and #15         ;--make wait longer for tank to respawn
 	bne WaitToUpdateRespawnCounter
-	dec TankStatus
+	lda TankStatus
+	sec
+	sbc #2
+	sta TankStatus
 WaitToUpdateRespawnCounter
 	rts
-AllFinishedWaitingStartPlayerRespawn
+FinishedWaitingPlayerDelay
+    ;--now figure out what we are waiting for.  if explosion, call respawn routine.
+    ;   if not, we start moving tank.
+    lda TankStatus
+    and #TANKUP ;if tank is facing up, then is explosion and still onscreen
+    beq DoneWaitingBringPlayerTankOnScreen
+	txa ;save X
+	pha
+	brk 
+	.word TankRespawnRoutineWrapper
+	pla
+	rts
 	;--set player to move immediately 
 	lda #255
 	sta TankFractional
@@ -2707,7 +2756,7 @@ IsTankPartiallyOnScreenBank0
     cmp #TANKONSCREENRIGHT+1+7
     bcs .TankOffScreen
     lda TankY,X
-    cmp #TANKONSCREENTOP+2+TANKHEIGHT-1
+    cmp #TANKONSCREENTOP+2+TANKHEIGHT
     bcc .TankOnScreen    
 .TankOffScreen
     lda #0
@@ -3943,14 +3992,23 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sta NUSIZ1
 	
 	;--tank colors
-	lda #TANKCOLOR1 ;GOLD+10
-	sta COLUP0
-	lda #TANKCOLOR2 ;BLUE2+12
-	sta COLUP1
-	
-	;--reflect P0 or P1 as necessary.   prep for flip loop below
+SetTankColors	
 	lda FrameCounter
 	and #1
+    tax
+    lda P0M0Color,X
+    sta COLUP0
+    lda P1M1Color,X
+    sta COLUP1	
+	
+; 	lda #TANKCOLOR1 ;GOLD+10
+; 	sta COLUP0
+; 	lda #TANKCOLOR2 ;BLUE2+12
+; 	sta COLUP1
+
+    txa
+	
+	;--reflect P0 or P1 as necessary.   prep for flip loop below
 	asl
 	tax
 	lda RotationTables,X        ;RotationTablesBank1 if moved back to bank 1
@@ -4049,7 +4107,6 @@ EndREFPLoop             ;       14/18/23
 	;save stack pointer
 	tsx
 	stx Temp           ;+5      16
-		;%%%
 
 	ldx #3
 PositioningLoop	;--just players
@@ -4995,7 +5052,6 @@ SetNewLevelTankDelay
     ;--cheap hack to make player show up faster
     and #~TANKRESPAWNWAIT  ;clear the wait
     ora #PLAYERINITIALDELAY
-    ;lda #TANKRIGHT;(PLAYERRESPAWNDELAY-4)
     sta TankStatus
 	
 NotCompletelyDoneWithMaze
@@ -5104,7 +5160,10 @@ TankCollisionRotationTables
     .word TankCollisionBitsEven, TankCollisionBitsOdd
 
 TankCollisionBitsOdd
-    .byte %01101000, %11000100, %10011000, %00110100
+    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -player tank
+    .byte %11000100 ;M0 to P0, M0 to P1, and M0 to M1   -enemy tank 1
+    .byte %10011000 ;M0 to P0, M1 to P0, and P0 to P1   -enemy tank 2
+    .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3
 TankCollisionBitsEven
     .byte %11000100, %10011000, %00110100, %01101000
 	
@@ -5224,11 +5283,40 @@ TankCollisionLoop
 ; YesTankCollisions
     and (MiscPtr),Y
     beq NoTankCollision
+; YesTankCollision   
+    ;--check to see if what we are colliding into is already dead:
+    sta Temp
+    sty Temp+2
+    jmp CheckForExplosionCollisionLoopEntry
+CheckForExplosionCollisionLoop
+    
+    lda Temp
+    and (MiscPtr),Y
+    beq NoCollisionWithThisTank
+    ;--now check if tank is dead
+    lda TankStatus,Y
+    and #TANKINPLAY
+    bne TankHitLiveTank
+CollisionWithExplosion
+NoCollisionWithThisTank    
+CheckForExplosionCollisionLoopEntry
+    dey
+    bpl CheckForExplosionCollisionCheckEnd
+    ldy #3
+CheckForExplosionCollisionCheckEnd
+    cpy Temp+2
+    beq DidNotHitAnythingLive
+    bne CheckForExplosionCollisionLoop ;branch always
+    
+TankHitLiveTank
+    ;--restore Y
+    ldy Temp+2
+    ;--now what?
     ;--remove tank only if fully onscreen
     tya
     tax ;
     ;--check if tank in play (can be on screen but not in play, if dead)
-    lda TankStatus,X        ;%%%
+    lda TankStatus,X        
     and #TANKINPLAY
     beq TankAlreadyDeadCannotDie
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
@@ -5247,7 +5335,6 @@ TankCollisionLoop
 ; 	sta AUDV0
 ;     beq PlayerTankDead
 EnemyTankDied
-    ;--remove enemy tank    
     tya
     tax
     jsr PlayerHitTank   ;this routine uses X to index into which tank got hit.
@@ -5255,9 +5342,11 @@ TankAlreadyDeadCannotDie
 TankNotOnScreenCannotDie    
 NoTankCollision
 PlayerTankDead
+DidNotHitAnythingLive
     dey
     bpl TankCollisionLoop  
 NoTankCollisionsAtAll
+
 
 
     ;--alternate collision routine for bullet-to-wall using collision registers
@@ -5329,7 +5418,23 @@ NoPointsForEnemyOwnGoals
 TankAlreadyDeadCannotBeShot
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
-	
+
+
+    ;if a tank was killed immediately above, we cleared all bits except for TANKINPLAY
+    ;   so that we could correctly tell if tanks if collided with it
+    ;   and so now look for those tanks and set the rest of the bits correctly
+    ldy #3
+SetTankStatusForDeadTanks
+    lda TankStatus,Y
+    cmp #TANKINPLAY
+    bne TankNotNewlyDead
+    lda TankDeadStatus,Y
+    sta TankStatus,Y
+TankNotNewlyDead
+    dey
+    bpl SetTankStatusForDeadTanks       
+
+
 	;--OLD ROUTINE that uses software collision detection (checks every bullet every frame)
 ; 	;   X is index into tank (outer loop)
 ; 	;   Y is index into bullet (inner loop)
@@ -5557,6 +5662,9 @@ TopRowEnemyTankRespawn
 
 ;****************************************************************************
 
+TankDeadStatus
+    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
+
 BulletHitTank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
@@ -5568,24 +5676,23 @@ PlayerHitTank
 	tya
 	pha
 
-	txa
-	bne EnemyTanksNotMovedOffScreen
-	jsr TankRespawnRoutine
+; 	txa
+; 	bne EnemyTanksNotMovedOffScreen
+; 	jsr TankRespawnRoutine
 EnemyTanksNotMovedOffScreen
 
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
 	
-	txa
-	beq PlayerTankHit
-	;--problem here is when tanks run into each other or shoot each other you don't get points but it is showing the points gfx
-	;   because 
-	
-    lda #TANKUP|TANKSCOREWAIT   ;has to be tank up because it isn't used when tanks respawn
-                                ;and is therefore an indication that tank hasn't respawned yet
-	sta TankStatus,X
-	;--decrease tanks remaining ONLY if enemy tank hit
+	;--clear "in play" flag, set wait counter, and set direction
+;     lda TankDeadStatus,X
+    lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
+    sta TankStatus,X
 
+    txa
+	beq PlayerTankHit
+EnemyTankHit
+    ;--decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
 	bne LevelNotComplete
 	;--killed last tank, level is complete:
@@ -5606,7 +5713,6 @@ EnemyTanksNotMovedOffScreen
 	jsr MoveBulletsOffScreen	;--returns with X=255
 		
 	
-PlayerTankHit	
 LevelNotComplete
     ;--what I want to do here is IF the # of tanks remaining <= 3, 
     ;   increase all enemy tank speeds by .... 4?  constant value.
@@ -5617,30 +5723,30 @@ LevelNotComplete
     ;--use Y variable... or save X and restore?
     txa
     pha     ;save X
-    ldx #3
-IncreaseEnemyTankSpeedLoop
-    lda TankStatus,X
-    lsr     ;get TANKINPLAY flag into carry
-    bcc TankNotOnScreenDoNotIncreaseSpeed
-    rol     ;get TANKINPLAY flag back into lower bit
-    and #TANKSPEED
-    clc
-    adc #LEVELENDTANKSPEEDBOOST
-    cmp #TANKSPEED14+1
-    bcc NewEnemyTankSpeedNotTooHigh
-    lda #TANKSPEED14    
-NewEnemyTankSpeedNotTooHigh
-    sta Temp
-    lda TankStatus,X
-    and #TANKDIRECTION|TANKINPLAY  ;clears tank speed AND tank-in-play bits
-    ora Temp
-    sta TankStatus,X
-TankNotOnScreenDoNotIncreaseSpeed
-    dex
-    bne IncreaseEnemyTankSpeedLoop
-    
+;     ldx #3
+; IncreaseEnemyTankSpeedLoop
+;     lda TankStatus,X
+;     lsr     ;get TANKINPLAY flag into carry
+;     bcc TankNotOnScreenDoNotIncreaseSpeed
+;     rol     ;get TANKINPLAY flag back into lower bit
+;     and #TANKSPEED
+;     clc
+;     adc #LEVELENDTANKSPEEDBOOST
+;     cmp #TANKSPEED14+1
+;     bcc NewEnemyTankSpeedNotTooHigh
+;     lda #TANKSPEED14    
+; NewEnemyTankSpeedNotTooHigh
+;     sta Temp
+;     lda TankStatus,X
+;     and #TANKDIRECTION|TANKINPLAY  ;clears tank speed AND tank-in-play bits
+;     ora Temp
+;     sta TankStatus,X
+; TankNotOnScreenDoNotIncreaseSpeed
+;     dex
+;     bne IncreaseEnemyTankSpeedLoop
     pla
     tax     ;restore X
+PlayerTankHit	
 MoreThanFourTanksRemainingStill    
 	;--save and restore Y in this routine
 	pla
@@ -5893,8 +5999,12 @@ RotationOdd
 	.byte 0	;and first 3 bytes of next table
 RotationEven
 	.byte 2, 1, 3, 0
+	
+P0M0Color
+    .byte TANKCOLOR1, TANKCOLOR3
 
-
+P1M1Color
+    .byte TANKCOLOR2, TANKCOLOR4
 	
 BulletDirectionMask
 	.byte %11, %11<<2, %11<<4, %11<<6
@@ -5924,7 +6034,72 @@ PFMaskLookupBank2
 	.byte $03, $0C, $30, $C0
 	.byte $C0, $30, $0C, $03
 	.byte $03, $0C, $30, $C0
+
+StartingTankXPosition
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY01STARTINGX, ENEMY02STARTINGX, ENEMY11STARTINGX, ENEMY12STARTINGX, ENEMY21STARTINGX, ENEMY22STARTINGX
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2, ENEMY2STARTINGX2
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3, ENEMY2STARTINGX3
+
+StartingTankYPosition 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
+StartingTankStatus
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+
+	
+	
+ToneBank2
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
+
+FrequencyBank2
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
+SoundLengthBank2
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
+	
+NumberOfBitsSetBank2
+	.byte 0, 1, 1, 2
+	.byte 1, 2, 2, 3
+	.byte 1, 2, 2, 3
+	.byte 2, 3, 3, 4
+
+	
+PFPointer
+	.word PF1Left, PF2Left, PF2Right, PF1Right
+
+
+TankUpFrame
+	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
+PlayerTankUpFrame
+	.word PlayerTankUp4+TANKHEIGHT, PlayerTankUp3+TANKHEIGHT, PlayerTankUp2+TANKHEIGHT, PlayerTankUp1+TANKHEIGHT
+
+TankDownFrame
+	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
+PlayerTankDownFrame
+	.word PlayerTankDown4+TANKHEIGHT, PlayerTankDown3+TANKHEIGHT, PlayerTankDown2+TANKHEIGHT, PlayerTankDown1+TANKHEIGHT
+TankRightFrame
+	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
+PlayerTankRightFrame
+	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
+	
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+
+TitleGraphics
+    ;-----PF1--------PF2--------PF2--------PF1------
+    .byte %00001000, %11111100, %11111100, %00001000
+    .byte %00001000, %10001100, %10001100, %00001000
+    .byte %00001111, %11101111, %11101111, %00001111
+    .byte %00000111, %11111111, %11111111, %00000111
+    .byte %00000000, %00000000, %00000000, %00000000
+    .byte %10101010, %01110101, %01001010, %01010111
+    .byte %10101010, %01010101, %01001110, %00110101
+    .byte %10101010, %01010101, %01001010, %01010101
+    .byte %11111010, %01110111, %11101110, %01110101
+    .byte %11011010, %01110111, %11101110, %01110101
+TitleGraphicsEnd				
 	
 	
     PAGEALIGN 3
@@ -6334,172 +6509,8 @@ TankRightAnimated4b
 		.byte #%01100110;--
 		.byte 0
 
-
-		
-		
-TankKilledImage = * - 1
-        .byte #%01010100;--2
-        .byte #%00111011;--4
-        .byte #%01000100;--6
-        .byte #%01100101;--8
-        .byte #%01011100;--10
-        .byte #%10010001;--12
-        
-TankKilledImageb     
-        .byte 0   
-        .byte #%10010010;--1
-        .byte #%01001000;--3
-        .byte #%10100100;--5
-        .byte #%00000010;--7
-        .byte #%00100100;--9
-        .byte #%01001010;--11
-        .byte 0
-        
-        
-        
-        
-; TankScoreImage = * - 1
-;         .byte #%00000000;--2
-;         .byte #%11101010;--4
-;         .byte #%01010101;--6
-;         .byte #%11001010;--8
-;         .byte #%00000000;--10
-;         .byte #%00000000;--12
-; TankScoreImageb
+PlayerTankRight1 = * - 1
 ;         .byte 0
-;         .byte #%00000000;--1
-;         .byte #%00000000;--3
-;         .byte #%01010101;--5
-;         .byte #%01010101;--7
-;         .byte #%01000000;--9
-;         .byte #%00000000;--11
-;         .byte 0
-        
-        
-        
-TanksRemainingGfx
-;	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-	.byte 0
-	.byte %11101110
-	.byte %11101110
-	.byte %11101110
-	.byte %01000100		
-		
-	
-	
-	
-	PAGEALIGN 5
-
-
-
-
-	
-	ds BLOCKHEIGHT+1 - (* & $FF)
-BlockRowTable
-DigitBlank
-	ds BLOCKHEIGHT, 0
-	ds BLOCKHEIGHT, 1
-	ds BLOCKHEIGHT, 2
-	ds BLOCKHEIGHT, 3
-	ds BLOCKHEIGHT, 4
-	ds BLOCKHEIGHT, 5
-	ds BLOCKHEIGHT, 6
-	ds BLOCKHEIGHT, 7
-	ds BLOCKHEIGHT, 8
-	ds BLOCKHEIGHT, 9
-	ds BLOCKHEIGHT, 10
-	ds BLOCKHEIGHT, 11
-	ds BLOCKHEIGHT, 12
-	ds BLOCKHEIGHT, 13
-	ds BLOCKHEIGHT, 14
-	ds BLOCKHEIGHT, 15
-	ds BLOCKHEIGHT, 16
-	ds BLOCKHEIGHT, 17
-	
-
-
-
-	
-	
-StartingTankXPosition
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY01STARTINGX, ENEMY02STARTINGX, ENEMY11STARTINGX, ENEMY12STARTINGX, ENEMY21STARTINGX, ENEMY22STARTINGX
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2, ENEMY2STARTINGX2
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3, ENEMY2STARTINGX3
-
-StartingTankYPosition 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	
-StartingTankStatus
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-; 	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-
-	
-	
-ToneBank2
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
-
-FrequencyBank2
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
-SoundLengthBank2
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
-	
-NumberOfBitsSetBank2
-	.byte 0, 1, 1, 2
-	.byte 1, 2, 2, 3
-	.byte 1, 2, 2, 3
-	.byte 2, 3, 3, 4
-
-	
-	
-TitleGraphics
-    ;-----PF1--------PF2--------PF2--------PF1------
-    .byte %00001000, %11111100, %11111100, %00001000
-    .byte %00001000, %10001100, %10001100, %00001000
-    .byte %00001111, %11101111, %11101111, %00001111
-    .byte %00000111, %11111111, %11111111, %00000111
-    .byte %00000000, %00000000, %00000000, %00000000
-    .byte %10101010, %01110101, %01001010, %01010111
-    .byte %10101010, %01010101, %01001110, %00110101
-    .byte %10101010, %01010101, %01001010, %01010101
-    .byte %11111010, %01110111, %11101110, %01110101
-    .byte %11011010, %01110111, %11101110, %01110101
-
-
-TitleGraphicsEnd				
-
-PFPointer
-	.word PF1Left, PF2Left, PF2Right, PF1Right
-
-
-TankUpFrame
-	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
-PlayerTankUpFrame
-	.word PlayerTankUp4+TANKHEIGHT, PlayerTankUp3+TANKHEIGHT, PlayerTankUp2+TANKHEIGHT, PlayerTankUp1+TANKHEIGHT
-
-TankDownFrame
-	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
-PlayerTankDownFrame
-	.word PlayerTankDown4+TANKHEIGHT, PlayerTankDown3+TANKHEIGHT, PlayerTankDown2+TANKHEIGHT, PlayerTankDown1+TANKHEIGHT
-TankRightFrame
-	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
-PlayerTankRightFrame
-	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
-	
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
-	
-    ALIGNGFXDATA 3
-;---Graphics Data from PlayerPal 2600---
-;--graphics data for player tank.  needs to be split and aligned
-PlayerTankRight1
-        .byte 0
         .byte #%11011101;--       
         .byte #%00110000;--        
         .byte #%01111111;--
@@ -6566,11 +6577,7 @@ PlayerTankRight4b
         .byte #%00110000;--9
         .byte #%10111011;--1
         .byte 0        
-        
-        
-        
-        
-        
+		
 PlayerTankDown1 = * - 1       ;uses .byte 0 from previous table and the 0 in the following byte
         .byte #%00011011;--2
         .byte #%11011000;--4
@@ -6603,7 +6610,73 @@ PlayerTankDown2b
         .byte #%10111100;--9
         .byte #%00011011;--1
         .byte 0        
-PlayerTankDown3 = * - 1
+		
+TankKilledImage = * - 1
+        .byte #%01010100;--2
+        .byte #%00111011;--4
+        .byte #%01000100;--6
+        .byte #%01100101;--8
+        .byte #%01011100;--10
+        .byte #%10010001;--12
+        
+TankKilledImageb     
+        .byte 0   
+        .byte #%10010010;--1
+        .byte #%01001000;--3
+        .byte #%10100100;--5
+        .byte #%00000010;--7
+        .byte #%00100100;--9
+        .byte #%01001010;--11
+        .byte 0
+        
+        
+        
+        
+; TankScoreImage = * - 1
+;         .byte #%00000000;--2
+;         .byte #%11101010;--4
+;         .byte #%01010101;--6
+;         .byte #%11001010;--8
+;         .byte #%00000000;--10
+;         .byte #%00000000;--12
+; TankScoreImageb
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%00000000;--3
+;         .byte #%01010101;--5
+;         .byte #%01010101;--7
+;         .byte #%01000000;--9
+;         .byte #%00000000;--11
+;         .byte 0
+        
+        
+        
+TanksRemainingGfx
+;	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+	.byte 0
+	.byte %11101110
+	.byte %11101110
+	.byte %11101110
+	.byte %01000100		
+	
+	
+	PAGEALIGN 5
+	
+    ALIGNGFXDATA 3
+;---Graphics Data from PlayerPal 2600---
+;--graphics data for player tank.  needs to be split and aligned
+
+        
+        
+        
+        
+        
+PlayerTankDown3 ;= * - 1
+        .byte 0
         .byte #%11011000;--2
         .byte #%00011011;--4
         .byte #%11011000;--6
@@ -6700,7 +6773,43 @@ PlayerTankUp4b
         .byte #%11011011;--7
         .byte #%11011011;--9
         .byte #%11011011;--1
-        .byte 0
+        .byte 0	
+	
+        
+    PAGEALIGN 6
+
+
+
+
+	
+	ds BLOCKHEIGHT+1 - (* & $FF)
+BlockRowTable
+DigitBlank
+	ds BLOCKHEIGHT, 0
+	ds BLOCKHEIGHT, 1
+	ds BLOCKHEIGHT, 2
+	ds BLOCKHEIGHT, 3
+	ds BLOCKHEIGHT, 4
+	ds BLOCKHEIGHT, 5
+	ds BLOCKHEIGHT, 6
+	ds BLOCKHEIGHT, 7
+	ds BLOCKHEIGHT, 8
+	ds BLOCKHEIGHT, 9
+	ds BLOCKHEIGHT, 10
+	ds BLOCKHEIGHT, 11
+	ds BLOCKHEIGHT, 12
+	ds BLOCKHEIGHT, 13
+	ds BLOCKHEIGHT, 14
+	ds BLOCKHEIGHT, 15
+	ds BLOCKHEIGHT, 16
+	ds BLOCKHEIGHT, 17
+	
+
+
+
+	
+	
+
 	
 	
 
