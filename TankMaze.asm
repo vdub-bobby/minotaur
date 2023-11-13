@@ -207,7 +207,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 52       ;--this jitters a bit at times.
+VBLANK_TIMER = 50       ;--this jitters a bit at times.
 OVERSCAN_TIMER = 31     ;--this seems to be fine 
 
 
@@ -243,7 +243,7 @@ TANKDEADWAIT   =   2
 TANKDEADWAITPLAYER  =   8
 
 PLAYERRESPAWNDELAY = 14
-PLAYERINITIALDELAY  =   6
+PLAYERINITIALDELAY  =   0
 
 ; STARTINGENEMYTANKCOUNT	=	 20 ;--no longer used
 
@@ -332,11 +332,11 @@ MAZEGENERATIONPASSES = MAZEROWS/2-1
 ;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
 ;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
 ;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
-PLAYERTANKSPEED	=	TANKSPEED2|1     
-ENEMYTANKBASESPEED0	=   TANKSPEED8
+PLAYERTANKSPEED	    =   TANKSPEED2|1     
+ENEMYTANKBASESPEED0 =   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED8
-ENEMYTANKBASESPEED2	=	TANKSPEED8
-
+ENEMYTANKBASESPEED2 =   TANKSPEED8
+SPEEDBONUS          =   2
 ;--SOUND CONSTANTS
 ;   indexes into lookup table for sound effects
 BRICKSOUND              =   0
@@ -622,7 +622,6 @@ Channel1Decay ds 1
 
 Debounce ds 1
 
-;EnemyDebounce ds 1
 
 TankX ds 4
 TankY ds 4
@@ -716,12 +715,14 @@ Start
 ;-------------------VBLANK Routine-------------------------------------------
 ;----------------------------------------------------------------------------
 VBLANKRoutine
-	lda #%00000111
-VSYNCWaitLoop
-	sta WSYNC
-	sta VSYNC
-	lsr
-	bcs VSYNCWaitLoop
+    lda #%00001111
+VSYNCWaitLoop2
+    sta WSYNC
+    sta VSYNC
+    lsr
+    bne VSYNCWaitLoop2      ;different version of this loop
+    
+    
 
 	lda #VBLANK_TIMER
 	sta TIM64T
@@ -902,7 +903,10 @@ GameNotOver
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
 	jsr PlayerTankMovementRoutine
-
+; 	brk
+; 	.word MoveBulletSubroutine
+	
+	jsr PowerUpBonusRoutine
 
 	jmp WaitForOverscanEnd
 GameNotOn
@@ -1068,7 +1072,7 @@ OverTimeOverscan
 	nop
 EndOverscan	
 	
-;	sta WSYNC		;last line...I think?
+; 	sta WSYNC		;last line...I think?
 
 ; 	rts
 	jmp VBLANKRoutine
@@ -1466,7 +1470,7 @@ TankNotInPlay
 	;--tank is onscreen but dead and sitting there.
 	;   Decrement the wait, once it is done then move it offscreen
 	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
-	and #7;
+	and #$07;
 	bne DoNotMoveTankOffscreenYet
 	lda TankStatus,X
 	and #$0F
@@ -1554,7 +1558,7 @@ WaitForPlayerExplosion
 	;--else still waiting
 	;--update counter every 8 frames
 	lda FrameCounter
-	and #15         ;--make wait longer for tank to respawn
+	and #31         ;--make wait longer for tank to respawn
 	bne WaitToUpdateRespawnCounter
 	lda TankStatus
 	sec
@@ -1673,15 +1677,52 @@ AtIntersectionX
     ;       so test this repeatedly:
     ;           k = n>>1 and 3j = 0 (if n is even) or 3 (if n is odd)
 
-EvenlyDivisibleBySevenLoop
-    lsr                             ;k=n>>1
-    bcc EvenlyDivisibleBySevenLoop  ;if n was odd (carry clear) we subtract zero
-    sbc #3                          ;if n was even (carry set) we subtract three
-    bcc NotEvenlyDivisibleBySeven   ;if we end up with a negative number, then it is not evenly divisible by 7
-    bne EvenlyDivisibleBySevenLoop  ;if we end up with a positive non-zero number, then repeat
-	beq AtIntersectionY             ;if we end up with zero, then it is evenly divisible by 7
-NotEvenlyDivisibleBySeven
-	jmp NotAtIntersection
+; EvenlyDivisibleBySevenLoop
+;     lsr                             ;k=n>>1
+;     bcc EvenlyDivisibleBySevenLoop  ;if n was odd (carry clear) we subtract zero
+;     sbc #3                          ;if n was even (carry set) we subtract three
+;     bcc NotEvenlyDivisibleBySeven   ;if we end up with a negative number, then it is not evenly divisible by 7
+;     bne EvenlyDivisibleBySevenLoop  ;if we end up with a positive non-zero number, then repeat
+; 	beq AtIntersectionY             ;if we end up with zero, then it is evenly divisible by 7
+; NotEvenlyDivisibleBySeven
+
+    ;--new new routine is a binary search.  Worst case is 27 cycles, best is 5.
+    cmp #ROWHEIGHT*6        ;middle value
+    beq AtIntersectionY     ;                   best case, 5 cycles
+    bcc Lower1
+    cmp #ROWHEIGHT*9
+    beq AtIntersectionY
+    bcc Lower2
+    cmp #ROWHEIGHT*11
+    beq AtIntersectionY
+    cmp #ROWHEIGHT*10
+    beq AtIntersectionY
+    cmp #ROWHEIGHT*12
+    beq AtIntersectionY
+    bne NotAtIntersectionY      ;branch always 
+Lower2
+    cmp #ROWHEIGHT*8
+    beq AtIntersectionY
+    cmp #ROWHEIGHT*7
+    beq AtIntersectionY
+    bne NotAtIntersectionY      ;branch always  worst case, 27 cycles
+Lower1
+    cmp #ROWHEIGHT*3
+    beq AtIntersectionY
+    bcc Lower3
+    cmp #ROWHEIGHT*5
+    beq AtIntersectionY
+    cmp #ROWHEIGHT*4    
+    beq AtIntersectionY
+    bne NotAtIntersectionY      ;branch always
+Lower3
+    cmp #ROWHEIGHT*2
+    beq AtIntersectionY
+    cmp #ROWHEIGHT*1
+    beq AtIntersectionY
+    ;--else not at an intersection
+NotAtIntersectionY
+   	jmp NotAtIntersection
 AtIntersectionY	
 	;--here is where we choose which way each tank will go
 
@@ -3195,6 +3236,41 @@ IncreaseScoreSubroutineBank0
 	cld
 	rts
 
+;****************************************************************************
+	SUBROUTINE
+PowerUpBonusRoutine
+
+    ;--if player tank not in play, immediately return
+    lda TankStatus
+    lsr
+    bcc .PlayerNotInPlayNoBonus
+
+    ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
+    
+    ;--get starting tank amount
+    lda MazeNumber
+    asl
+    clc
+    adc #6
+    cmp #20
+    bcc .HaveStartingTankAmount
+    lda #20
+.HaveStartingTankAmount
+    lsr
+    sec
+    sbc TanksRemaining
+    bcc .HaveNotKilledEnoughTanksYet
+    ;--now, have we died
+    lda MazeGenerationPass
+    bne .PlayerHasDiedNoBonus
+    lda TankStatus
+    and #~TANKSPEED
+    ora #PLAYERTANKSPEED+SPEEDBONUS
+    sta TankStatus
+.PlayerHasDiedNoBonus    
+.HaveNotKilledEnoughTanksYet
+.PlayerNotInPlayNoBonus
+    rts
 
 ;----------------------------------------------------------------------------
 ;-------------------------Data Below-----------------------------------------
@@ -5053,6 +5129,10 @@ SetNewLevelTankDelay
     and #~TANKRESPAWNWAIT  ;clear the wait
     ora #PLAYERINITIALDELAY
     sta TankStatus
+    
+    ;--and finally, set MazeGenerationPass to zero because we'll use that for powerups/bonuses during the level
+    lda #0
+    sta MazeGenerationPass
 	
 NotCompletelyDoneWithMaze
 	;--restore original random number
@@ -5607,15 +5687,27 @@ TankRespawnRoutineWrapper
     jsr TankRespawnRoutine
     jmp ReturnFromBSSubroutine2
 
-
+PlayerStartingStatus
+    .byte TANKRIGHT|0, TANKRIGHT|2, TANKRIGHT|4, TANKRIGHT|6
+    .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
 
 TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy tanks)
 	txa
 	bne EnemyTankRespawnRoutine
-    ;--stop player tank sound and use regular respawn for player tank
-;     sta AUDV0
-    beq UsePlayerRespawnPosition
+    ;--increase counter of number of deaths (in MazeGenerationPass) then increase respawn wait
+    ldy MazeGenerationPass
+    cpy #8
+    bcc PlayerHasNotDiedEightTimes
+    ldy #7
+PlayerHasNotDiedEightTimes    
+    inc MazeGenerationPass
+	lda PlayerStartingStatus,Y
+	sta TankStatus,X
+    bne UsePlayerRespawnPosition    ;branch always
 EnemyTankRespawnRoutine
+	lda StartingTankStatus,X  
+	sta TankStatus,X
+
 	;--new respawn routine: randomly pick between 2 respawn spots for each tank
 	;   formula is tank # times 2 + rand(0, 1)
 	lda RandomNumber
@@ -5655,8 +5747,6 @@ TopRowEnemyTankRespawn
 	sta TankY,X
 	lda StartingTankXPosition,Y
 	sta TankX,X
-	lda StartingTankStatus,X  
-	sta TankStatus,X
 
     rts
 
