@@ -68,7 +68,6 @@
             BulletHitBrickSubroutine
             BulletHitTank / PlayerHitTank
             StartSoundSubroutineBank2
-            IsBlockAtPositionBank2
             PositionASpriteSubroutineBank2
         data
         bank switching logic
@@ -460,7 +459,7 @@ ENEMYDEBOUNCEBITS =     %00011111
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
-BULLETFRACTIONALPERCENT =   85
+BULLETFRACTIONALPERCENT =   87
 BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets down slightly so the collision detection works better
 
 BASECOLOR		    =		GOLD
@@ -781,6 +780,10 @@ InBetweenLevels
     bne DoNotReadConsoleSwitchesWhileGeneratingMaze ;also not while game over routine is running
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
+
+
+
+
 
 	brk
 	.word KernelRoutineGame
@@ -1454,9 +1457,8 @@ MoveEnemyTanksSubroutine
 	jmp FireEnemyBulletRoutine
 
 MoveAnEnemyTank
-	tax
+	tax ;index into which tank
 
-	;jsr IsTankOnScreenBank0     
 	lda TankStatus,X
 	and #TANKINPLAY	
 	beq TankNotInPlay
@@ -1470,21 +1472,18 @@ TankNotInPlay
 	;--tank is onscreen but dead and sitting there.
 	;   Decrement the wait, once it is done then move it offscreen
 	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
-	and #$07;
+	and #$07
 	bne DoNotMoveTankOffscreenYet
 	lda TankStatus,X
 	and #$0F
-	sec
+; 	sec         ;I think this is set already after CMP and failed BNE branch above above
 	sbc #2
 	ora #TANKUP
 	sta TankStatus,X
 	bpl DoNotMoveTankOffscreenYet	
 	;--move tank offscreen
-	txa ;save X
-	pha
 	brk 
-	.word TankRespawnRoutineWrapper
-	pla
+	.word TankRespawnRoutineWrapperEnemy
 DoNotMoveTankOffscreenYet
     rts
 TankOffScreen
@@ -1572,11 +1571,8 @@ FinishedWaitingPlayerDelay
     lda TankStatus
     and #TANKUP ;if tank is facing up, then is explosion and still onscreen
     beq DoneWaitingBringPlayerTankOnScreen
-	txa ;save X
-	pha
 	brk 
-	.word TankRespawnRoutineWrapper
-	pla
+	.word TankRespawnRoutineWrapperPlayer
 	rts
 	;--set player to move immediately 
 	lda #255
@@ -2469,7 +2465,7 @@ ReadControllersSubroutine
 	and #$F0	;clear bottom nibble
 	cmp #$F0
     bne TryingToMove
-    ;--not trying to move, so just ... exit?
+    ;--not trying to move, so just ... exit?  no!  have to go check if we are trying to shoot!
     ;--also clear speed bits in TankStatus so we know it isn't trying to move.
     lda TankStatus
     and #~TANKSPEED
@@ -2477,7 +2473,7 @@ ReadControllersSubroutine
     ;--stop engine sound
     pla ;--pop movement flag (=0) off stack
 ;     sta AUDV0
-    rts
+    jmp PlayerTankBulletFiring
 TryingToMove
 SkipReadingControllers
 ; 	ldx #PLAYERTANKENGINEVOLUME
@@ -2626,11 +2622,21 @@ TurnUpward
 	sta TankStatus,X
 NoUp
 DoneMoving
-
-	;--don't allow player to fire when offscreen
+    ;--if enemy tank we exit now... I think.  right?  this bullet-firing routine is specific to the player, enemy bullets are fired elsewhere
+    txa ;set flags based on X
+    beq PlayerTankBulletFiring
+    rts
+PlayerTankBulletFiring    
+    
+    
+	;--don't allow player to fire when offscreen or when not in play (i.e., when an explosion lol)
+	lda TankStatus
+	and #TANKINPLAY
+	beq PlayerExplodingCannotShoot
 	lda TankX
 	cmp #16
 	bcs PlayerOnScreenCanShoot
+PlayerExplodingCannotShoot	
 	jmp NotFiring
 PlayerOnScreenCanShoot
 	;are any balls available for firing
@@ -2812,49 +2818,53 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	;--returns result in Temp
 	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
 	;--except now first row has walls at two positions (maybe!) only
+	;   this routine can't overwrite Y
 		
-	txa
-	pha			;save X on stack
-	lda Temp
+	txa                     ;+2
+	pha			            ;+3      5  save X on stack
+	lda Temp                ;+3      8
 	sec
 	sbc #16
 	lsr
 	lsr
 	lsr
-	tax
+	tax                     ;+12    20
 	lda PFRegisterLookup,X
-	pha
+	pha                     ;+7     27
 	lda PFMaskLookup,X
-	pha
-	lda Temp+1
+	pha                     ;+7     34
+	lda Temp+1              ;+3     37
 	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
 	sec
 	sbc #BLOCKHEIGHT
-	bcs NotOnBottomRow
-OnBottomRow
+	bcs NotOnBottomRow      ;6/7    43/44
+OnBottomRow                 ;       43
 	;--on bottom row
 	;--only two blocks on bottom row
 	;	at X positions (LastRowL) 64-71 and (LastRowR) 88-95
 	lda LastRowL
-	beq LastRowNoWallOnLeft
-	lda Temp
-	cmp #72
-	bcs LastRowCheckRightBlock
+	beq LastRowNoWallOnLeft     ;+4/5   47/48
+	lda Temp                
+	cmp #72                     ;+5     52
+	bcs LastRowCheckRightBlock  ;+2/3   54/55
 	cmp #64
-	bcs FoundWhetherBlockExists
-LastRowNoWallOnLeft
-LastRowCheckRightBlock
+	bcs FoundWhetherBlockExists ;+4/5   58/59
+LastRowNoWallOnLeft             ;       48/58    
+LastRowCheckRightBlock          ;            /55
 	lda LastRowR
-	beq FoundWhetherBlockExists
+	beq FoundWhetherBlockExists ;+4/5   branch: 53/60/63 ...drop through: 52/59/62
 	lda Temp
 	cmp #96
-	bcs LastRowNoHit
+	bcs LastRowNoHit            ;+7/8   61/68/71 (branch) or 60/67/70 (drop through)
 	cmp #88
-	bcs FoundWhetherBlockExists
-LastRowNoHit
+	bcs FoundWhetherBlockExists ;+4/5   65/72/75 (branch) or 64/71/74 (drop through)
+LastRowNoHit                    ;                                                    or 61/68/71 (from branch above)
 	lda #0
-	beq FoundWhetherBlockExists
-NotOnBottomRow	
+	beq FoundWhetherBlockExists ;+5     66/69/73/76/79 
+	;--in conclusion, we end this path by jumping below to the routine exit after this many cycles:
+	;           53/59/60/63/65/66/69/72/73/75/76/79 (one of these!)
+	;
+NotOnBottomRow	                ;       44
 	;--divide by blockheight
 
 	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
@@ -2872,27 +2882,28 @@ NotOnBottomRow
 	adc Temp
 	ror
 	lsr
-	lsr
-	tax
+	lsr                         ;+27    71 
+	
+	tax                         ;+2     73
 
 	;--now add X to 2nd element on stack
-	txa
+	;txa
 	tsx
 	clc
 	adc $00+2,X
-	tax
+	tax                         ;+12    85
 	
 	lda PF1Left,X
 	tsx
-	and $00+1,X
-FoundWhetherBlockExists
+	and $00+1,X                 ;+10    95
+FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
 	;--result is now in A --nonzero means a block is there, zero means no
 	sta Temp		;result goes into Temp
 	pla
 	pla		;get intermediate results off of stack
 	pla
 	tax		;restore X from stack
-	rts
+	rts                         ;+23    76-118
 
 	
 	
@@ -3743,7 +3754,7 @@ KernelRoutineGame
 	and #1
 	asl
 	tax
-	lda RotationTables,X   ;"RotationTables" if we move back to bank 2
+	lda RotationTables,X  
 	sta MiscPtr
 	lda RotationTables+1,X
 	sta MiscPtr+1
@@ -3757,7 +3768,7 @@ RotationLoop
 	txa
 	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
 	bne MissileNotPlayer   
-PlayerNotMissile
+    ; PlayerNotMissile
 	;--get correct tank gfx ptr set up
 	txa
 	asl
@@ -3920,10 +3931,15 @@ NoAdjustMissileY
 	dex
 	bpl AdjustMissileYLoop
 	
+	;--cycle BaseColor
+	lda #(BASECOLOR)&($F0)
+    sta Temp+1
 	
 	lda FrameCounter
 	and #$0F
-	sta Temp        ;used below for cycling base color
+	ora Temp+1
+	sta Temp+1
+
 	;bullet flicker rotation:
 	and #3
 	tax
@@ -3933,18 +3949,11 @@ NoAdjustMissileY
 	sta BallY
 
 	
-	
-
-	;--cycle BaseColor
-	lda #(BASECOLOR)&($F0)
-	ora Temp
-	sta Temp+1
-	
 	;--set up score pointers
 	
 	ldx #10
-SetupScorePtrsLoop
 	txa
+SetupScorePtrsLoop
 	lsr
 	lsr
 	tay
@@ -3965,15 +3974,49 @@ SetupScorePtrsLoop
 	lda #>DigitData
 	sta ScorePtr+1,X
 	sta ScorePtr-1,X
-	dex
-	dex
-	dex
-	dex
+    txa
+    sec
+    sbc #4
+    tax
 	bpl SetupScorePtrsLoop
 	;--room for score up here?
 
-	lda #RIGHTEIGHT
-	sta HMM1
+; 	lda #RIGHTEIGHT
+; 	sta HMM1            ;what is this for?
+
+	SUBROUTINE
+	if DEBUGTANKAICOUNTER = 1
+        lda TankMovementCounter
+        cmp #TANKAISWITCH
+        bcs .tankaidebug
+        lda #BLUE|$4
+        bcc .tankaidebugend
+.tankaidebug
+    	lsr
+    	lsr
+    	lsr
+    	lsr
+    	ora #WALLCOLOR&$F0
+.tankaidebugend
+    ELSE
+        lda GameStatus
+        and #GAMEOVER
+        beq RegularWallColor
+        lda TankMovementCounter
+        asl ;--get WALLDONEFLASHING bit into carry
+        bcc WallFlashingColor
+        lda #0
+WallFlashingColor
+        lsr
+        and #$0F
+        ora #(WALLCOLOR&$F0)
+        bne SetWallColor
+RegularWallColor
+        lda #WALLCOLOR
+SetWallColor        
+    ENDIF
+
+    sta Temp+3
 
 
 WaitForVblankEnd
@@ -4065,7 +4108,7 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	
 	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
 	sta NUSIZ0
-	sta NUSIZ1
+	sta NUSIZ1                  ;+8     75
 	
 	;--tank colors
 SetTankColors	
@@ -4075,66 +4118,24 @@ SetTankColors
     lda P0M0Color,X
     sta COLUP0
     lda P1M1Color,X
-    sta COLUP1	
+    sta COLUP1	                ;+21    20
 	
-; 	lda #TANKCOLOR1 ;GOLD+10
-; 	sta COLUP0
-; 	lda #TANKCOLOR2 ;BLUE2+12
-; 	sta COLUP1
 
-    txa
 	
 	;--reflect P0 or P1 as necessary.   prep for flip loop below
+    txa
 	asl
 	tax
 	lda RotationTables,X        ;RotationTablesBank1 if moved back to bank 1
 	sta MiscPtr
 	lda RotationTables+1,X
-	sta MiscPtr+1
+	sta MiscPtr+1               ;+20    40
 	
-; 	sta WSYNC
-	
-	SUBROUTINE
-	if DEBUGTANKAICOUNTER = 1
-        lda TankMovementCounter
-        cmp #TANKAISWITCH
-        bcs .tankaidebug
-        lda #BLUE|$4
-        bcc .tankaidebugend
-.tankaidebug
-    	lsr
-    	lsr
-    	lsr
-    	lsr
-    	ora #WALLCOLOR&$F0
-.tankaidebugend
-    ELSE
-        lda GameStatus
-        and #GAMEOVER
-        beq RegularWallColor
-        lda TankMovementCounter
-        asl ;--get WALLDONEFLASHING bit into carry
-        bcc WallFlashingColor
-        lda #0
-WallFlashingColor
-        lsr
-        and #$0F
-        ora #(WALLCOLOR&$F0)
-        bne SetWallColor
-RegularWallColor
-        lda #WALLCOLOR
-SetWallColor        
-    ENDIF
-
     
-    sta Temp+3
-	sta COLUPF
+    lda Temp+3
+	sta COLUPF                  ;+6     46
 	;--do this above...the rest we do during the wall below.  
 
-	
-    sta WSYNC   ;--timing, this is required for now due to branches immediately above
-	
-	
 	;---reflect P0/P1
 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
 	ldy #3              ;+2     24
@@ -4168,17 +4169,17 @@ EndREFPLoop             ;       14/18/23
 	
 	ldx #4
 ; PositioningLoopVBLANK	;--excluding players (and M1)
-	lda PlayerX,X
+	lda PlayerX+4;,X
 	jsr PositionASpriteSubroutineBank2   ;        9
 ; 	dex
 ; 	cpx #3
 ; 	bne PositioningLoopVBLANK
 	
     ldy #255
-	sty VDELP0  ;Y is 255 following loop above
+	sty VDELP0  
 	sty VDELBL          ;+6
 
-	iny         ;Y = 0
+	iny                 ;Y = 0
 	sty VDELP1          ;+5     11
 	;save stack pointer
 	tsx
@@ -4474,13 +4475,13 @@ DoneWithKernelLastRowLoop
 	lda #66
 	inx
 ; 	jsr PositionASpriteNoHMOVEOrHMCLRSubroutine
-    jsr PositionASpriteSubroutineBank2	
+    jsr PositionASpriteSubroutineBank2	    ;returns at cycle 9
 
 	
 	;--done displaying maze
 	;--set up score, tanks remaining, lives remaining etc
 
-	sta WSYNC
+ 	sta WSYNC
 ; 	sta HMOVE
 	ldy #0                  ;+2
 	sty PF0                 
@@ -4660,25 +4661,42 @@ MoveBulletSubroutine
 MoveBulletsLoop
     lda #0
     sta Temp
+;     lda BulletFractional
+;     clc
+    ;--apply update four times (because only once every four frames)
+;     adc #BULLETFRACTIONALSPEED
+;     rol Temp    ;get carry into Temp  +7
+;     adc #BULLETFRACTIONALSPEED
+;     rol Temp    ;get carry into Temp  +7
+;     adc #BULLETFRACTIONALSPEED
+;     rol Temp    ;get carry into Temp  +7
+;     adc #BULLETFRACTIONALSPEED
+;     rol Temp    ;get carry into Temp  +7      28
+;     ;--only actually save this change every four frames.
+;     cpx #0
+;     bne NoUpdateBulletFractionalThisFrame
+;     sta BulletFractional
+; NoUpdateBulletFractionalThisFrame
+;     ldy Temp
+;     lda NumberOfBitsSetBank2,Y       ;+42 (max) this is how many pixels to move
+
+    ;--try diff routine
     lda BulletFractional
     clc
-    ;--apply update four times (because only once every four frames)
     adc #BULLETFRACTIONALSPEED
-    rol Temp    ;get carry into Temp
-    adc #BULLETFRACTIONALSPEED
-    rol Temp    ;get carry into Temp
-    adc #BULLETFRACTIONALSPEED
-    rol Temp    ;get carry into Temp
-    adc #BULLETFRACTIONALSPEED
-    rol Temp    ;get carry into Temp
-    ;--only actually save this change every four frames.
+    sta Temp+1
+    lda #3
+    adc #0
+    sta Temp
     cpx #0
     bne NoUpdateBulletFractionalThisFrame
+    lda Temp+1
     sta BulletFractional
-NoUpdateBulletFractionalThisFrame
-    ldy Temp
-    lda NumberOfBitsSetBank2,Y       ;this is how many pixels to move
-    sta Temp
+NoUpdateBulletFractionalThisFrame    
+
+    
+    
+
 	lda BulletX,X
 	;cmp #BALLOFFSCREEN     == 0
 	beq NoBulletMovement;BulletOffScreen;
@@ -5680,13 +5698,25 @@ NoSoundForBrickExplosion
     
 ;****************************************************************************
 
-TankRespawnRoutineWrapper
-    tsx
-    lda $03,X
-    tax
+; TankRespawnRoutineWrapper
+;     tsx
+;     lda $03,X
+;     tax
+;     jsr TankRespawnRoutine
+;     jmp ReturnFromBSSubroutine2
+    
+TankRespawnRoutineWrapperPlayer
+    ldx #0    
     jsr TankRespawnRoutine
     jmp ReturnFromBSSubroutine2
 
+TankRespawnRoutineWrapperEnemy
+    lda FrameCounter
+    and #3
+    tax
+    jsr TankRespawnRoutine
+    jmp ReturnFromBSSubroutine2
+    
 PlayerStartingStatus
     .byte TANKRIGHT|0, TANKRIGHT|2, TANKRIGHT|4, TANKRIGHT|6
     .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
@@ -5932,97 +5962,6 @@ SkipDrawingTitleScreenThisFrame
 ;****************************************************************************
 
 
-IsBlockAtPositionBank2		;position in Temp (x), Temp+1 (y)
-	;--returns result in Temp
-	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
-	;--except now first row has walls at two positions (maybe!) only
-		
-	txa
-	pha			;save X on stack
-	lda Temp
-	sec
-	sbc #16
-	lsr
-	lsr
-	lsr
-	tax
-	lda PFRegisterLookupBank2,X
-	pha
-	lda PFMaskLookupBank2,X
-	pha
-	lda Temp+1
-	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
-	sec
-	sbc #BLOCKHEIGHT
-	bcs .NotOnBottomRow
-	;--on bottom row
-	;--only two blocks on bottom row
-	;	at X positions (LastRowL) 64-72 and (LastRowR) 88-96
-	lda LastRowL
-	beq .LastRowNoWallOnLeft
-	lda Temp
-	cmp #73
-	bcs .LastRowCheckRightBlock
-	cmp #64
-	bcs .FoundWhetherBlockExists
-.LastRowNoWallOnLeft
-.LastRowCheckRightBlock
-	lda LastRowR
-	beq .FoundWhetherBlockExists
-	lda Temp
-	cmp #96
-	bcs .LastRowNoHit
-	cmp #88
-	bcs .FoundWhetherBlockExists
-.LastRowNoHit
-	lda #0
-	beq .FoundWhetherBlockExists
-.NotOnBottomRow	
-	;--divide by blockheight
-	;maximum Y value is 77 (TANKAREAHEIGHT=77)
-	;	we subtract BLOCKHEIGHT above to see if we are on the bottom row
-	;	so maximum once we are here is 70
-	;	BLOCKHEIGHT = 7
-	; 	so maximum loops is 10
-
-
-
-	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
-	;	post gives credit to December '84 Apple Assembly Line
-	;--constant cycle count divide by 7 !!!!
-	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-	sta Temp
-	lsr
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	tax
-
-	;--now add X to 2nd element on stack
-	txa
-	tsx
-	clc
-	adc $00+2,X
-	tax
-	
-	lda PF1Left,X
-	tsx
-	and $00+1,X
-.FoundWhetherBlockExists
-	;--result is now in A --nonzero means a block is there, zero means no
-	sta Temp		;result goes into Temp
-	pla
-	pla		;get intermediate results off of stack
-	pla
-	tax		;restore X from stack
-	rts
 	
 ;****************************************************************************
 
@@ -6942,7 +6881,7 @@ ReturnFromBSSubroutine2
 	nop $1FF8,X     ;+4
 ;     nop $1FF8
 
-	rts             ;+6     32
+	rts             ;+6     28
 
 
 ;****************************************************************************	
