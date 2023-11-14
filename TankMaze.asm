@@ -174,7 +174,46 @@
 
 */
 
-DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
+
+/*
+
+        rando notes:
+        if tank not at intersection, and bullet not on the screen, entire vblank takes 10 scanlines (before we jump to "kernel", which 
+        has a bunch of stuff before it actually starts drawing the screen)
+        
+        takes ... 6 scanlines to get through "rotation" loop ... which is varying.
+        
+        another 2 scanlines to set up graphics pointers for tanks
+        another 2 scanlines to set up score pointers
+        
+        and then that's the end of the actual vblank.  seems like approx best case scenario is we have something like 15 extra scanlines.
+        
+        
+        next frame, tank is at intersection -
+         9 scanlines to check for wall (!!!!)  this is probably the biggest thing
+         5 scanlines to check for enemy tank
+         1 scanline for "ChooseTankDirection"
+         1 scanline for "EliminateDiagonal..."
+        
+        we are at scanline 20 (almost) when we get to TankMovementSubroutine
+        
+        at scanline #21 when we reach the end (currently drops through to see if player wants to shoot)
+        
+        finally done with enemy tank movement at scanline #22 (halfway through)
+        
+        bullet is onscreen this time ...so takes 4 scanlines to move bullet
+        
+        
+        SoundSubroutine - 3 scanlines
+        ReadConsoleSwitch... - if nothing pressed, back in half a scanline
+        
+        so tank is at intersection, bullet on screen means vblank  takes 29 scanlines (before we jump to kernel)
+        
+
+
+*/
+
+DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
@@ -1509,8 +1548,8 @@ TankNotOnscreen
 	and #7;
 	bne DoNotBringTankOnscreenYet
 	lda TankStatus,X
-	sec
-	sbc #2
+; 	sec             ;carry clear after not-taken BCS branch above
+	sbc #1          ;so we are actually subtracting 2 here
 	sta TankStatus,X
 ; 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
@@ -2929,7 +2968,7 @@ DoNotStartSound
 	
 ;****************************************************************************
 
-SUBROUTINE
+    SUBROUTINE
 
 CheckForEnemyTankSubroutine
     ;--come in with X pointing at current tank
@@ -2940,33 +2979,51 @@ CheckForEnemyTankSubroutine
 
     stx Temp+1  ;--save index into current tank
     sta Temp ;save directions
-    and #J0LEFT
-    bne .NotMovingLeft
+;     and #J0LEFT
+;     bne .NotMovingLeft
     ;--moving left.
     ldy #3
-.CheckForEnemyTankLeftLoop
+; .CheckForEnemyTankLeftLoop
+.CheckForEnemyTankLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
-    beq .NoCompareTankToItselfLeft
+;     beq .NoCompareTankToItselfLeft
+    bne .NotComparingTankToItself
+    jmp .NoCompareTankToItself
+.NotComparingTankToItself
     ;--see if enemy tank is offscreen
    
 ;     lda TankStatus,Y
 ;     and #TANKINPLAY
 
 ;     jsr IsTankOnScreenBank0
-    jsr IsTankPartiallyOnScreenBank0
-    beq .TankOffScreenIgnoreLeft
+;     jsr IsTankPartiallyOnScreenBank0        ;why this check ONLY for moving left?
+;     beq .TankOffScreenIgnoreLeft
+    lda Temp
+    and #J0LEFT
+    bne .NotMovingLeft
+
+
+
+    lda TankStatus,Y
+;     and #TANKINPLAY
+;     beq .TankOffScreenIgnoreLeft
+    lsr                 ;get TANKINPLAY bit into carry
+;     bcc .TankOffScreenIgnoreLeft
+    bcs .TankOnScreenComparePositions
+    jmp .TankOffScreenIgnore
+.TankOnScreenComparePositions    
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
-    sec
-    sbc #1      ;--have to add one so equal values are ignored
+;     sec       ;carry set following not-taken BCC branch above
+    sbc #1      ;--have to subtract one so equal values are ignored
     sbc TankX,Y
     cmp #14
     bcs .ThisTankNotToLeft
     ;if so, see if that tank is between 1.5 blocks up and 1.5 blocks down 
     lda TankY,X
-    clc
-    adc #10
-    sec
+;     clc       ;carry clear following not-taken BCS branch above
+    adc #11     ;actual value is +10 but carry-subtraction below subtracts one more than the TankY
+;     sec       ;skip because we adjust above
     sbc TankY,Y
     cmp #20
     bcs .ThisTankNotToLeft
@@ -2974,37 +3031,39 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0LEFT
     sta Temp
-    bne .CheckMovingRight   ;branch always to the next check
+;     bne .CheckMovingRight   ;branch always to the next check
 .ThisTankNotToLeft    
 .NoCompareTankToItselfLeft
 .TankOffScreenIgnoreLeft
-    dey
-    bne .CheckForEnemyTankLeftLoop
+;     dey
+;     bne .CheckForEnemyTankLeftLoop
 .NotMovingLeft
 .CheckMovingRight
     lda Temp
     and #J0RIGHT
     bne .NotMovingRight
     ;--moving right.
-    ldy #3
-.CheckForEnemyTankRightLoop
-    cpy Temp+1  ;--don't bother comparing tank to itself
-    beq .NoCompareTankToItselfRight
+;     ldy #3
+; .CheckForEnemyTankRightLoop
+;     cpy Temp+1  ;--don't bother comparing tank to itself
+;     beq .NoCompareTankToItselfRight
     ;--see if enemy tank is offscreen
-    lda TankStatus,Y
-    and #TANKINPLAY
-    beq .TankOffScreenIgnoreRight
+;     lda TankStatus,Y
+; ;     and #TANKINPLAY
+; ;     beq .TankOffScreenIgnoreRight
+;     lsr         ;get TANKINPLAY bit into carry
+;     bcc .TankOffScreenIgnoreRight
     ;see if an enemy tank is 
     lda TankX,Y
-    sec
+    sec     
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankX,X
     cmp #14
     bcs .ThisTankNotToRight
     lda TankY,X
-    clc
-    adc #10
-    sec
+;     clc       ;carry clear following not-taken BCS branch above
+    adc #11     ;actual value is +10 but carry-subtraction below subtracts one more than the TankY
+;     sec       ;skip because we adjust above
     sbc TankY,Y
     cmp #20
     bcs .ThisTankNotToRight
@@ -3012,38 +3071,40 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0RIGHT
     sta Temp
-    bne .CheckMovingUp  ;branch always to the next check
+;     bne .CheckMovingUp  ;branch always to the next check
 .ThisTankNotToRight    
 .NoCompareTankToItselfRight
 .TankOffScreenIgnoreRight
-    dey
-    bne .CheckForEnemyTankRightLoop
+;     dey
+;     bne .CheckForEnemyTankRightLoop
 .NotMovingRight
 .CheckMovingUp
     lda Temp
     and #J0UP
     bne .NotMovingUp
     ;--moving up.
-    ldy #3
+;     ldy #3
 ;     stx Temp+1
-.CheckForEnemyTankUpLoop
-    cpy Temp+1  ;--don't bother comparing tank to itself
-    beq .NoCompareTankToItselfUp
+; .CheckForEnemyTankUpLoop
+;     cpy Temp+1  ;--don't bother comparing tank to itself
+;     beq .NoCompareTankToItselfUp
     ;--see if enemy tank is offscreen
-    lda TankStatus,Y
-    and #TANKINPLAY
-    beq .TankOffScreenIgnoreUp
+;     lda TankStatus,Y
+; ;     and #TANKINPLAY
+; ;     beq .TankOffScreenIgnoreUp
+;     lsr         ;get TANKINPLAY bit into carry
+;     bcc .TankOffScreenIgnoreUp
     ;see if an enemy tank is above
     lda TankY,Y
-    sec
+    sec       
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,X
     cmp #12
     bcs .ThisTankNotToUp
     lda TankX,X
-    clc
-    adc #12
-    sec
+;     clc       ;carry clear following not-taken BCS branch above
+    adc #13     ;actual value is +12 but carry-subtraction below subtracts one more than the TankY
+;     sec       ;skip because we adjust above
     sbc TankX,Y
     cmp #24
     bcs .ThisTankNotToUp
@@ -3051,12 +3112,12 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0UP
     sta Temp
-    bne .CheckMovingDown  ;branch always to the next check
+;     bne .CheckMovingDown  ;branch always to the next check
 .ThisTankNotToUp    
 .NoCompareTankToItselfUp
 .TankOffScreenIgnoreUp
-    dey
-    bne .CheckForEnemyTankUpLoop
+;     dey
+;     bne .CheckForEnemyTankUpLoop
 .NotMovingUp
 
 .CheckMovingDown
@@ -3064,26 +3125,28 @@ CheckForEnemyTankSubroutine
     and #J0DOWN
     bne .NotMovingDown
     ;--moving down.
-    ldy #3
+;     ldy #3
 ;     stx Temp+1
-.CheckForEnemyTankDownLoop
-    cpy Temp+1  ;--don't bother comparing tank to itself
-    beq .NoCompareTankToItselfDown
-    ;--see if enemy tank is offscreen
-    lda TankStatus,Y
-    and #TANKINPLAY
-    beq .TankOffScreenIgnoreDown
+; .CheckForEnemyTankDownLoop
+;     cpy Temp+1  ;--don't bother comparing tank to itself
+;     beq .NoCompareTankToItselfDown
+;     ;--see if enemy tank is offscreen
+;     lda TankStatus,Y
+; ;     and #TANKINPLAY
+; ;     beq .TankOffScreenIgnoreDown
+;     lsr         ;get TANKINPLAY bit into carry
+;     bcc .TankOffScreenIgnoreDown
     ;see if an enemy tank is below
     lda TankY,X
-    sec
+    sec       
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,Y
     cmp #12
     bcs .ThisTankNotToDown
     lda TankX,X
-    clc
-    adc #12
-    sec
+;     clc       ;carry clear following not-taken BCS branch above
+    adc #13     ;actual value is +12 but carry-subtraction below subtracts one more than the TankY
+;     sec       ;skip because we adjust above
     sbc TankX,Y
     cmp #24
     bcs .ThisTankNotToDown
@@ -3091,12 +3154,16 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0DOWN
     sta Temp
-    bne .DoneWithEnemyTankChecks  ;branch always to the next check
+;     bne .DoneWithEnemyTankChecks  ;branch always to the next check
 .ThisTankNotToDown    
 .NoCompareTankToItselfDown
 .TankOffScreenIgnoreDown
+.NoCompareTankToItself
+.TankOffScreenIgnore
     dey
-    bne .CheckForEnemyTankDownLoop
+;     bne .CheckForEnemyTankDownLoop
+    beq .DoneWithEnemyTankChecks
+    jmp .CheckForEnemyTankLoop
 .NotMovingDown
 .DoneWithEnemyTankChecks
 
