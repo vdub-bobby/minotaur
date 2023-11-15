@@ -191,7 +191,7 @@
         
         next frame, tank is at intersection -
          9 scanlines to check for wall (!!!!)  this is probably the biggest thing
-         5 scanlines to check for enemy tank
+         5 scanlines to check for enemy tank (this has been reduced to 1-3 I think)
          1 scanline for "ChooseTankDirection"
          1 scanline for "EliminateDiagonal..."
         
@@ -213,7 +213,7 @@
 
 */
 
-DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
+DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
@@ -245,7 +245,7 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 50       ;--this jitters a bit at times.
+VBLANK_TIMER = 44       ;--this jitters a bit at times.
 OVERSCAN_TIMER = 31     ;--this seems to be fine 
 
 
@@ -809,10 +809,10 @@ GameOnVBLANK
 GameAlreadyStarted
 GameNotOnVBLANK
 InBetweenLevels
-	;--keep playing sound even when game not on
-	jsr SoundSubroutine
-	
-	jsr UpdateRandomNumber  ;--once per frame
+; 	;--keep playing sound even when game not on
+; 	jsr SoundSubroutine
+; 	
+; 	jsr UpdateRandomNumber  ;--once per frame
 
     lda GameStatus
     and #GENERATINGMAZE|GAMEOVER
@@ -839,7 +839,11 @@ OverscanRoutine
 	lda #OVERSCAN_TIMER
 	sta TIM64T
 	
+	;--keep playing sound even when game not on
+	jsr SoundSubroutine
 	
+	jsr UpdateRandomNumber  ;--once per frame
+
 	lda GameStatus
 	and #GAMEOVER
 	beq GameNotOver
@@ -950,6 +954,9 @@ GameNotOver
 	
 	jsr PowerUpBonusRoutine
 
+	
+	
+	
 	jmp WaitForOverscanEnd
 GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
@@ -2869,9 +2876,11 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	lsr
 	tax                     ;+12    20
 	lda PFRegisterLookup,X
-	pha                     ;+7     27
+; 	pha                     ;+7     27
+    sta Temp+3          
 	lda PFMaskLookup,X
-	pha                     ;+7     34
+; 	pha                     ;+7     34
+    sta Temp+2
 	lda Temp+1              ;+3     37
 	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
 	sec
@@ -2927,22 +2936,24 @@ NotOnBottomRow	                ;       44
 
 	;--now add X to 2nd element on stack
 	;txa
-	tsx
+; 	tsx
 	clc
-	adc $00+2,X
+; 	adc $00+2,X
+    adc Temp+3
 	tax                         ;+12    85
 	
 	lda PF1Left,X
-	tsx
-	and $00+1,X                 ;+10    95
+; 	tsx
+; 	and $00+1,X                 ;+10    95
+    and Temp+2
 FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
 	;--result is now in A --nonzero means a block is there, zero means no
 	sta Temp		;result goes into Temp
-	pla
-	pla		;get intermediate results off of stack
+; 	pla
+; 	pla		;get intermediate results off of stack
 	pla
 	tax		;restore X from stack
-	rts                         ;+23    76-118
+	rts                         ;+23    76-118  (which changes from using stack to using temp vars, we subtract 22 cycles for new totals: 54-96)
 
 	
 	
