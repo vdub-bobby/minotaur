@@ -17,15 +17,19 @@
 20.CYCLES                0006              (R )
 21.TankOffScreen         377b              (R )
 21.TankOnScreen          377e              (R )
-22.KillAllTanksLoop      39c7              (R )
-22.TankAlreadyDeadCannotKillAgain 39d8              (R )
-23.DoNotStartSound       3a49              (R )
-24.DivideLoop            3aa5              (R )
-26.marker                3c4b              (R )
-28.marker                3d46              (R )
+22.DoneTankScoreMultiplierLoop 390a              (R )
+22.FoundInitialTankCount 38ec              (R )
+22.PlayerDiedNoExtraScore 3910              (R )
+22.TankScoreMultiplierLoop 38f7              (R )
+23.KillAllTanksLoop      39ff              (R )
+23.TankAlreadyDeadCannotKillAgain 3a10              (R )
+24.DoNotStartSound       3a81              (R )
+25.DivideLoop            3add              (R )
+27.marker                3c4b              (R )
+29.marker                3d46              (R )
 3.loop                   16e0              (R )
 3.loopdone               16e7              (R )
-30.marker                3e00              (R )
+31.marker                3e48              (R )
 4.TankOffScreen          18fc              (R )
 4.TankOnScreen           18ff              (R )
 5.TankOffScreen          1912              (R )
@@ -52,7 +56,7 @@
 AboutToCheckForEnemyTank 14b9                  
 AdjustMissileYLoop       3107              (R )
 AimForBase               152b              (R )
-AllowCarveDownTable      3ab9              (R )
+AllowCarveDownTable      3af1              (R )
 AlreadyStartingNewLevel  1240              (R )
 ARTICULATE               0001              (R )
 ARTICULATION_BIT         0001              (R )
@@ -71,7 +75,7 @@ BackFromSwitch0b         339e              (R )
 BackFromSwitch1          335d              (R )
 BackFromSwitch1b         33d9              (R )
 BackToBeginningOfSong    1645              (R )
-BallHasNotHitBlock       386c              (R )
+BallHasNotHitBlock       3862              (R )
 BallHeight               00b3                  
 BALLOFFSCREEN            0000              (R )
 BallX                    00ab              (R )
@@ -99,36 +103,36 @@ BRICKSOUNDTONE           0008              (R )
 BROWN                    00f0                  
 BROWNGREEN               00c0                  
 BULLETCLEAR              0003                  
-BulletCollisionM0        388f              (R )
-BulletCollisionM1        3895              (R )
-BulletCollisionP0        3883              (R )
-BulletCollisionP1        3889              (R )
+BulletCollisionM0        3885              (R )
+BulletCollisionM1        388b              (R )
+BulletCollisionP0        3879              (R )
+BulletCollisionP1        387f              (R )
 BulletDirection          00a5              (R )
 BulletDirectionClear     1b4b              (R )
-BulletDirectionClearBank2 3b00                  
-BulletDirectionMask      3afc              (R )
-BULLETDOWN               0002              (R )
+BulletDirectionClearBank2 3b38                  
+BulletDirectionMask      3b34              (R )
 BulletDown               1b4f              (R )
-BulletDownBank2          3b04              (R )
+BULLETDOWN               0002              (R )
+BulletDownBank2          3b3c              (R )
 BulletFractional         00a6              (R )
 BULLETFRACTIONALPERCENT  0057              (R )
 BULLETFRACTIONALSPEED    00ae              (R )
-BulletHitBrickSubroutine 38e8              (R )
-BulletHitTank            39de              (R )
+BulletHitBrickSubroutine 3920              (R )
+BulletHitTank            3a16              (R )
 BULLETLEFT               0001              (R )
 BulletLeft               1b53              (R )
-BulletLeftBank2          3b08              (R )
-BulletMovingLeft         3926              (R )
+BulletLeftBank2          3b40              (R )
+BulletMovingLeft         395e              (R )
 BulletNotDown            354d              (R )
-BulletNotOnBottomRow     3919              (R )
+BulletNotOnBottomRow     3951              (R )
 BulletNotRight           355c              (R )
 BulletNotUp              353a              (R )
 BulletOffScreen          357b              (R )
-BulletOnLeftLastRow      3913              (R )
+BulletOnLeftLastRow      394b              (R )
 BulletOnScreen           3586              (R )
 BulletRight              1b57              (R )
 BULLETRIGHT              0000              (R )
-BulletRightBank2         3b0c              (R )
+BulletRightBank2         3b44              (R )
 BULLETSOUND              0001              (R )
 BULLETSOUNDFREQ          000d              (R )
 BULLETSOUNDLENGTH        000c              (R )
@@ -137,7 +141,7 @@ BULLETSPEEDHOR           0001
 BULLETSPEEDVER           0001                  
 BulletUp                 1b4b              (R )
 BULLETUP                 0003              (R )
-BulletUpBank2            3b00              (R )
+BulletUpBank2            3b38              (R )
 BulletX                  009d              (R )
 BulletY                  00a1              (R )
 BURNTORANGE              0030                  
@@ -155,7 +159,7 @@ CheckForExplosionCollisionCheckEnd 380d              (R )
 CheckForExplosionCollisionLoop 37fc              (R )
 CheckForExplosionCollisionLoopEntry 3808              (R )
 CheckForWallSubroutine   1a31              (R )
-CheckNextTankForNewDeath 38e2              (R )
+CheckNextTankForNewDeath 38d2              (R )
 CheckVerticalMovement    1a79                  
 ChooseTankDirection      1551              (R )
 ChooseTankDirectionSubroutine 125f              (R )
@@ -188,12 +192,12 @@ DEBUGNOENEMYBULLETS      0000              (R )
 DEBUGPFPRIORITY          0000              (R )
 DEBUGTANKAICOUNTER       0000              (R )
 DesiredDirectionsNotAllowed 1571              (R )
-DidNotHitAnythingLive    385d              (R )
+DidNotHitAnythingLive    3853              (R )
 DigitBlank               3f08                  
 DigitData                3d00              (R )
-DigitDataLo              3bc1              (R )
+DigitDataLo              3bd9              (R )
 DigitDataMissile         3c00              (R )
-DigitDataMissileLo       3acf              (R )
+DigitDataMissileLo       3b07              (R )
 DirectionChosen          158f              (R )
 DirectionIsFine          158e              (R )
 DirectionsFine           175c              (R )
@@ -202,7 +206,7 @@ DoDraw10                 332a              (R )
 DoDraw10b                33ab              (R )
 DoDraw11                 3366              (R )
 DoDraw11b                33e2              (R )
-DoneDrawingTitleScreen   3a81              (R )
+DoneDrawingTitleScreen   3ab9              (R )
 DoneFiring               18e3              (R )
 DoneMakingWallsFlash     10af              (R )
 DoneMoving               182f              (R )
@@ -227,9 +231,9 @@ DoNotUpdateChannel1Decay 15b0              (R )
 DOUBLEWIDTHBALL          0010              (R )
 DOUBLEWIDTHMISSILE       0010              (R )
 DRAWBASE                 0004              (R )
-DrawTitleScreenFast      3a70              (R )
-DrawTitleScreenModerately 3a66              (R )
-DrawTitleScreenSubroutine 3a4a              (R )
+DrawTitleScreenFast      3aa8              (R )
+DrawTitleScreenModerately 3a9e              (R )
+DrawTitleScreenSubroutine 3a82              (R )
 DrumBeatSnaresOnly1      1c44              (R )
 DrumBeatWithKick1        1c4c              (R )
 DrumFillSnaresOnly1      1c46              (R )
@@ -297,20 +301,20 @@ EnemyTank3Routine        150c
 ENEMYTANKBASESPEED0      0008              (R )
 ENEMYTANKBASESPEED1      0008              (R )
 ENEMYTANKBASESPEED2      0008              (R )
-EnemyTankDied            3858              (R )
+EnemyTankDied            384e              (R )
 EnemyTankDirectionRoutine 1488              (R )
 EnemyTankEliminateDiagonal 1751              (R )
-EnemyTankHit             39fd              (R )
+EnemyTankHit             3a35              (R )
 EnemyTankIsFarAimForPlayer 154b              (R )
 EnemyTankPossibleReversal 141c                  
-EnemyTankRespawnRoutine  3992              (R )
-EnemyTanksNotMovedOffScreen 39e8                  
+EnemyTankRespawnRoutine  39ca              (R )
+EnemyTanksNotMovedOffScreen 3a20                  
 ENEMYTANKSOUND           0002              (R )
 ENEMYTANKSOUNDFREQ       001e              (R )
 ENEMYTANKSOUNDLENGTH     0032              (R )
 ENEMYTANKSOUNDTONE       0008              (R )
 ENGINESOUND              0003                  
-EntryPointRowOffsetTable 3ac9              (R )
+EntryPointRowOffsetTable 3b01              (R )
 Fanfare1Pattern          1bdd              (R )
 Fanfare2Pattern          1bed              (R )
 Fanfare3Pattern          1bfd              (R )
@@ -334,17 +338,17 @@ FoundAllBricks           1178              (R )
 FoundAvailableBall       184e              (R )
 FoundAvailableEnemyBall  12a0              (R )
 FoundBrick               115e              (R )
-FoundDeadTankNowKill     3899              (R )
+FoundDeadTankNowKill     388f              (R )
 FoundGoodDirection       1584              (R )
 FoundPFWithBricks        1152              (R )
-FoundRespawnPosition     39a1              (R )
+FoundRespawnPosition     39d9              (R )
 FoundWhetherBlockExists  196c              (R )
-FoundWhichRowBulletIsIn  3904              (R )
+FoundWhichRowBulletIsIn  393c              (R )
 Four                     3d1c              (R )
 FrameCounter             0080              (R )
 Frequency                1b19              (R )
 FREQUENCY_BITS           00f0                  
-FrequencyBank2           3b6b              (R )
+FrequencyBank2           3b83              (R )
 FrequencyTable           1c6a              (R )
 GameAlreadyStarted       105a              (R )
 GameNotOn                110e              (R )
@@ -368,7 +372,7 @@ GENERATINGMAZE           0040              (R )
 GetNewNote               1643              (R )
 GetNewPercussion         1698              (R )
 GetPercussionSound       16ba              (R )
-GetRowBulletIsInLoop     38fc              (R )
+GetRowBulletIsInLoop     3934              (R )
 GOLD                     0010                  
 GRAY                     0000                  
 GREEN                    00b0                  
@@ -412,8 +416,8 @@ KernelLoop               3314              (R )
 KernelRoutineGame        3003              (R )
 KICKPITCH                001e              (R )
 KICKSOUND                000f              (R )
-KillAllTanksBonus        39c5              (R )
-KILLTANKSCORE            0100              (R )
+KillAllTanksBonus        39fd              (R )
+KILLTANKSCORE            0050              (R )
 LastPassThroughMazeGeneration 3651              (R )
 LastRowCheckRightBlock   1942              (R )
 LastRowL                 00ea              (R )
@@ -433,7 +437,7 @@ LevelCompleteNow         119f              (R )
 LEVELCOMPLETETIMER       0003              (R )
 LEVELENDBRICKSCORE       0010              (R )
 LEVELENDTANKSPEEDBOOST   0004                  
-LevelNotComplete         3a18              (R )
+LevelNotComplete         3a50              (R )
 LevelStartFanfarePattern 1c14                  
 LevelStartSong           1c0d              (R )
 LIGHTBLUE                0090                  
@@ -474,7 +478,7 @@ MissileX                 00a9              (R )
 MissileY                 00ae              (R )
 MissileYTemp             00b6              (R )
 MissileZero              3c3d              (R )
-MoreThanFourTanksRemainingStill 3a31              (R )
+MoreThanFourTanksRemainingStill 3a69              (R )
 MoreThanOneAllowedDirection 14e0              (R )
 MoreThanTwoAllowedDirections 14e0                  
 MoveAllTanksOffScreenSubroutine 122f              (R )
@@ -487,8 +491,8 @@ MoveEnemyTanksSubroutine 135d              (R )
 MovementAllowed          179f              (R )
 MovementMask             1bb6              (R )
 MoveTankOnYAxis          1276              (R )
-MoveTanksOffscreenLoop   1235              (R )
 MoveTanksOffScreenLoop   1124              (R )
+MoveTanksOffscreenLoop   1235              (R )
 MusicIsNotPlaying        15b6              (R )
 MusicIsPlaying           15bb              (R )
 MusicRoutine             15b0                  
@@ -496,7 +500,7 @@ NewGameZeroLoop          1218              (R )
 NewGameZeroLoopEntryPoint 121a              (R )
 NewSpeedNotTooHigh       1346              (R )
 NewTankSpeed             1b94                  
-NextPowerUpActivation    3841              (R )
+NextPowerUpActivation    391c              (R )
 Nine                     3d3f              (R )
 NO_ILLEGAL_OPCODES       0000 ????         (R )
 NoAdjustMissileY         3111              (R )
@@ -507,7 +511,7 @@ NoAvailableEnemyBalls    131a
 NoBulletMovement         3586              (R )
 NoBulletSound            186f              (R )
 NoBulletToBaseCollision  37c1              (R )
-NoBulletToTankCollision  38b7              (R )
+NoBulletToTankCollision  38a7              (R )
 NoCarveDownInThisColumn  3644              (R )
 NoChangeToGameOverSound  10f6              (R )
 NoChangeToGameOverVolume 10f6              (R )
@@ -518,19 +522,19 @@ NoDown                   1819              (R )
 NOISESOUND               0008                  
 NoLeft                   1803              (R )
 NOMOVEMENT               0000              (R )
-NonPlayerTankHitPowerUp  385d              (R )
+NonPlayerTankHitPowerUp  3853              (R )
 NoPercussion             16b9              (R )
 NoPercussionDownBeat     15fa              (R )
-NoPointsForEnemyOwnGoals 38b4              (R )
-NoPointsForGettingShot   38b4              (R )
-NoPowerUp                38dc              (R )
+NoPointsForEnemyOwnGoals 38a4              (R )
+NoPointsForGettingShot   38a4              (R )
+NoPowerUp                38cc              (R )
 NoRight                  17ed              (R )
-NoScoreForWallDestructionByEnemies 38f5              (R )
+NoScoreForWallDestructionByEnemies 392d              (R )
 NoShiftToRhythmPattern   1714              (R )
-NoSoundForBrickExplosion 395d                  
+NoSoundForBrickExplosion 3995                  
 NoSpecialAdjustmentToPlayer0Top 30f0              (R )
-NoTankCollision          385d              (R )
-NoTankCollisionsAtAll    3860                  
+NoTankCollision          3853              (R )
+NoTankCollisionsAtAll    3856                  
 NoTankReversal           143b              (R )
 NoTankSoundForEnemyTanks 17d4              (R )
 NotAtBottomEdge          1ab8                  
@@ -557,14 +561,14 @@ NotPlayerTankSkipNotMovingCheck 3043              (R )
 NoTriggerToStartGameClearTriggerDebounce 104b              (R )
 NoUp                     182f              (R )
 NoUpdateBulletFractionalThisFrame 3522              (R )
-NoUpdateToPowerUpCountdown 3a2b              (R )
+NoUpdateToPowerUpCountdown 3a63              (R )
 NoVerticalTankMovement   1289              (R )
 NoWallD                  1ab8              (R )
 NoWallL                  1a55              (R )
 NoWallR                  1a79              (R )
 NoWallU                  1a97              (R )
 NumberOfBitsSet          1ba6              (R )
-NumberOfBitsSetBank2     3b79                  
+NumberOfBitsSetBank2     3b91                  
 NUSIZ0                   0004              (R )
 NUSIZ1                   0005              (R )
 OCTWIDTHBALL             0030                  
@@ -582,10 +586,10 @@ OverTimeOverscan         11de              (R )
 OverTimeVBLANK           3178              (R )
 P0CollisionTable         378d              (R )
 P0DIFF                   0040                  
-P0M0Color                3af8              (R )
+P0M0Color                3b30              (R )
 P1CollisionTable         378f              (R )
 P1DIFF                   0080                  
-P1M1Color                3afa              (R )
+P1M1Color                3b32              (R )
 PATTERNEND               00ff                  
 PERCUSSIONCUTOFF         0003              (R )
 PercussionDistortionTable 1c56                  
@@ -600,10 +604,10 @@ PF2                      000f              (R )
 PF2Left                  00cc              (R )
 PF2Right                 00d6              (R )
 PFMaskLookup             1b5b              (R )
-PFMaskLookupBank2        3b20              (R )
-PFPointer                3b89              (R )
+PFMaskLookupBank2        3e38              (R )
+PFPointer                3ba1              (R )
 PFRegisterLookup         1b00              (R )
-PFRegisterLookupBank2    3b10              (R )
+PFRegisterLookupBank2    3e28              (R )
 PINKYADJUSTMENTX         0010              (R )
 PINKYADJUSTMENTY         000e              (R )
 PITFALLSOUND             0007                  
@@ -614,19 +618,19 @@ Player1Ptr               00be              (R )
 PLAYERDEATHCOUNTBITS     0007              (R )
 PLAYERDEATHCOUNTMAX      0007              (R )
 PlayerExplodingCannotShoot 183f              (R )
-PlayerHasDiedSevenTimes  398a              (R )
-PlayerHasNotDiedSevenTimes 3984                  
-PlayerHitTank            39e6              (R )
+PlayerHasDiedSevenTimes  39c2              (R )
+PlayerHasNotDiedSevenTimes 39bc                  
+PlayerHitTank            3a1e              (R )
 PLAYERINITIALDELAY       0000              (R )
 PlayerNotMissile         3028              (R )
 PlayerOnScreen           1504              (R )
 PlayerOnScreenCanShoot   1842              (R )
 PLAYERRESPAWNDELAY       000e              (R )
-PlayerStartingStatus     3971              (R )
+PlayerStartingStatus     39a9              (R )
 PLAYERSTARTINGX          0008              (R )
 PLAYERSTARTINGY          0008              (R )
 PlayerTankBulletFiring   1833              (R )
-PlayerTankDead           385d                  
+PlayerTankDead           3853                  
 PlayerTankDoesNotReverse 143b              (R )
 PlayerTankDown1          3dbd                  
 PlayerTankDown1b         3dc4                  
@@ -636,13 +640,13 @@ PlayerTankDown3          3e4d              (R )
 PlayerTankDown3b         3e54                  
 PlayerTankDown4          3e5b                  
 PlayerTankDown4b         3e62                  
-PlayerTankDownFrame      3ba9                  
+PlayerTankDownFrame      3bc1                  
 PLAYERTANKENGINEFREQ     0008              (R )
 PLAYERTANKENGINELENGTH   0003              (R )
 PLAYERTANKENGINESOUND    0007              (R )
 PLAYERTANKENGINETONE     0002              (R )
 PLAYERTANKENGINEVOLUME   0003              (R )
-PlayerTankHit            3a31              (R )
+PlayerTankHit            3a69              (R )
 PlayerTankMovementRoutine 13d6              (R )
 PlayerTankMovingSetRegularGraphicsPointers 303a              (R )
 PlayerTankOnscreenMoveIt 1410              (R )
@@ -654,34 +658,37 @@ PlayerTankRight3         3da1
 PlayerTankRight3b        3da8                  
 PlayerTankRight4         3daf                  
 PlayerTankRight4b        3db6                  
-PlayerTankRightFrame     3bb9                  
+PlayerTankRightFrame     3bd1                  
 PLAYERTANKSPEED          0003              (R )
-PlayerTankUp1            3e69                  
-PlayerTankUp1b           3e70                  
-PlayerTankUp2            3e77                  
-PlayerTankUp2b           3e7e                  
-PlayerTankUp3            3e85                  
-PlayerTankUp3b           3e8c                  
-PlayerTankUp4            3e93                  
-PlayerTankUp4b           3e9a                  
-PlayerTankUpFrame        3b99                  
+PlayerTankUp1            3cbd                  
+PlayerTankUp1b           3cc4                  
+PlayerTankUp2            3ccb                  
+PlayerTankUp2b           3cd2                  
+PlayerTankUp3            3cd9                  
+PlayerTankUp3b           3ce0                  
+PlayerTankUp4            3ce7                  
+PlayerTankUp4b           3cee                  
+PlayerTankUpFrame        3bb1                  
 PLAYERTANKVOLUME         0008                  
 PlayerX                  00a7              (R )
 PlayerY                  00ac              (R )
 PlayerYTemp              00b5              (R )
-PlayLongSound            3a88              (R )
+PlayLongSound            3ac0              (R )
 PlayMusic                15ed              (R )
 PlayMusicSound           16ad              (R )
 PlayRegularNote          15fe              (R )
-PlayShortSound           3a9a              (R )
+PlayShortSound           3ad2              (R )
 PlaySoundGameNotOver     15a0              (R )
-PositionASpriteSubroutineBank2 3aa0              (R )
+PositionASpriteSubroutineBank2 3ad8              (R )
 PositioningLoop          3237              (R )
 POWERUPACTIVATEDBITS     00c0              (R )
 PowerUpBonusRoutine      1ace              (R )
 POWERUPCOUNTDOWNBITS     0038              (R )
 PowerUpImage1            3de7                  
 PowerUpImage1b           3dee                  
+PowerUpImage2            3e6a                  
+PowerUpImage3            3e76                  
+PowerUpImage4            3e82                  
 POWERUPSCOREBONUS        1000              (R )
 PreKernelSetupLoop2      30f2              (R )
 PreventReverses          1b97                  
@@ -689,7 +696,7 @@ PRIORITYPF               0004              (R )
 ProcessDirections        17aa              (R )
 PURPLE                   0050                  
 PURPLEBLUE               0060                  
-PutTitleGraphicsInPlayfieldLoop 3a4c              (R )
+PutTitleGraphicsInPlayfieldLoop 3a84              (R )
 QUADWIDTHBALL            0020                  
 QUADWIDTHMISSILE         0020              (R )
 RandomNumber             0082              (R )
@@ -705,7 +712,7 @@ RegularPlayerTankSpeed   1781              (R )
 RegularWallColor         3169              (R )
 RemoveBulletsFromScreenGameOverLoop 10a0              (R )
 RemoveBulletsFromScreenLoop 374f              (R )
-RemovedWallBlock         3952              (R )
+RemovedWallBlock         398a              (R )
 RESBL                    0014                  
 RESET                    0001                  
 RESETNotReleased         11fb              (R )
@@ -724,19 +731,20 @@ RIGHTFIVE                00b0
 RIGHTFOUR                00c0                  
 RIGHTONE                 00f0              (R )
 RIGHTSEVEN               0090                  
-RightSideEnemyTankRespawn 39b2              (R )
+RightSideEnemyTankRespawn 39ea              (R )
 RIGHTSIX                 00a0                  
 RIGHTTHREE               00d0              (R )
 RIGHTTWO                 00e0              (R )
-RotationEven             3af4              (R )
+RotationEven             3b2c              (R )
 RotationLoop             3015              (R )
-RotationOdd              3af3              (R )
-RotationTables           3aef              (R )
+RotationOdd              3b2b              (R )
+RotationTables           3b27              (R )
 ROWHEIGHT                0007              (R )
 RSYNC                    0003                  
 SAWSOUND                 0001                  
 Score                    0087              (R )
 SCORECOLOR               000c              (R )
+ScoreForKillingTank      38d8              (R )
 ScoreKernelLoop          31ad              (R )
 SCOREPF                  0002                  
 ScorePtr                 00f1              (R )
@@ -758,7 +766,7 @@ SetREFPLoop              3202              (R )
 SetStartingEnemyTankLocationsLoop 3739              (R )
 SetTankColors            31e0                  
 SetTankGfxPtr            3098              (R )
-SetTankStatusForDeadTanks 38b9              (R )
+SetTankStatusForDeadTanks 38a9              (R )
 SetupScorePtrsLoop       312e              (R )
 SetUpTankInitialValues   1247              (R )
 SetWallColor             316b              (R )
@@ -776,7 +784,7 @@ Six                      3d2a              (R )
 SixteenthUpBeat          1720              (R )
 SkipCreatingConnectingPassageLeft 36e2              (R )
 SkipCreatingConnectingPassageRight 36ca              (R )
-SkipDrawingTitleScreenThisFrame 3a9d              (R )
+SkipDrawingTitleScreenThisFrame 3ad5              (R )
 SkipEOR                  11e9              (R )
 SkipReadingControllers   1773              (R )
 SNARE2PITCH              000c              (R )
@@ -786,7 +794,7 @@ SNAREPITCH               0006              (R )
 SNARESOUND               0008              (R )
 SongIndex                00ec              (R )
 SoundLength              1b22              (R )
-SoundLengthBank2         3b72              (R )
+SoundLengthBank2         3b8a              (R )
 SoundSubroutine          1599              (R )
 SPEEDBONUS               0002              (R )
 SQUARE_19                0000              (R )
@@ -797,13 +805,13 @@ SQUARE_31                0040              (R )
 SQUARESOUND              0004              (R )
 Start                    1000              (R )
 Start2                   3000              (R )
-StartingTankStatus       3b60              (R )
-StartingTankXPosition    3b30              (R )
-StartingTankYPosition    3b48              (R )
+StartingTankStatus       3b78              (R )
+StartingTankXPosition    3b48              (R )
+StartingTankYPosition    3b60              (R )
 StartNewGame             1212              (R )
 StartNewLevel            1221              (R )
 StartSoundSubroutine     1971              (R )
-StartSoundSubroutineBank2 3a34              (R )
+StartSoundSubroutineBank2 3a6c              (R )
 SWACNT                   0281                  
 SWBCNT                   0283                  
 SWCHA                    0280              (R )
@@ -818,8 +826,8 @@ T1024T                   0297
 TAN                      00e0                  
 TANGREEN                 00d0                  
 TANKAISWITCH             0040              (R )
-TankAlreadyDeadCannotBeShot 38b7              (R )
-TankAlreadyDeadCannotDie 385d              (R )
+TankAlreadyDeadCannotBeShot 38a7              (R )
+TankAlreadyDeadCannotDie 3853              (R )
 TANKAREAHEIGHT           004d              (R )
 TankCollisionBitsEven    3789              (R )
 TankCollisionBitsOdd     3785              (R )
@@ -829,7 +837,7 @@ TANKCOLOR1               0016              (R )
 TANKCOLOR2               008c              (R )
 TANKCOLOR3               0044              (R )
 TANKCOLOR4               00f4              (R )
-TankDeadStatus           39c1              (R )
+TankDeadStatus           39f9              (R )
 TankDeadStatusBank0      1c6f                  
 TANKDEADWAIT             0002              (R )
 TANKDEADWAITPLAYER       0008              (R )
@@ -844,7 +852,7 @@ TankDownAnimated3        3ca1
 TankDownAnimated3b       3ca8                  
 TankDownAnimated4        3caf                  
 TankDownAnimated4b       3cb6                  
-TankDownFrame            3ba1              (R )
+TankDownFrame            3bb9              (R )
 TankFractional           0099              (R )
 TankFractionalAddition   1b2b              (R )
 TankGfxHorizontal        3d4d                  
@@ -862,30 +870,30 @@ TANKLEFT                 0040              (R )
 TankMovementCounter      0081              (R )
 TankMovementSubroutine   178c              (R )
 TankNotAboveMaze         14a2              (R )
-TankNotDeadYetKillIt     3845              (R )
+TankNotDeadYetKillIt     3841              (R )
 TankNotFacingDown        3081              (R )
 TankNotFacingRight       3091              (R )
 TankNotFacingUp          3071              (R )
 TankNotInPlay            1372              (R )
 TankNotInPlayCannotShoot 131a              (R )
 TankNotLeftOfMaze        14ac              (R )
-TankNotNewlyDead         38e2              (R )
+TankNotNewlyDead         38d2              (R )
 TankNotOffLeftEdge       13c4              (R )
 TankNotOffRightEdge      13cc              (R )
 TankNotOnscreen          13a3              (R )
-TankNotOnScreenCannotDie 385d              (R )
+TankNotOnScreenCannotDie 3853              (R )
 TankNotTurning           17be              (R )
 TANKOFFSCREEN            007f              (R )
 TankOffScreen            1394              (R )
-TankOffScreenCannotBeKilled 38b7                  
+TankOffScreenCannotBeKilled 38a7                  
 TankOffscreenCannotShoot 131a              (R )
 TANKONSCREENLEFT         0010              (R )
 TankOnscreenMoveIt       1412              (R )
 TANKONSCREENRIGHT        0088              (R )
 TANKONSCREENTOP          004d              (R )
-TankRespawnRoutine       3979              (R )
-TankRespawnRoutineWrapperEnemy 3966              (R )
-TankRespawnRoutineWrapperPlayer 395e              (R )
+TankRespawnRoutine       39b1              (R )
+TankRespawnRoutineWrapperEnemy 399e              (R )
+TankRespawnRoutineWrapperPlayer 3996              (R )
 TANKRESPAWNWAIT          000e              (R )
 TankReverseDirection     1420                  
 TANKRIGHT                0080              (R )
@@ -897,7 +905,7 @@ TankRightAnimated3       3d69
 TankRightAnimated3b      3d70                  
 TankRightAnimated4       3d77                  
 TankRightAnimated4b      3d7e                  
-TankRightFrame           3bb1              (R )
+TankRightFrame           3bc9              (R )
 TankShootingVertically   12ea                  
 TANKSPEED                000e              (R )
 TANKSPEED0               0000              (R )
@@ -919,8 +927,8 @@ TANKSPEED9               0009
 TanksRemaining           008a              (R )
 TANKSREMAININGCOLOR      00aa              (R )
 TanksRemainingGfx        3df6              (R )
-TanksRemainingPF1Mask    3ad9              (R )
-TanksRemainingPF2Mask    3ae4              (R )
+TanksRemainingPF1Mask    3b11              (R )
+TanksRemainingPF2Mask    3b1c              (R )
 TanksRemainingSpeedBoost 1b7d                  
 TankStatus               0095              (R )
 TankTargetAdjustmentX    1b39              (R )
@@ -934,7 +942,7 @@ TankUpAnimated3          3c69
 TankUpAnimated3b         3c70                  
 TankUpAnimated4          3c77                  
 TankUpAnimated4b         3c7e                  
-TankUpFrame              3b91              (R )
+TankUpFrame              3ba9              (R )
 TankX                    008d              (R )
 TankY                    0091              (R )
 Temp                     00ed              (R )
@@ -950,15 +958,15 @@ TIM64T                   0296              (R )
 TIM8T                    0295                  
 TimeForEnemyTankToTurn   1498              (R )
 TIMINT                   0285                  
-TitleGraphics            3bcb              (R )
-TitleGraphicsEnd         3bf3              (R )
+TitleGraphics            3e00              (R )
+TitleGraphicsEnd         3e28              (R )
 TITLESCREEN              0010              (R )
 TitleScreenSong          1bba              (R )
 Tone                     1b10              (R )
-ToneBank2                3b64              (R )
+ToneBank2                3b7c              (R )
 TopLeftCornerNotEnclosed 36a0              (R )
 TopRightCornerNotEnclosed 36b2              (R )
-TopRowEnemyTankRespawn   39b6              (R )
+TopRowEnemyTankRespawn   39ee              (R )
 TriggerDebounced         1864              (R )
 TRIGGERDEBOUNCEFLAG      0080              (R )
 TRIGGERDEBOUNCEVALUE     000f                  
@@ -979,7 +987,7 @@ TWOCOPIESWIDE            0004
 UpdateMazeNumber         35ac              (R )
 UpdateRandomNumber       11e2              (R )
 UpdateRandomNumberBank2  3729              (R )
-UsePlayerRespawnPosition 399f              (R )
+UsePlayerRespawnPosition 39d7              (R )
 UsePowerUpGraphic        305a              (R )
 VBLANK                   0001              (R )
 VBLANK_TIMER             002c              (R )

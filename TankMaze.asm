@@ -105,7 +105,7 @@
 	    DONE Powerup that kills all tanks on screen - give 1000 points per tank killed 
 	        STILL CONSIDERING (plus 500?)
 	    DONE Bricks are worth 5 points during level, all remaining bricks are worth 10 pts each at end of level
-	    Level end worth 100xlevel
+	    DONE Level end worth 100xlevel
     fix scanline count
 	Logic for when levels wrap .... not worried about this.
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
@@ -482,7 +482,7 @@ SNARE2PITCH	=	12
 ;--end SOUND CONSTANTS
 
 WALLDESTRUCTIONSCORE    =   $0005
-KILLTANKSCORE           =   $0100
+KILLTANKSCORE           =   $0050
 LEVELENDBRICKSCORE      =   $0010
 
 ;--GameStatus flags
@@ -5512,10 +5512,8 @@ TankHitLiveTank
     ;--third play powerup sound (only if player hit it!)
    ; sta TankX,X
     jmp TankAlreadyDeadCannotDie        ;branch always 
-    
 
-NextPowerUpActivation
-    .byte %01000000, %10000000, %11000000, %11000000    
+
     
 TankNotDeadYetKillIt    
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
@@ -5524,11 +5522,8 @@ TankNotDeadYetKillIt
     ;--tank is onscreen
     tya ;--set flags based on which tank
     bne EnemyTankDied   ;only get points if player runs into tank, not if tanks run into each other.
- 	;--add KILLTANKSCORE to score 
-	lda #>KILLTANKSCORE
-	sta Temp
-	lda #<KILLTANKSCORE
-	jsr IncreaseScoreSubroutine
+ 	;--score for killing enemy tank
+ 	jsr ScoreForKillingTank
 	;--turn off player movement sound
 ; 	lda #0
 ; 	sta AUDV0
@@ -5605,11 +5600,13 @@ FoundDeadTankNowKill
 	cmp #2
 	bcs NoPointsForEnemyOwnGoals
 	txa ;set flags based on X
-	beq NoPointsForGettingShot
-	lda #>KILLTANKSCORE
-	sta Temp
-	lda #<KILLTANKSCORE
-	jsr IncreaseScoreSubroutine
+	beq NoPointsForGettingShot	
+	jsr ScoreForKillingTank
+	
+; 	lda #>KILLTANKSCORE ;%%%%
+; 	sta Temp
+; 	lda #<KILLTANKSCORE
+; 	jsr IncreaseScoreSubroutine
 
 NoPointsForGettingShot		
 NoPointsForEnemyOwnGoals
@@ -5727,6 +5724,64 @@ CheckNextTankForNewDeath
 ; DoneWithCheckBulletTankCollisionOuterLoop
 	
 	jmp ReturnFromBSSubroutine2
+
+;****************************************************************************
+
+
+    SUBROUTINE    
+ScoreForKillingTank
+    txa
+    pha ;save X
+    lda MazeGenerationPass      ;used for powerups and etc during level
+    and #PLAYERDEATHCOUNTBITS
+    bne .PlayerDiedNoExtraScore
+    ;--else, give number of tanks killed so far (minus 1) x 25
+    lda MazeNumber
+    asl
+    clc
+    adc #6
+    cmp #20
+    bcc .FoundInitialTankCount
+    lda #20
+.FoundInitialTankCount
+    sec
+    sbc TanksRemaining
+    tax
+    sed
+    lda #0
+    sta Temp
+    sta Temp+1
+.TankScoreMultiplierLoop
+    dex
+    bmi .DoneTankScoreMultiplierLoop
+    lda Temp+1
+    clc
+    adc #$25
+    sta Temp+1
+    lda Temp
+    adc #0
+    sta Temp
+    jmp .TankScoreMultiplierLoop        ;can probably make this a BCC 
+.DoneTankScoreMultiplierLoop
+    cld                                 ;probably not necessary, the subroutine below just sets it again
+    lda Temp+1
+    jsr IncreaseScoreSubroutine
+.PlayerDiedNoExtraScore
+	lda #>KILLTANKSCORE
+	sta Temp
+	lda #<KILLTANKSCORE
+	jsr IncreaseScoreSubroutine
+	pla
+	tax ;--restore X
+    rts        
+
+    
+;****************************************************************************
+    
+    
+NextPowerUpActivation
+    .byte %01000000, %10000000, %11000000, %11000000    
+
 
 ;****************************************************************************
 
@@ -6217,20 +6272,6 @@ BulletRightBank2
 	
 	
 	
-PFRegisterLookupBank2
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
-
-	
-	
-PFMaskLookupBank2
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-	.byte $C0, $30, $0C, $03
-	.byte $03, $0C, $30, $C0
-
 StartingTankXPosition
 	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY01STARTINGX, ENEMY02STARTINGX, ENEMY11STARTINGX, ENEMY12STARTINGX, ENEMY21STARTINGX, ENEMY22STARTINGX
 	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2, ENEMY2STARTINGX2
@@ -6283,19 +6324,6 @@ DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
 	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
-TitleGraphics
-    ;-----PF1--------PF2--------PF2--------PF1------
-    .byte %00001000, %11111100, %11111100, %00001000
-    .byte %00001000, %10001100, %10001100, %00001000
-    .byte %00001111, %11101111, %11101111, %00001111
-    .byte %00000111, %11111111, %11111111, %00000111
-    .byte %00000000, %00000000, %00000000, %00000000
-    .byte %10101010, %01110101, %01001010, %01010111
-    .byte %10101010, %01010101, %01001110, %00110101
-    .byte %10101010, %01010101, %01001010, %01010101
-    .byte %11111010, %01110111, %11101110, %01110101
-    .byte %11011010, %01110111, %11101110, %01110101
-TitleGraphicsEnd				
 	
 	
     PAGEALIGN 3
@@ -6544,8 +6572,71 @@ TankDownAnimated4b
 		.byte #%11111100;--
 		.byte #%00011011;--
 		.byte 0
+PlayerTankUp1   = * - 1
+        .byte #%11011011;--2
+        .byte #%10111101;--4
+        .byte #%10111101;--6
+        .byte #%11011011;--8
+        .byte #%11011011;--0
+        .byte #%11011011;--2
 
-		
+PlayerTankUp1b
+        .byte 0
+        .byte #%11000000;--1
+        .byte #%00111101;--3
+        .byte #%10111100;--5
+        .byte #%00011011;--7
+        .byte #%11011000;--9
+        .byte #%00011011;--1
+        .byte 0        
+PlayerTankUp2   = * - 1
+        .byte #%00011011;--2
+        .byte #%10111100;--4
+        .byte #%00111101;--6
+        .byte #%11011000;--8
+        .byte #%00011011;--0
+        .byte #%11011000;--2
+PlayerTankUp2b
+        .byte 0
+        .byte #%11000011;--1
+        .byte #%10111101;--3
+        .byte #%10111101;--5
+        .byte #%11011011;--7
+        .byte #%11011011;--9
+        .byte #%11011011;--1
+        .byte 0
+PlayerTankUp3   = * - 1
+        .byte #%11011011;--2
+        .byte #%10111101;--4
+        .byte #%10111101;--6
+        .byte #%11011011;--8
+        .byte #%11011011;--0
+        .byte #%11011011;--2
+PlayerTankUp3b
+        .byte 0
+        .byte #%00000011;--1
+        .byte #%10111100;--3
+        .byte #%00111101;--5
+        .byte #%11011000;--7
+        .byte #%00011011;--9
+        .byte #%11011000;--1
+        .byte 0
+PlayerTankUp4   = * - 1
+        .byte #%11011000;--2
+        .byte #%00111101;--4
+        .byte #%10111100;--6
+        .byte #%00011011;--8
+        .byte #%11011000;--0
+        .byte #%00011011;--2
+PlayerTankUp4b
+        .byte 0
+        .byte #%11000011;--1
+        .byte #%10111101;--3
+        .byte #%10111101;--5
+        .byte #%11011011;--7
+        .byte #%11011011;--9
+        .byte #%11011011;--1
+        .byte 0			
 		
 		PAGEALIGN 4
 	
@@ -6845,24 +6936,6 @@ PowerUpImage1b
         
         
         
-; TankScoreImage = * - 1
-;         .byte #%00000000;--2
-;         .byte #%11101010;--4
-;         .byte #%01010101;--6
-;         .byte #%11001010;--8
-;         .byte #%00000000;--10
-;         .byte #%00000000;--12
-; TankScoreImageb
-;         .byte 0
-;         .byte #%00000000;--1
-;         .byte #%00000000;--3
-;         .byte #%01010101;--5
-;         .byte #%01010101;--7
-;         .byte #%01000000;--9
-;         .byte #%00000000;--11
-;         .byte 0
-        
-        
         
 TanksRemainingGfx
 ;	.byte 0
@@ -6879,13 +6952,40 @@ TanksRemainingGfx
 	
 	PAGEALIGN 5
 	
-    ALIGNGFXDATA 3
-;---Graphics Data from PlayerPal 2600---
-;--graphics data for player tank.  needs to be split and aligned
+	;%%% put crap here
+TitleGraphics
+    ;-----PF1--------PF2--------PF2--------PF1------
+    .byte %00001000, %11111100, %11111100, %00001000
+    .byte %00001000, %10001100, %10001100, %00001000
+    .byte %00001111, %11101111, %11101111, %00001111
+    .byte %00000111, %11111111, %11111111, %00000111
+    .byte %00000000, %00000000, %00000000, %00000000
+    .byte %10101010, %01110101, %01001010, %01010111
+    .byte %10101010, %01010101, %01001110, %00110101
+    .byte %10101010, %01010101, %01001010, %01010101
+    .byte %11111010, %01110111, %11101110, %01110101
+    .byte %11011010, %01110111, %11101110, %01110101
+TitleGraphicsEnd				
+	
 
-        
-        
-        
+PFRegisterLookupBank2
+	.byte 0, 0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
+
+	
+	
+PFMaskLookupBank2
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+	.byte $C0, $30, $0C, $03
+	.byte $03, $0C, $30, $C0
+
+
+
+    ALIGNGFXDATA 3
+       
         
         
 PlayerTankDown3 ;= * - 1
@@ -6922,71 +7022,49 @@ PlayerTankDown4b
         .byte #%11011000;--1
         .byte 0
 
-PlayerTankUp1   = * - 1
-        .byte #%11011011;--2
-        .byte #%10111101;--4
-        .byte #%10111101;--6
-        .byte #%11011011;--8
-        .byte #%11011011;--0
-        .byte #%11011011;--2
-
-PlayerTankUp1b
-        .byte 0
-        .byte #%11000000;--1
-        .byte #%00111101;--3
-        .byte #%10111100;--5
-        .byte #%00011011;--7
-        .byte #%11011000;--9
-        .byte #%00011011;--1
-        .byte 0        
-PlayerTankUp2   = * - 1
-        .byte #%00011011;--2
-        .byte #%10111100;--4
-        .byte #%00111101;--6
-        .byte #%11011000;--8
-        .byte #%00011011;--0
-        .byte #%11011000;--2
-PlayerTankUp2b
-        .byte 0
-        .byte #%11000011;--1
-        .byte #%10111101;--3
-        .byte #%10111101;--5
-        .byte #%11011011;--7
-        .byte #%11011011;--9
-        .byte #%11011011;--1
-        .byte 0
-PlayerTankUp3   = * - 1
-        .byte #%11011011;--2
-        .byte #%10111101;--4
-        .byte #%10111101;--6
-        .byte #%11011011;--8
-        .byte #%11011011;--0
-        .byte #%11011011;--2
-PlayerTankUp3b
-        .byte 0
-        .byte #%00000011;--1
-        .byte #%10111100;--3
-        .byte #%00111101;--5
-        .byte #%11011000;--7
-        .byte #%00011011;--9
-        .byte #%11011000;--1
-        .byte 0
-PlayerTankUp4   = * - 1
-        .byte #%11011000;--2
-        .byte #%00111101;--4
-        .byte #%10111100;--6
-        .byte #%00011011;--8
-        .byte #%11011000;--0
-        .byte #%00011011;--2
-PlayerTankUp4b
-        .byte 0
-        .byte #%11000011;--1
-        .byte #%10111101;--3
-        .byte #%10111101;--5
-        .byte #%11011011;--7
-        .byte #%11011011;--9
-        .byte #%11011011;--1
-        .byte 0	
+PowerUpImage2
+        .byte #%00000000;--
+        .byte #%00000110;--
+        .byte #%00011110;--
+        .byte #%00111110;--
+        .byte #%01111110;--
+        .byte #%01111100;--
+        .byte #%01110100;--
+        .byte #%01111100;--
+        .byte #%01111000;--
+        .byte #%01100000;--
+        .byte #%00110000;--
+        .byte #%00011100;--
+PowerUpImage3
+        .byte #%00000000;--
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%01111110;--
+        .byte #%01111110;--
+        .byte #%01111110;--
+        .byte #%11111111;--
+        .byte #%10000001;--
+        .byte #%10000001;--
+        .byte #%11000011;--
+PowerUpImage4
+        .byte #%00000000;--
+        .byte #%01100000;--
+        .byte #%01111000;--
+        .byte #%01111100;--
+        .byte #%01111110;--
+        .byte #%00111110;--
+        .byte #%00101110;--
+        .byte #%00111110;--
+        .byte #%00011110;--
+        .byte #%00000110;--
+        .byte #%00001100;--
+        .byte #%00111000;--
+        
+        
+        
+    ;--have a lot of space left here. (currently $72 bytes)
 	
         
     PAGEALIGN 6
