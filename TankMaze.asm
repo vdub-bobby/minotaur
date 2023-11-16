@@ -81,26 +81,33 @@
 
 	To do:
 	Difficulty ramping.  Two things:
-	    1. Increase initial difficulty
+	    1. Increase initial difficulty - potentially increase firing rate for level 1
 	    2. Tweak difficulty ramping.  Currently -
 	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
                 could we increase the maximum tank speed?  We can't move tanks more than once every 4 frames, but could we move >1 pixel at a time?
                     could be possible except that we have to make sure they don't overrun intersections.  Which is an issue since bricks are 7 lines tall.
                         what if we made them 8 lines tall
 	        tanks reach maximum fire rate at level 21
-	IN PROGRESS Add explosion graphics  or ????.  STILL TO DO: Player tank also should explode.  And make it so explosion graphic doesn't kill other tanks.
+	DONE Add explosion graphics  or ????.  STILL TO DO: Player tank also should explode.  And make it so explosion graphic doesn't kill other tanks.
     Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
-	Power-Ups - ???
+	IN PROGRESS Power-Ups - ???
 		keep this simple: 
-			speed
+			DONE speed
 			NIX - extra life
-			"bomb" that destroys all tanks on screen (and all walls?)
-			something that slows all enemies down?
-			other?
+			DONE "bomb" that destroys all tanks on screen (and all walls?)
+			??? something that slows all enemies down?
+			??? other?
 			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
 			    would need a byte of RAM (or nibble?) for this
+	Adjust scoring:
+	    50 points for each tank killed plus combo system: for each tank killed before dying in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
+	        Killing all tanks without dying means last tank is worth 525 points.
+	    DONE Powerup that kills all tanks on screen - give 1000 points per tank killed 
+	        STILL CONSIDERING (plus 500?)
+	    DONE Bricks are worth 5 points during level, all remaining bricks are worth 10 pts each at end of level
+	    Level end worth 100xlevel
     fix scanline count
-	Logic for when levels wrap
+	Logic for when levels wrap .... not worried about this.
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
     DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
 	DONE: Music?  Have a free channel but basically zero RAM left.  Could probably squeeze one byte of RAM out.
@@ -1046,26 +1053,11 @@ FoundAllBricks
 	;--play bling sound
     ldy #SCORESOUND
 	jsr StartSoundSubroutine
-	;--add levelx1000 to score
+	;--add levelx100 to score
 	lda MazeNumber
-	asl
-	asl
-	asl
-	asl
 	sta Temp
 	lda #0
-	jsr IncreaseScoreSubroutineBank0 ;can only use this to add up to 9999 to the score.  
-	;--so add top digit of MazeNumber x 1000 to Score separately
-	lda MazeNumber
-	lsr
-	lsr
-	lsr
-	lsr
-	sed
-	clc
-	adc Score
-	sta Score
-	cld
+	jsr IncreaseScoreSubroutineBank0 
 
 	;--remove base
     lda GameStatus
@@ -3001,43 +2993,32 @@ CheckForEnemyTankSubroutine
     ;   and A holds direction (mask against joystick constants)
     ;   return A holding allowed directions
     
-    ;TODO: ignore tanks that are off screen
+    ;--possible optimization: 
+    ;   right now, it checks the same directions for all on-screen tanks.
+    ;   could short-circuit that, e.g., if tank 3 is preventing upward movement, skip upward check for tank 2.
+    ;   if cleverly coded, could shave some cycles off the routine in certain cases, 
+    ;   at the expense of additional code length, and likely making it take longer in other cases
+    ;   If timing gets really tight could investigate.
 
     stx Temp+1  ;--save index into current tank
     sta Temp ;save directions
-;     and #J0LEFT
-;     bne .NotMovingLeft
     ;--moving left.
     ldy #3
-; .CheckForEnemyTankLeftLoop
 .CheckForEnemyTankLoop
     cpy Temp+1  ;--don't bother comparing tank to itself
-;     beq .NoCompareTankToItselfLeft
     bne .NotComparingTankToItself
     jmp .NoCompareTankToItself
 .NotComparingTankToItself
     ;--see if enemy tank is offscreen
-   
-;     lda TankStatus,Y
-;     and #TANKINPLAY
-
-;     jsr IsTankOnScreenBank0
-;     jsr IsTankPartiallyOnScreenBank0        ;why this check ONLY for moving left?
-;     beq .TankOffScreenIgnoreLeft
+    lda TankStatus,Y
+    lsr                 ;get TANKINPLAY bit into carry
+    bcs .TankOnScreenComparePositions
+    jmp .TankOffScreenIgnore
+.TankOnScreenComparePositions 
     lda Temp
     and #J0LEFT
     bne .NotMovingLeft
-
-
-
-    lda TankStatus,Y
-;     and #TANKINPLAY
-;     beq .TankOffScreenIgnoreLeft
-    lsr                 ;get TANKINPLAY bit into carry
-;     bcc .TankOffScreenIgnoreLeft
-    bcs .TankOnScreenComparePositions
-    jmp .TankOffScreenIgnore
-.TankOnScreenComparePositions    
+   
     ;see if an enemy tank within 1.5 blocks (12 pix) to the left
     lda TankX,X
 ;     sec       ;carry set following not-taken BCC branch above
@@ -3057,29 +3038,12 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0LEFT
     sta Temp
-;     bne .CheckMovingRight   ;branch always to the next check
 .ThisTankNotToLeft    
-.NoCompareTankToItselfLeft
-.TankOffScreenIgnoreLeft
-;     dey
-;     bne .CheckForEnemyTankLeftLoop
 .NotMovingLeft
-.CheckMovingRight
     lda Temp
     and #J0RIGHT
     bne .NotMovingRight
     ;--moving right.
-;     ldy #3
-; .CheckForEnemyTankRightLoop
-;     cpy Temp+1  ;--don't bother comparing tank to itself
-;     beq .NoCompareTankToItselfRight
-    ;--see if enemy tank is offscreen
-;     lda TankStatus,Y
-; ;     and #TANKINPLAY
-; ;     beq .TankOffScreenIgnoreRight
-;     lsr         ;get TANKINPLAY bit into carry
-;     bcc .TankOffScreenIgnoreRight
-    ;see if an enemy tank is 
     lda TankX,Y
     sec     
     sbc #1      ;--have to add one so equal values are ignored
@@ -3097,29 +3061,12 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0RIGHT
     sta Temp
-;     bne .CheckMovingUp  ;branch always to the next check
 .ThisTankNotToRight    
-.NoCompareTankToItselfRight
-.TankOffScreenIgnoreRight
-;     dey
-;     bne .CheckForEnemyTankRightLoop
 .NotMovingRight
-.CheckMovingUp
     lda Temp
     and #J0UP
     bne .NotMovingUp
     ;--moving up.
-;     ldy #3
-;     stx Temp+1
-; .CheckForEnemyTankUpLoop
-;     cpy Temp+1  ;--don't bother comparing tank to itself
-;     beq .NoCompareTankToItselfUp
-    ;--see if enemy tank is offscreen
-;     lda TankStatus,Y
-; ;     and #TANKINPLAY
-; ;     beq .TankOffScreenIgnoreUp
-;     lsr         ;get TANKINPLAY bit into carry
-;     bcc .TankOffScreenIgnoreUp
     ;see if an enemy tank is above
     lda TankY,Y
     sec       
@@ -3138,12 +3085,7 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0UP
     sta Temp
-;     bne .CheckMovingDown  ;branch always to the next check
 .ThisTankNotToUp    
-.NoCompareTankToItselfUp
-.TankOffScreenIgnoreUp
-;     dey
-;     bne .CheckForEnemyTankUpLoop
 .NotMovingUp
 
 .CheckMovingDown
@@ -3151,17 +3093,6 @@ CheckForEnemyTankSubroutine
     and #J0DOWN
     bne .NotMovingDown
     ;--moving down.
-;     ldy #3
-;     stx Temp+1
-; .CheckForEnemyTankDownLoop
-;     cpy Temp+1  ;--don't bother comparing tank to itself
-;     beq .NoCompareTankToItselfDown
-;     ;--see if enemy tank is offscreen
-;     lda TankStatus,Y
-; ;     and #TANKINPLAY
-; ;     beq .TankOffScreenIgnoreDown
-;     lsr         ;get TANKINPLAY bit into carry
-;     bcc .TankOffScreenIgnoreDown
     ;see if an enemy tank is below
     lda TankY,X
     sec       
@@ -3180,20 +3111,14 @@ CheckForEnemyTankSubroutine
     lda Temp
     ora #J0DOWN
     sta Temp
-;     bne .DoneWithEnemyTankChecks  ;branch always to the next check
 .ThisTankNotToDown    
-.NoCompareTankToItselfDown
-.TankOffScreenIgnoreDown
 .NoCompareTankToItself
 .TankOffScreenIgnore
     dey
-;     bne .CheckForEnemyTankDownLoop
     beq .DoneWithEnemyTankChecks
     jmp .CheckForEnemyTankLoop
 .NotMovingDown
 .DoneWithEnemyTankChecks
-
-
 
     lda Temp    ;restore allowed directions to Accumulator
 
@@ -3359,13 +3284,8 @@ PowerUpBonusRoutine
     beq .PowerUpNotActivated
     cmp #%10000000
     bne .OnlySpeedBonus
-    ;--else kill all onscreen tanks and give score bonus (of 1000?)
-    lda #>POWERUPSCOREBONUS
-    sta Temp
-    lda #<POWERUPSCOREBONUS
-    jsr IncreaseScoreSubroutineBank0
     
-    ;--kill all tanks
+    ;--kill all tanks (also gives score bonus there)
     brk
     .word KillAllTanksBonus
     ;--also play some kind of sound effect
@@ -3764,8 +3684,8 @@ TankDeadStatusBank0
 	
     echo "----", ($1FD5-*), " bytes left (ROM) at end of Bank 1"
 
-	org $1FD5
-	rorg $1FD5
+	org $1FD1
+	rorg $1FD1
 	
 	;BRK vector comes here, call with:
 	;   BRK
@@ -3824,6 +3744,15 @@ ReturnFromBSSubroutine1
 	nop $1FF8,X     ;+5     23  uses top 3 bits of address to determine which bank to switch to
 	rts             ;+6     29
 EndBankSwitchRoutine1
+
+
+	;--reserve space for hot spots
+
+    org $1FF8
+    rorg $1FF8
+    
+    ds 2
+
 
 	org $1FFC
     rorg $1FFC
@@ -5989,6 +5918,11 @@ KillAllTanksBonus
     lsr
     bcc .TankAlreadyDeadCannotKillAgain
     jsr PlayerHitTank
+    ;--also give score bonus (of 1000?)
+    lda #>POWERUPSCOREBONUS
+    sta Temp
+    lda #<POWERUPSCOREBONUS
+    jsr IncreaseScoreSubroutine
 .TankAlreadyDeadCannotKillAgain
     dex
     bne .KillAllTanksLoop
@@ -6900,7 +6834,7 @@ PowerUpImage1 = * - 1
         .byte #%00000000;--12
 PowerUpImage1b
         .byte 0
-        .byte #%00000000;--1
+        .byte #%00111100;--1
         .byte #%00111100;--3
         .byte #%01111110;--5
         .byte #%11111111;--7
@@ -7096,8 +7030,8 @@ DigitBlank
 
     echo "----", ($3FD5-*), " bytes left (ROM) at end of Bank 2"
 
-   	org $2FD5
-	rorg $3FD5
+   	org $2FD1
+	rorg $3FD1
 	
 BankSwitchSubroutine2 
 	plp             ;+4
@@ -7133,7 +7067,13 @@ ReturnFromBSSubroutine2
 
 	rts             ;+6     28
 
-
+	;--reserve space for hot spots
+    org $2FF8
+    rorg $3FF8
+    
+    ds 2
+	
+	
 ;****************************************************************************	
 
 
