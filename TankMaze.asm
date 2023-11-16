@@ -258,8 +258,11 @@ TANKAREAHEIGHT	=	BLOCKHEIGHT * MAZEROWS
 MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
 DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 
-
-
+;--MazeGenerationPass bits during a level (used to count player deaths and track powerups)
+PLAYERDEATHCOUNTBITS        =   %00000111
+PLAYERDEATHCOUNTMAX         =   7
+POWERUPACTIVATEDBITS        =   %11000000       ;4 possible powerups?
+POWERUPCOUNTDOWNBITS        =   %00111000       ;number of enemies to be killed without any deaths to activate a powerup
 
 ;--TankStatus bits
 TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
@@ -267,10 +270,18 @@ TANKSPEED       =   %00001110       ;ASL ASL ASL ASL ORA #$1F and then added to 
 TANKRESPAWNWAIT =   %00001110       ;shares bits with speed
 TANKINPLAY      =   %00000001       ;this is set when tank has respawned and is coming on screen or fully on screen.  cleared when tank is dead and/or still waiting to be respawned.
 
-TANKRIGHT		=	J0RIGHT
-TANKLEFT		=	J0LEFT
-TANKDOWN		=	J0DOWN
-TANKUP			=	J0UP
+
+    ;--TANKINPLAY cleared and direction = TANKUP means explosion graphic
+    ;--TANKINPLAY cleared and direction != TANKUP means offscreen waiting to respawn
+     
+
+TANKRIGHT		=	J0RIGHT         ;%10000000
+TANKLEFT		=	J0LEFT          ;%01000000
+TANKDOWN		=	J0DOWN          ;%00100000
+TANKUP			=	J0UP            ;%00010000
+
+
+;
 
     ;delay uses TANKRESPAWNWAIT bits (%00001110) so these values have to be even numbers between 2 and 14
 ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
@@ -294,7 +305,7 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
 FIRSTCOLUMNX    =   16
 
-
+POWERUPSCOREBONUS   =   $1000
 
 ;--constants for game over routine
 ;--TankMovementCounter is reused for this routine
@@ -1513,8 +1524,11 @@ TankNotInPlay
 	;--first - is the tank dead and onscreen?  if so, check it's wait and move it offscreen
 	lda TankStatus,X
 	and #TANKDIRECTION  ;--if pointing UP, then it is still onscreen
-	cmp #TANKUP
-	bne TankOffScreen
+	cmp #TANKUP|TANKDOWN    ;tank up AND tank down means powerup displaying on screen
+	beq TankIsActuallyPowerup   ;--actually, any direction means still onscreen
+	cmp #TANKUP             ;tank up only means explosion displaying on screen
+	bne  TankOffScreen
+
 	;--tank is onscreen but dead and sitting there.
 	;   Decrement the wait, once it is done then move it offscreen
 	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
@@ -1531,6 +1545,7 @@ TankNotInPlay
 	brk 
 	.word TankRespawnRoutineWrapperEnemy
 DoNotMoveTankOffscreenYet
+TankIsActuallyPowerup       ;if tank is powerup, we don't do anything.  nothing happens until it is gathered or shot.  (at least for now, maybe later we wait and then remove)
     rts
 TankOffScreen
 	;tank offscreen
@@ -1576,7 +1591,7 @@ TankNotOffRightEdge
 	lda #J0DOWN
 
 SetInitialEnemyTankSpeed
-	jsr SetInitialEnemyTankSpeedRoutine
+	jsr SetInitialEnemyTankSpeedRoutine     ;this also sets TANKINPLAY bit
 	
 	;--set tank fractional so it moves immediately and doesn't turn before it gets onscreen
  	lda #255
@@ -3335,29 +3350,39 @@ PowerUpBonusRoutine
     bcc .PlayerNotInPlayNoBonus
 
     ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
-    
-    ;--get starting tank amount
-    lda MazeNumber
-    asl
-    clc
-    adc #6
-    cmp #20
-    bcc .HaveStartingTankAmount
-    lda #20
-.HaveStartingTankAmount
-    lsr
-    sec
-    sbc TanksRemaining
-    bcc .HaveNotKilledEnoughTanksYet
-    ;--now, have we died
+    ;--new routine: if powerup activated, player gets speed boost AS long as he hasn't died!
+;     lda MazeGenerationPass
+;     and #PLAYERDEATHCOUNTBITS
+;     bne .PlayerHasDiedNoBonus    
     lda MazeGenerationPass
-    bne .PlayerHasDiedNoBonus
+    and #POWERUPACTIVATEDBITS
+    beq .PowerUpNotActivated
+    cmp #%10000000
+    bne .OnlySpeedBonus
+    ;--else kill all onscreen tanks and give score bonus (of 1000?)
+    lda #>POWERUPSCOREBONUS
+    sta Temp
+    lda #<POWERUPSCOREBONUS
+    jsr IncreaseScoreSubroutineBank0
+    
+    ;--kill all tanks
+    brk
+    .word KillAllTanksBonus
+    ;--also play some kind of sound effect
+    
+    
+    lda MazeGenerationPass
+    and #~POWERUPACTIVATEDBITS
+    ora #%01000000
+    sta MazeGenerationPass
+.OnlySpeedBonus    
+    ;--get starting tank amount
     lda TankStatus
     and #~TANKSPEED
     ora #PLAYERTANKSPEED+SPEEDBONUS
     sta TankStatus
 .PlayerHasDiedNoBonus    
-.HaveNotKilledEnoughTanksYet
+.PowerUpNotActivated
 .PlayerNotInPlayNoBonus
     rts
 
@@ -3730,7 +3755,11 @@ DistortionTable
 FrequencyTable
     .byte 19, 20, 23, 26
     .byte 31
-	
+
+    
+TankDeadStatusBank0
+    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
+    
 ;------------------------------------------------------------------------------------------
 	
     echo "----", ($1FD5-*), " bytes left (ROM) at end of Bank 1"
@@ -3845,8 +3874,10 @@ RotationLoop
 	sta PlayerY,X
 	txa
 	lsr		;--only setup gfx pointer when the tank is displayed with the player (i.e., X = 0 or 1)
-	bne MissileNotPlayer   
-    ; PlayerNotMissile
+	beq PlayerNotMissile
+    jmp MissileNotPlayer	
+	
+PlayerNotMissile
 	;--get correct tank gfx ptr set up
 	txa
 	asl
@@ -3881,13 +3912,24 @@ TankGfxIndexSet
 	
 	;--if tank is dead, use one specific gfx
 	lda TankStatus,Y
-	and #TANKINPLAY
-	bne TankInPlayUsualGraphics
-	;--else use 
+	;and #TANKINPLAY
+; 	bne TankInPlayUsualGraphics
+	lsr     ;get TANKINPLAY bit into carry
+	bcs TankInPlayUsualGraphics
+	;--if direction = TANKDOWN use power up symbol
+	and #TANKDOWN>>1        ;shifted over since we LSR above
+	bne UsePowerUpGraphic
+	;--else use explosion graphic
 	lda #<(TankKilledImage+TANKHEIGHT)
 	pha
 	lda #>(TankKilledImage+TANKHEIGHT)
     bne SetTankGfxPtr   ;branch always
+UsePowerUpGraphic
+	lda #<(PowerUpImage1+TANKHEIGHT)
+	pha
+	lda #>(PowerUpImage1+TANKHEIGHT)
+    bne SetTankGfxPtr   ;branch always
+
 	
 TankInPlayUsualGraphics
 	lda TankStatus,Y
@@ -5227,7 +5269,13 @@ SetNewLevelTankDelay
     sta TankStatus
     
     ;--and finally, set MazeGenerationPass to zero because we'll use that for powerups/bonuses during the level
-    lda #0
+    ;--set number of tanks to kill before power up appears randomly
+    pla
+    pha     ;get actual random number but leave on stack
+    and #POWERUPCOUNTDOWNBITS
+    bne SetPowerUpCountdownValue
+    lda #POWERUPCOUNTDOWNBITS   ;make sure it doesn't start at zero
+SetPowerUpCountdownValue   
     sta MazeGenerationPass
 	
 NotCompletelyDoneWithMaze
@@ -5471,9 +5519,17 @@ CheckForExplosionCollisionLoop
     beq NoCollisionWithThisTank
     ;--now check if tank is dead
     lda TankStatus,Y
-    and #TANKINPLAY
-    bne TankHitLiveTank
-CollisionWithExplosion
+;     and #TANKINPLAY
+;     bne TankHitLiveTank
+    lsr     ;get TANKINPLAY bit into carry
+    bcs TankHitLiveTank
+    ;--now see if explosion or powerup
+;     and #TANKDOWN>>1        ;shifted over following LSR above
+;     beq NoCollisionWithThisTank
+;     ;--else we hit a powerup
+;     ;--so we change to explosion?
+;     lda #0
+;     sta TankStatus,Y
 NoCollisionWithThisTank    
 CheckForExplosionCollisionLoopEntry
     dey
@@ -5485,6 +5541,8 @@ CheckForExplosionCollisionCheckEnd
     bne CheckForExplosionCollisionLoop ;branch always
     
 TankHitLiveTank
+    ;--if Y = 0 then tank run into by player
+    sty Temp+3  ;save this we will check below
     ;--restore Y
     ldy Temp+2
     ;--now what?
@@ -5493,8 +5551,44 @@ TankHitLiveTank
     tax ;
     ;--check if tank in play (can be on screen but not in play, if dead)
     lda TankStatus,X        
-    and #TANKINPLAY
+;     and #TANKINPLAY
+;     beq TankAlreadyDeadCannotDie
+    lsr     ;get TANKINPLAY bit into carry
+    bcs TankNotDeadYetKillIt
+    ;--tank is not in play, is it an explosion or a powerup?
+    and #TANKDOWN>>1    ;shifted due to LSR above
     beq TankAlreadyDeadCannotDie
+    ;--else tank is powerup.  what to do exactly?
+    ;--if hit by non-player tank, ignore:
+    lda Temp+3  ;--this holds zero if player tank is what hit it
+    bne NonPlayerTankHitPowerUp
+
+    ;--first respawn tank to get powerup off the screen
+    tya
+    pha     ;save Y
+    jsr TankRespawnRoutine
+    pla
+    tay
+    ;--second actually activate powerup
+    lda MazeGenerationPass  ;used for powerups during levels
+    and #POWERUPACTIVATEDBITS
+    asl
+    rol
+    rol     ;get top two bits into lower two bits
+    tax
+    lda MazeGenerationPass
+    and #~POWERUPACTIVATEDBITS
+    ora NextPowerUpActivation,X
+    sta MazeGenerationPass
+    ;--third play powerup sound (only if player hit it!)
+   ; sta TankX,X
+    jmp TankAlreadyDeadCannotDie        ;branch always 
+    
+
+NextPowerUpActivation
+    .byte %01000000, %10000000, %11000000, %11000000    
+    
+TankNotDeadYetKillIt    
     jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
     and #$FF    ;--sets flags
     beq TankNotOnScreenCannotDie
@@ -5519,10 +5613,10 @@ TankNotOnScreenCannotDie
 NoTankCollision
 PlayerTankDead
 DidNotHitAnythingLive
+NonPlayerTankHitPowerUp
     dey
     bpl TankCollisionLoop  
 NoTankCollisionsAtAll
-
 
 
     ;--alternate collision routine for bullet-to-wall using collision registers
@@ -5604,9 +5698,29 @@ SetTankStatusForDeadTanks
     lda TankStatus,Y
     cmp #TANKINPLAY
     bne TankNotNewlyDead
+    ;--check to see if it should be a powerup
+    ;   only a powerup if:
+    ;       player deaths in this level = 0
+    ;       powerup countdown is zero
+    lda MazeGenerationPass
+    and #PLAYERDEATHCOUNTBITS
+    bne NoPowerUp
+    lda MazeGenerationPass
+    and #POWERUPCOUNTDOWNBITS
+    bne NoPowerUp
+    ;--else it's a powerup!
+    lda TankDeadStatus,Y
+    ora #TANKDOWN
+    sta TankStatus,Y
+    lda MazeGenerationPass
+    ora #POWERUPCOUNTDOWNBITS
+    sta MazeGenerationPass  ;reset counter to the max (7)
+    bne CheckNextTankForNewDeath
+NoPowerUp
     lda TankDeadStatus,Y
     sta TankStatus,Y
 TankNotNewlyDead
+CheckNextTankForNewDeath
     dey
     bpl SetTankStatusForDeadTanks       
 
@@ -5803,12 +5917,16 @@ TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy
 	txa
 	bne EnemyTankRespawnRoutine
     ;--increase counter of number of deaths (in MazeGenerationPass) then increase respawn wait
-    ldy MazeGenerationPass
-    cpy #8
-    bcc PlayerHasNotDiedEightTimes
-    ldy #7
-PlayerHasNotDiedEightTimes    
+    lda MazeGenerationPass
+    and #PLAYERDEATHCOUNTBITS
+    cmp #PLAYERDEATHCOUNTMAX
+    beq PlayerHasDiedSevenTimes
+PlayerHasNotDiedSevenTimes    
     inc MazeGenerationPass
+    lda MazeGenerationPass
+    and #PLAYERDEATHCOUNTMAX
+PlayerHasDiedSevenTimes    
+    tay
 	lda PlayerStartingStatus,Y
 	sta TankStatus,X
     bne UsePlayerRespawnPosition    ;branch always
@@ -5862,6 +5980,21 @@ TopRowEnemyTankRespawn
 
 TankDeadStatus
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
+    
+    SUBROUTINE   
+KillAllTanksBonus
+    ldx #3
+.KillAllTanksLoop
+    lda TankStatus,X
+    lsr
+    bcc .TankAlreadyDeadCannotKillAgain
+    jsr PlayerHitTank
+.TankAlreadyDeadCannotKillAgain
+    dex
+    bne .KillAllTanksLoop
+    jmp ReturnFromBSSubroutine2    
+        
+;****************************************************************************
 
 BulletHitTank
 	;--bullet did hit tank.
@@ -5888,7 +6021,14 @@ EnemyTanksNotMovedOffScreen
     sta TankStatus,X
 
     txa
-	beq PlayerTankHit
+	bne EnemyTankHit
+	;--if player hit, remove all powerups
+	lda MazeGenerationPass
+	and #~POWERUPACTIVATEDBITS
+	sta MazeGenerationPass
+	
+	
+	jmp PlayerTankHit
 EnemyTankHit
     ;--decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
@@ -5908,10 +6048,25 @@ EnemyTankHit
 	;--kill 
 ; 	lda #0		
 ; 	sta AUDV1
+    txa
+    pha
 	jsr MoveBulletsOffScreen	;--returns with X=255
-		
+	pla
+	tax	
 	
 LevelNotComplete
+    ;--first, reduce powerup tank kill countdown
+    lda MazeGenerationPass  ;used for powerup stuff during levels
+    and #POWERUPCOUNTDOWNBITS
+    beq NoUpdateToPowerUpCountdown
+    sec
+    sbc #8
+    sta Temp
+    lda MazeGenerationPass
+    and #~POWERUPCOUNTDOWNBITS
+    ora Temp
+    sta MazeGenerationPass
+NoUpdateToPowerUpCountdown    
     ;--what I want to do here is IF the # of tanks remaining <= 3, 
     ;   increase all enemy tank speeds by .... 4?  constant value.
     lda TanksRemaining
@@ -5919,8 +6074,8 @@ LevelNotComplete
     bcs MoreThanFourTanksRemainingStill
     ;--loop through tanks and increase speed?
     ;--use Y variable... or save X and restore?
-    txa
-    pha     ;save X
+;     txa
+;     pha     ;save X
 ;     ldx #3
 ; IncreaseEnemyTankSpeedLoop
 ;     lda TankStatus,X
@@ -5942,8 +6097,8 @@ LevelNotComplete
 ; TankNotOnScreenDoNotIncreaseSpeed
 ;     dex
 ;     bne IncreaseEnemyTankSpeedLoop
-    pla
-    tax     ;restore X
+;     pla
+;     tax     ;restore X
 PlayerTankHit	
 MoreThanFourTanksRemainingStill    
 	;--save and restore Y in this routine
@@ -6734,6 +6889,23 @@ TankKilledImageb
         .byte #%00000010;--7
         .byte #%00100100;--9
         .byte #%01001010;--11
+        .byte 0
+        
+PowerUpImage1 = * - 1
+        .byte #%00111100;--2
+        .byte #%00111100;--4
+        .byte #%01011010;--6
+        .byte #%11111111;--8
+        .byte #%10000001;--10
+        .byte #%00000000;--12
+PowerUpImage1b
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%00111100;--3
+        .byte #%01111110;--5
+        .byte #%11111111;--7
+        .byte #%10000001;--9
+        .byte #%11000011;--11
         .byte 0
         
         
