@@ -5626,13 +5626,58 @@ FoundDeadTankNowKill
     ;--want to kill everything - bricks, tanks - in a one-block radius
     jsr PowerUpExplosionRemoveBricks ;(also removes bullet from screen)
     
+KillAllTanksWithinBlastRadius    
+    ;--now, kill all tanks within blast radius }:-)
+    ;   note: this will also as a side effect remove the powerup icon from the screen
+    ;--get upper left corner of blast radius
+    ;   using blast radius of 1.5 bricks
+    lda TankX,X
+    sec
+    sbc #12
+    sta Temp        ;left boundary
+    lda TankY,X
+    clc
+    adc #(TANKHEIGHT+TANKHEIGHT/2)+1
+    sta Temp+1      ;upper boundary+1
+    lda TankX,X
+    clc
+    adc #13
+    sta Temp+2      ;right boundary+1
+    lda TankY,X
+    sec
+    sbc #(TANKHEIGHT+TANKHEIGHT/2)
+    sta Temp+3      ;lower boundary
+    ;--discarding X (powerup incon index) at this point
+    ldx #3
+KillAllTanksInLoop
+    lda TankX,X
+    cmp Temp
+    bcc NotInsideBlastRadius
+    cmp Temp+2
+    bcs NotInsideBlastRadius
+    lda TankY,X
+    cmp Temp+3
+    bcc NotInsideBlastRadius
+    cmp Temp+2
+    bcs NotInsideBlastRadius
+    ;--it is KILL KILL KILL
+;     tya
+;     pha
+    lda TankDeadStatus,X
+    sta TankStatus,X    ;%%%
+    
+;     pla
+;     tay    
+NotInsideBlastRadius
+    dex
+    bpl KillAllTanksInLoop  
+        
+    
     ;--second, remove powerup icon from screen
-    jsr TankRespawnRoutine      ;this trashes Y
+;     jsr TankRespawnRoutine      ;this trashes Y
     ;--third, play sound
     ldy #POWERUPEXPLOSIONSOUND
     jsr StartSoundSubroutineBank2
-    
-    
     
     jmp DoneWithBulletCollision
 TankAliveKillIt    
@@ -5775,15 +5820,9 @@ PowerUpExplosionRemoveBricks
 	pha             ;save Y index into bullet    
     ;--we will loop through the 8 bricks we want to blow up, starting in upper left and moving right and down
     ;first, get X position of upper left brick and convert to column
-    ;--it matters if bullet is moving left or right
-    lda BulletDirection
-    and BulletDirectionMask,Y
-    cmp BulletLeftBank2,Y
-    beq .BulletMovingLeft
+    ;--it ACTUALLY DOESN'T matter if bullet is moving left or right since we are starting from the tank (=powerup) position, not bullet position
+
     lda #-20
-    .byte $2C   ;--skip 2 bytes
-.BulletMovingLeft    
-    lda #-21
     clc
     adc TankX,X
                 ;subtract 1/2 tank width (4) and also 16 pixels so we are in the center of the block to the left, 
@@ -5824,6 +5863,7 @@ PowerUpExplosionRemoveBricks
     lda Temp+2  ;column
     clc
     adc RemoveBrickColumnShift,Y
+    and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
     lda Temp+3  ;row
     clc
@@ -6417,19 +6457,7 @@ StartingTankYPosition
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
-StartingTankStatus
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 
-	
-	
-	
-
-	
-NumberOfBitsSetBank2
-	.byte 0, 1, 1, 2
-	.byte 1, 2, 2, 3
-	.byte 1, 2, 2, 3
-	.byte 2, 3, 3, 4
 
 
 
@@ -7287,8 +7315,19 @@ SoundLengthBank2
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH
 	
+StartingTankStatus
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+
+	
+	
 	
 
+	
+NumberOfBitsSetBank2
+	.byte 0, 1, 1, 2
+	.byte 1, 2, 2, 3
+	.byte 1, 2, 2, 3
+	.byte 2, 3, 3, 4
 ;****************************************************************************	
 
     echo "----", ($3FD5-*), " bytes left (ROM) at end of Bank 2"
