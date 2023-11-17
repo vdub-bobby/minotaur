@@ -404,6 +404,7 @@ ENEMYBULLETSOUND        =   5
 WALLSOUND               =   6
 PLAYERTANKENGINESOUND   =   7
 SCORESOUND              =   8
+POWERUPEXPLOSIONSOUND   =   9
 
 PLAYERTANKVOLUME	=	8
 
@@ -437,7 +438,9 @@ WALLSOUNDLENGTH     =   8
 SCORESOUNDTONE      =   SQUARESOUND
 SCORESOUNDFREQ      =   20
 SCORESOUNDLENGTH    =   4
-
+POWERUPEXPLOSIONSOUNDTONE   =   NOISESOUND   
+POWERUPEXPLOSIONSOUNDFREQ   =   15
+POWERUPEXPLOSIONSOUNDLENGTH =   65
 ;--music constants
 
 ;-note bits:
@@ -521,7 +524,7 @@ BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets do
 
 BASECOLOR		    =		GOLD
 SCORECOLOR          =       GRAY|$C
-WALLCOLOR			=		RED|$6
+WALLCOLOR			=		RED|$8
 TANKSREMAININGCOLOR =   TURQUOISE|$A
 
 ;--old colors: GOLD|A and BLUE2|C
@@ -3395,17 +3398,17 @@ PFRegisterLookup
 Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
 	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-	.byte SCORESOUNDTONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE
 
 Frequency
 	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
 	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-	.byte SCORESOUNDFREQ
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ
 
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
-	.byte SCORESOUNDLENGTH
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH
 
 	
 ;****************************************************************************
@@ -3909,7 +3912,8 @@ MissileNotPlayer
 	tax		;get correct index
     ;--if tank not in play, don't display missile
     lda TankStatus,Y
-    and #TANKINPLAY
+    and #TANKINPLAY|TANKDOWN|TANKUP
+    cmp #TANKUP
     bne MissileOnScreen
     lda #TANKAREAHEIGHT+20
     sta MissileY,X
@@ -3996,7 +4000,6 @@ NoAdjustMissileY
 	sta BallX
 	lda BulletY,X
 	sta BallY
-
 	
 	;--set up score pointers
 	
@@ -4258,6 +4261,26 @@ PositioningLoop	;--just players
 	jmp BeginMainMazeKernel ;+3     33
 
 	
+;----------------Some Data Stuck Here	
+	
+TankUpFrame
+	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
+PlayerTankUpFrame
+	.word PlayerTankUp4+TANKHEIGHT, PlayerTankUp3+TANKHEIGHT, PlayerTankUp2+TANKHEIGHT, PlayerTankUp1+TANKHEIGHT
+
+TankDownFrame
+	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
+PlayerTankDownFrame
+	.word PlayerTankDown4+TANKHEIGHT, PlayerTankDown3+TANKHEIGHT, PlayerTankDown2+TANKHEIGHT, PlayerTankDown1+TANKHEIGHT
+TankRightFrame
+	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
+PlayerTankRightFrame
+	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
+   
+	
+;----------------Some Data Stuck Here	
+	
+	 
     PAGEALIGN 2
 	
 Switch0
@@ -5590,8 +5613,29 @@ BulletCollisionM1
 FoundDeadTankNowKill
     ;--check if tank is already dead (but still on screen)
     lda TankStatus,X
-    and #TANKINPLAY
-    beq TankAlreadyDeadCannotBeShot
+;     and #TANKINPLAY
+;     beq TankAlreadyDeadCannotBeShot
+    lsr     ;get TANKINPLAY bit into carry
+    bcs TankAliveKillIt
+    ;--so we hit a not-in-play tank.  
+    ;--now see if we it is an explosion or a powerup.  if explosion, ignore
+    and #TANKDIRECTION>>1       ;direction bits, shifted right one
+    cmp #(TANKUP|TANKDOWN)>>1              ;UP and DOWN together means powerup icon
+    bne TankAlreadyDeadCannotBeShot
+    ;--so we hit a powerup.
+    ;--want to kill everything - bricks, tanks - in a one-block radius
+    jsr PowerUpExplosionRemoveBricks ;(also removes bullet from screen)
+    
+    ;--second, remove powerup icon from screen
+    jsr TankRespawnRoutine      ;this trashes Y
+    ;--third, play sound
+    ldy #POWERUPEXPLOSIONSOUND
+    jsr StartSoundSubroutineBank2
+    
+    
+    
+    jmp DoneWithBulletCollision
+TankAliveKillIt    
 
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
 	lda FrameCounter
@@ -5603,10 +5647,6 @@ FoundDeadTankNowKill
 	beq NoPointsForGettingShot	
 	jsr ScoreForKillingTank
 	
-; 	lda #>KILLTANKSCORE ;%%%%
-; 	sta Temp
-; 	lda #<KILLTANKSCORE
-; 	jsr IncreaseScoreSubroutine
 
 NoPointsForGettingShot		
 NoPointsForEnemyOwnGoals
@@ -5614,7 +5654,7 @@ NoPointsForEnemyOwnGoals
 TankAlreadyDeadCannotBeShot
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
-
+DoneWithBulletCollision
 
     ;if a tank was killed immediately above, we cleared all bits except for TANKINPLAY
     ;   so that we could correctly tell if tanks if collided with it
@@ -5726,7 +5766,141 @@ CheckNextTankForNewDeath
 	jmp ReturnFromBSSubroutine2
 
 ;****************************************************************************
+    SUBROUTINE
+PowerUpExplosionRemoveBricks  
+        ;come in with X = tank (powerup icon) index, Y is bullet index  
+    txa
+    pha             ;save index into tank (powerup icon) that got hit
+	tya
+	pha             ;save Y index into bullet    
+    ;--we will loop through the 8 bricks we want to blow up, starting in upper left and moving right and down
+    ;first, get X position of upper left brick and convert to column
+    ;--it matters if bullet is moving left or right
+    lda BulletDirection
+    and BulletDirectionMask,Y
+    cmp BulletLeftBank2,Y
+    beq .BulletMovingLeft
+    lda #-20
+    .byte $2C   ;--skip 2 bytes
+.BulletMovingLeft    
+    lda #-21
+    clc
+    adc TankX,X
+                ;subtract 1/2 tank width (4) and also 16 pixels so we are in the center of the block to the left, 
+                ;adjusted for column 0 starting at pixel 16
+ 
+    lsr
+    lsr
+    lsr
+    sta Temp+2
+    
+	;--now get row
+	lda TankY,X
+    clc
+    adc #TANKHEIGHT/2
+    sta Temp+3      
+	lsr
+	lsr
+	lsr
+	adc Temp+3
+	ror
+	lsr
+	lsr
+	adc Temp+3
+	ror
+	lsr
+	lsr
+	sta Temp+3      ;store row back into Temp+3
 
+
+	
+	
+	;now remove bricks in a loop
+	ldy #7
+.RemoveBricksLoop
+    tya
+    pha ;save loop index
+    ;--first, move to next row and column
+    lda Temp+2  ;column
+    clc
+    adc RemoveBrickColumnShift,Y
+    sta Temp+2
+    lda Temp+3  ;row
+    clc
+    adc RemoveBrickRowShift,Y
+    sta Temp+3
+	lda #<PF1Left
+	sta MiscPtr
+	lda #>PF1Left
+	sta MiscPtr+1
+	;--check if column > 15 (means we are either left or right of the maze)
+	lda Temp+2
+	cmp #16
+	bcs .OffMazeGoToNext
+    ;--check if we are on row zero
+	lda Temp+3
+	bne .NotRowZero
+	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
+	lda Temp+2
+	cmp #6
+	bne .NotBrick6Row0
+	lda #0
+	sta LastRowL
+	beq .GoToNextBrick  ;branch always
+.NotBrick6Row0
+    cmp #9
+    bne .NotBrick9Row0	
+    lda #0
+    sta LastRowR
+    beq .GoToNextBrick  ;branch always	
+	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
+.NotRowZero
+	cmp #MAZEROWS-1
+	bcs .OffMazeGoToNext
+    ;--if we are here, we have a legit brick location and we will remove it
+    ;--get row into Y
+    ldy Temp+3
+    dey                 ;is this correct?
+    ;--get column into X
+    ldx Temp+2
+    ;--get which PF register and use it to adjust our pointer
+    lda PFRegisterLookupBank2,X
+    clc
+    adc MiscPtr
+    sta MiscPtr
+    ;--then lookup specific brick mask
+    lda PFMaskLookupBank2,X
+    eor #$FF
+    ;--then erase brick
+    and (MiscPtr),Y
+    sta (MiscPtr),Y
+.NotBrick9Row0    
+.OffMazeGoToNext  
+.GoToNextBrick 
+    pla
+    tay ;restore loop index
+    dey
+    bpl .RemoveBricksLoop
+
+
+
+    pla
+    tay     ;restore Y index into bullet
+    
+    ;--and remove bullet from screen
+    lda #BALLOFFSCREEN
+    sta BulletX,Y
+    sta BulletY,Y
+    
+    
+    pla
+    tax     ;restore X index into tank
+    rts
+    
+
+    
+    
+;****************************************************************************
 
     SUBROUTINE    
 ScoreForKillingTank
@@ -5798,17 +5972,25 @@ NoScoreForWallDestructionByEnemies
 	;--get row of block into Y and column into Temp+1
 
 	lda BulletY,X
-	ldy #0
 	sec
 	sbc #2
-GetRowBulletIsInLoop
-	sbc #BLOCKHEIGHT
-	bcc FoundWhichRowBulletIsIn
-	iny
-	jmp GetRowBulletIsInLoop
-FoundWhichRowBulletIsIn
+	;--use constant 27-cycle divide by 7 to get row instead of repeated-subtraction method
+	sta Temp
+	lsr
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr
+	adc Temp
+	ror
+	lsr
+	lsr                 ;+27
+	
+	tay
+; FoundWhichRowBulletIsIn
 	;--special check for row = 0
-	tya
 	bne BulletNotOnBottomRow
 	;--all we care is left or right of center
 	lda BulletX,X
@@ -5893,9 +6075,6 @@ TankRespawnRoutineWrapperEnemy
     jsr TankRespawnRoutine
     jmp ReturnFromBSSubroutine2
     
-PlayerStartingStatus
-    .byte TANKRIGHT|0, TANKRIGHT|2, TANKRIGHT|4, TANKRIGHT|6
-    .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
 
 TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy tanks)
 	txa
@@ -6218,11 +6397,6 @@ PositionASpriteSubroutineBank2
 ;------------------------------------------------------
 
 
-AllowCarveDownTable ;can't carve downward in the outer two columns
-    .byte 0, 0, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 0, 0		
 
     
 EntryPointRowOffsetTable
@@ -6230,45 +6404,6 @@ EntryPointRowOffsetTable
     .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
 
 
-DigitDataMissileLo
-	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree
-	
-	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
-	.byte <MissileEight, <MissileNine
-		
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
-
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
-		
-
-RotationTables
-	.word RotationEven, RotationOdd	
-
-RotationOdd
-	.byte 0	;and first 3 bytes of next table
-RotationEven
-	.byte 2, 1, 3, 0
-	
-P0M0Color
-    .byte TANKCOLOR1, TANKCOLOR3
-
-P1M1Color
-    .byte TANKCOLOR2, TANKCOLOR4
-	
-BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
-
-BulletDirectionClearBank2
-BulletUpBank2
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
-BulletDownBank2
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
-BulletLeftBank2
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRightBank2
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 	
 	
 	
@@ -6287,13 +6422,8 @@ StartingTankStatus
 
 	
 	
-ToneBank2
-	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE, LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE
+	
 
-FrequencyBank2
-	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ, LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ
-SoundLengthBank2
-	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH, LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH
 	
 NumberOfBitsSetBank2
 	.byte 0, 1, 1, 2
@@ -6301,28 +6431,9 @@ NumberOfBitsSetBank2
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
 
+
+
 	
-PFPointer
-	.word PF1Left, PF2Left, PF2Right, PF1Right
-
-
-TankUpFrame
-	.word TankUpAnimated4+TANKHEIGHT, TankUpAnimated3+TANKHEIGHT, TankUpAnimated2+TANKHEIGHT, TankUpAnimated1+TANKHEIGHT
-PlayerTankUpFrame
-	.word PlayerTankUp4+TANKHEIGHT, PlayerTankUp3+TANKHEIGHT, PlayerTankUp2+TANKHEIGHT, PlayerTankUp1+TANKHEIGHT
-
-TankDownFrame
-	.word TankDownAnimated4+TANKHEIGHT, TankDownAnimated3+TANKHEIGHT, TankDownAnimated2+TANKHEIGHT, TankDownAnimated1+TANKHEIGHT
-PlayerTankDownFrame
-	.word PlayerTankDown4+TANKHEIGHT, PlayerTankDown3+TANKHEIGHT, PlayerTankDown2+TANKHEIGHT, PlayerTankDown1+TANKHEIGHT
-TankRightFrame
-	.word TankRightAnimated4+TANKHEIGHT, TankRightAnimated3+TANKHEIGHT, TankRightAnimated2+TANKHEIGHT, TankRightAnimated1+TANKHEIGHT
-PlayerTankRightFrame
-	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
-	
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 
 	
 	
@@ -6925,7 +7036,7 @@ PowerUpImage1 = * - 1
         .byte #%00000000;--12
 PowerUpImage1b
         .byte 0
-        .byte #%00111100;--1
+        .byte #%00000000;--1
         .byte #%00111100;--3
         .byte #%01111110;--5
         .byte #%11111111;--7
@@ -6952,7 +7063,7 @@ TanksRemainingGfx
 	
 	PAGEALIGN 5
 	
-	;%%% put crap here
+	; put crap here
 TitleGraphics
     ;-----PF1--------PF2--------PF2--------PF1------
     .byte %00001000, %11111100, %11111100, %00001000
@@ -7063,10 +7174,64 @@ PowerUpImage4
         .byte #%00111000;--
         
         
-        
-    ;--have a lot of space left here. (currently $72 bytes)
+PlayerStartingStatus
+    .byte TANKRIGHT|0, TANKRIGHT|2, TANKRIGHT|4, TANKRIGHT|6
+    .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
+
+    
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
+	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
+PFPointer
+	.word PF1Left, PF2Left, PF2Right, PF1Right
+    
+DigitDataMissileLo
+	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree
 	
-        
+	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
+	.byte <MissileEight, <MissileNine
+		
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+		
+
+RotationTables
+	.word RotationEven, RotationOdd	
+
+RotationOdd
+	.byte 0	;and first 3 bytes of next table
+RotationEven
+	.byte 2, 1, 3, 0
+    ;--have a lot of space left here. (currently $2F bytes)
+	
+AllowCarveDownTable ;can't carve downward in the outer two columns
+    .byte 0, 0, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 0, 0		
+P0M0Color
+    .byte TANKCOLOR1, TANKCOLOR3
+
+P1M1Color
+    .byte TANKCOLOR2, TANKCOLOR4
+	
+BulletDirectionMask
+	.byte %11, %11<<2, %11<<4, %11<<6
+
+BulletDirectionClearBank2
+BulletUpBank2
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+BulletDownBank2
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+BulletLeftBank2
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
+BulletRightBank2
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+	
+	
     PAGEALIGN 6
 
 
@@ -7098,9 +7263,29 @@ DigitBlank
 
 
 
+RemoveBrickColumnShift
+    .byte 1,1,-2,2
+    .byte -2,1,1,0
+    
+RemoveBrickRowShift
+    .byte 0,0,-1,0
+    .byte -1,0,0,0	
 	
 	
+ToneBank2
+	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
+	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE
 
+FrequencyBank2
+	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
+	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ
+
+SoundLengthBank2
+	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
+	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH
 	
 	
 
