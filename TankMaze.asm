@@ -80,6 +80,7 @@
 
 
 	To do:
+	DONE Stuck enemies do not fire.  They always fire to the right, which would be a problem if they are stuck at the right edge.
 	Difficulty ramping.  Two things:
 	    1. Increase initial difficulty - potentially increase firing rate for level 1
 	    2. Tweak difficulty ramping.  Currently -
@@ -97,7 +98,10 @@
 			DONE "bomb" that destroys all tanks on screen (and all walls?)
 			??? something that slows all enemies down?
 			??? other?
-			Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
+			DONE Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
+    Attract mode?
+	Turn music off with B&W switch (or pause on 7800?)
+	Turn powerups off with difficulty (or use select?)
 	DONE Adjust scoring:
 	    DONE 50 points for each tank killed plus combo system: for each tank killed before dying in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
 	        Killing all tanks without dying means last tank is worth 525 points.
@@ -107,7 +111,7 @@
 	    DONE Bricks are worth 5 points during level, all remaining bricks are worth 10 pts each at end of level
 	    DONE Level end worth 100xlevel
     MOSTLY DONE fix scanline count
-	Logic for when levels wrap .... not worried about this.
+	G'NORE Logic for when levels wrap .... not worried about this.
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
     DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
 	DONE: Music?  Have a free channel but basically zero RAM left.  Could probably squeeze one byte of RAM out.
@@ -468,6 +472,8 @@ SQUARE_20   =   $10
 SQUARE_23   =   $20
 SQUARE_26   =   $30
 SQUARE_31   =   $40
+LEAD_15     =   $50
+LEAD_17     =   $60
 
 PATTERNEND  =   255
 
@@ -1111,16 +1117,36 @@ NotGeneratingMaze
 	beq NotOnTitleScreen
 	;--on title screen
 	lda MazeGenerationPass
-	bmi GameNotOnOverscan
+	bmi NoLongerDrawingTitleScreen
 	lda FrameCounter
 	and #$7
 	cmp #1
 	bne WaitToDrawTitleScreen
 	brk
 	.word DrawTitleScreenSubroutine       ;moved this to bank 2
+	jmp PutTanksOnTitleScreenNotYet
+NoLongerDrawingTitleScreen
+    ;--let's put some stuff on the screen
+    lda SongIndex
+    and #$F0
+    cmp #$40
+    bcc PutTanksOnTitleScreenNotYet
+    ldx #3
+PutTanksOnTitleScreenLoop
+    lda TankTitleScreenX,X
+    sta TankX,X
+    lda TankTitleScreenY,X
+    sta TankY,X
+    lda TankTitleScreenStatus,X
+    sta TankStatus,X
+    dex
+    bpl PutTanksOnTitleScreenLoop
+
+PutTanksOnTitleScreenNotYet
 WaitToDrawTitleScreen
+
 NotOnTitleScreen
-GameNotOnOverscan
+
 
 WaitForOverscanEnd
 	lda INTIM
@@ -1141,6 +1167,16 @@ EndOverscan
 ;----------------------------------------------------------------------------
 ;----------------------------End Main Routines-------------------------------
 ;----------------------------------------------------------------------------
+
+TankTitleScreenX
+    .byte 20, 132, 132, 132
+TankTitleScreenY
+    .byte 20, 40, 30, 20
+TankTitleScreenStatus
+    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
+   
+
+
 
 ;****************************************************************************
 
@@ -2189,13 +2225,21 @@ NoPercussionDownBeat
     ;--not on 32nd-note beat, so need to determine if we are playing percussion or playing note
     cmp #PERCUSSIONCUTOFF
     bcc PlayRegularNote
+        ;%%%
     ;--otherwise, first see if percussion is playing
 ;     rts ;--if above percussion cutoff, keep playing whatever we were playing
 ;     ;--see if percussion should be playing
-;     jsr GetPercussionSound
-;     beq PlayRegularNote
+    lda FrameCounter 
+    pha
+    ora #$3
+    sta FrameCounter
+    inc FrameCounter
+    jsr GetPercussionSound
+    pla
+    sta FrameCounter
+    beq PlayRegularNote
 ;     ;--else keep playing percussion
-    
+    rts
 PlayRegularNote    
     ;--else play regular tone
     lda SongIndex
@@ -2252,6 +2296,7 @@ BackToBeginningOfSong
     cmp #255
     bne NotEndOfSong
     iny
+    lda (MiscPtr+2),Y
     cmp #255
     bne NotEndOfSong
     ;--change.  If 255, next byte tells us what to change songindex to.
@@ -2799,7 +2844,7 @@ FireBulletRoutine
 	lda TankStatus,Y
 	asl ;--get J0RIGHT into carry
 	bcc NotFiringRight
-	;--shooting right
+FiringRight	
 	;--shooting right
 	lda BulletDirection
 	ora BulletRight,X
@@ -2835,7 +2880,8 @@ NotFiringLeft
 	jmp DoneFiring
 NotFiringDown
     asl ;--get J0UP into carry
-    bcc NoDirectionNotFiringAtAll   ;is this necessary?  
+;     bcc NoDirectionNotFiringAtAll   ;is this necessary?  
+    bcc FiringRight         ;if we are shooting and no directions, then we are stuck and facing right.
 	;--shooting up
 	lda BulletDirection
 	ora BulletUp,X
@@ -3498,7 +3544,7 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 30, 20, 19, 18
+    .byte 25, 20, 19, 18
     .byte 17, 16, 15, 14
     .byte 13, 12, 11, 10
     .byte 9, 8, 7, 6
@@ -3558,24 +3604,51 @@ MovementMask
 TitleScreenSong
     .word SilencePattern
     .word SilencePattern
-    .word SilencePattern
+    .word Fanfare1Pattern
+    .word Fanfare1Pattern
+    
     .word SilencePattern
     .word Fanfare1Pattern
     .word Fanfare2Pattern
     .word Fanfare1Pattern
+    
+    .word SilencePattern
+    .word Fanfare1Pattern
+    .word Fanfare2Pattern
     .word Fanfare3Pattern
+    
+    .word Fanfare1Pattern
+    .word Fanfare1Pattern
     .word $FFFF
-    .byte 2<<4
+    .byte 0<<4
 
 
-FanfarePattern
 SilencePattern
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
  
+  
+LevelStartFanfarePattern
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|LEAD_17
+    .byte VOLUME6|LEAD_17|ARTICULATE
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15
+    .byte VOLUME6|LEAD_15|ARTICULATE
     
+      
 Fanfare1Pattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3631,29 +3704,29 @@ Fanfare3Pattern
     
     
 LevelStartSong
-    .word Fanfare1Pattern
+    .word LevelStartFanfarePattern
     .word SilencePattern
     .word $FFFF
     .byte 1<<4
     
     
-LevelStartFanfarePattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
+; LevelStartFanfarePattern
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23|ARTICULATE
+;     .byte VOLUME6|SQUARE_23|ARTICULATE
+;     .byte VOLUME6|SQUARE_23|ARTICULATE
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23|ARTICULATE
+;     .byte VOLUME6|SQUARE_26
+;     .byte VOLUME6|SQUARE_26|ARTICULATE
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23
+;     .byte VOLUME6|SQUARE_23|ARTICULATE
 
     
     
@@ -3709,11 +3782,11 @@ ArticulationTable   ;--routine as currently written will never read the first an
     
 DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
-    .byte SQUARESOUND
+    .byte SQUARESOUND, LEADSOUND, LEADSOUND
 
 FrequencyTable
     .byte 19, 20, 23, 26
-    .byte 31
+    .byte 31, 15, 17
 
     
 TankDeadStatusBank0
@@ -5230,10 +5303,10 @@ SkipCreatingConnectingPassageLeft
     
     
 
-	;--this is for testing:  enclose top left tank
-	lda PF1Left+MAZEROWS-2
-	ora #$CF
-	sta PF1Left+MAZEROWS-2
+; 	;--this is for testing:  enclose top left tank
+; 	lda PF1Left+MAZEROWS-2
+; 	ora #$CF
+; 	sta PF1Left+MAZEROWS-2
 	
 	
 	;--and clear GAMEOFF flag and turn off maze generation flag, and make base reappear
@@ -5682,7 +5755,7 @@ KillAllTanksWithinBlastRadius
     sec
     sbc #(TANKHEIGHT+TANKHEIGHT/2)
     sta Temp+3      ;lower boundary
-    ;--discarding X (powerup incon index) at this point
+    ;--discarding X (powerup icon index) at this point
     ldx #3
 KillAllTanksInLoop
     lda TankX,X
@@ -5702,8 +5775,6 @@ NotInsideBlastRadius
     bpl KillAllTanksInLoop  
         
     
-    ;--second, remove powerup icon from screen
-;     jsr TankRespawnRoutine      ;this trashes Y
     ;--third, play sound
     ldy #POWERUPEXPLOSIONSOUND
     jsr StartSoundSubroutineBank2
