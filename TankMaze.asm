@@ -97,16 +97,16 @@
 			DONE "bomb" that destroys all tanks on screen (and all walls?)
 			??? something that slows all enemies down?
 			??? other?
-			thinking about using a "combo" mechanism, that can be displayed easily and when full.... tank speeds up?
-			    would need a byte of RAM (or nibble?) for this
-	Adjust scoring:
-	    50 points for each tank killed plus combo system: for each tank killed before dying in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
+			Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
+	DONE Adjust scoring:
+	    DONE 50 points for each tank killed plus combo system: for each tank killed before dying in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
 	        Killing all tanks without dying means last tank is worth 525 points.
 	    DONE Powerup that kills all tanks on screen - give 1000 points per tank killed 
 	        STILL CONSIDERING (plus 500?)
+	    Shooting powerup - points?
 	    DONE Bricks are worth 5 points during level, all remaining bricks are worth 10 pts each at end of level
 	    DONE Level end worth 100xlevel
-    fix scanline count
+    MOSTLY DONE fix scanline count
 	Logic for when levels wrap .... not worried about this.
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
     DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
@@ -405,6 +405,7 @@ WALLSOUND               =   6
 PLAYERTANKENGINESOUND   =   7
 SCORESOUND              =   8
 POWERUPEXPLOSIONSOUND   =   9
+SPEEDBOOSTSOUND         =   10
 
 PLAYERTANKVOLUME	=	8
 
@@ -431,7 +432,7 @@ SHORTBRICKSOUNDFREQ	=	BRICKSOUNDFREQ
 SHORTBRICKSOUNDLENGTH	=	7
 LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
-LONGEXPLOSIONLENGTH	=	200
+LONGEXPLOSIONLENGTH	=	127
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
 WALLSOUNDFREQ       =   10;8
 WALLSOUNDLENGTH     =   8
@@ -440,7 +441,12 @@ SCORESOUNDFREQ      =   20
 SCORESOUNDLENGTH    =   4
 POWERUPEXPLOSIONSOUNDTONE   =   NOISESOUND   
 POWERUPEXPLOSIONSOUNDFREQ   =   15
-POWERUPEXPLOSIONSOUNDLENGTH =   65
+POWERUPEXPLOSIONSOUNDLENGTH =   63
+SPEEDBOOSTSOUNDTONE     =   PITFALLSOUND		
+SPEEDBOOSTSOUNDFREQ     =   30
+SPEEDBOOSTSOUNDLENGTH   =   20
+
+
 ;--music constants
 
 ;-note bits:
@@ -1345,11 +1351,13 @@ MazeNumberLessThanBulletDebounceLimit
 	sta Debounce    ;was EnemyDebounce
 	
 	;--first, look for tank that is stuck (i.e., in play but not moving)
+	;--this doesn't work right now because tank speed is not set to zero when tanks are stuck (!)
+	;--but direction is set to zero.  let's check that.  which works but obviously we don't know what way to shoot!
 	ldy #3
 FindStuckTank
     lda TankStatus,Y
-    and #TANKSPEED|TANKINPLAY
-    cmp #TANKINPLAY|TANKSPEED0
+    and #TANKDIRECTION|TANKINPLAY
+    cmp #TANKINPLAY
     beq FireEnemyBulletNow
     dey
     bne FindStuckTank
@@ -2026,8 +2034,14 @@ TryAnotherDirection
 	bpl TryAnotherDirection
 	ldy #3					;loop around
 	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction
+
+NoAllowedDirections	
+    ;--if no allowed directions, set speed to zero
+;     lda TankStatus,X
+;     and #~TANKSPEED
+;     sta TankStatus,X
+    lda #0	
 FoundGoodDirection
-NoAllowedDirections
 	sta Temp
 	lda TankStatus,X
 	and #~TANKDIRECTION
@@ -2058,6 +2072,16 @@ NotAtIntersection
 
 ;****************************************************************************
 
+;--SPEEDBOOSTSOUNDLENGTH = 20
+
+PowerUpFrequencyTable
+    .byte 15, 15, 15, 15
+    .byte 15, 16, 17, 18
+    .byte 19, 20, 21, 22
+    .byte 23, 24, 25, 26
+    .byte 27, 28, 29, 30
+
+
 SoundSubroutine
 	;--no sound for enemy tanks; too annoying
 	
@@ -2080,13 +2104,25 @@ SoundSubroutine
 	rts
 	
 PlaySoundGameNotOver
+    ;--add some goofiness for the powerup routine
+    lda Channel1Decay
+    asl
+    bcc NoFrequencyChange  
+    ;--so use decay to index?
+    lsr
+    tay   
+    lda PowerUpFrequencyTable,Y
+    sta AUDF1
+NoFrequencyChange
 	lda Channel1Decay
+	and #$7F
  	cmp #$07
  	bcc SetChannel1Volume
  	lda #$07
 SetChannel1Volume
 	sta AUDV1
 	lda Channel1Decay
+	and #$7F
 	beq DoNotUpdateChannel1Decay
 	dec Channel1Decay
 DoNotUpdateChannel1Decay	
@@ -2974,7 +3010,7 @@ FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles 
 StartSoundSubroutine
 	
 	lda Channel1Decay
-	and #$F0
+	and #$70
 	bne DoNotStartSound
 	lda Tone,Y
 	sta AUDC1
@@ -3398,17 +3434,17 @@ PFRegisterLookup
 Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
 	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE
 
 Frequency
 	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
 	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ
 
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
-	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80
 
 	
 ;****************************************************************************
@@ -3836,8 +3872,8 @@ PlayerTankMovingSetRegularGraphicsPointers
 NotPlayerTankSkipNotMovingCheck
 	;--get index into tank graphics image
 	lda FrameCounter
-	lsr
-	and #%00000110      ;0, 2, 4, 6
+    and #%00001100
+    lsr
 TankGfxIndexSet
 	tax
 
@@ -3857,9 +3893,22 @@ TankGfxIndexSet
 	lda #>(TankKilledImage+TANKHEIGHT)
     bne SetTankGfxPtr   ;branch always
 UsePowerUpGraphic
-	lda #<(PowerUpImage1+TANKHEIGHT)
-	pha
-	lda #>(PowerUpImage1+TANKHEIGHT)
+    ldx #0
+    lda FrameCounter
+    and #%11100000
+    bne StaticPowerUpIcon
+    lda FrameCounter
+    and #%00011000
+    lsr
+    lsr
+    tax
+StaticPowerUpIcon    
+    lda PowerUpIconFrame,X
+    pha
+    lda PowerUpIconFrame+1,X
+; 	lda #<(PowerUpImage1+TANKHEIGHT)
+; 	pha
+; 	lda #>(PowerUpImage1+TANKHEIGHT)
     bne SetTankGfxPtr   ;branch always
 
 	
@@ -4277,8 +4326,18 @@ TankRightFrame
 PlayerTankRightFrame
 	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
    
-	
-;----------------Some Data Stuck Here	
+PowerUpIconFrame
+    .word PowerUpImage1+TANKHEIGHT, PowerUpImage2+TANKHEIGHT, PowerUpImage3+TANKHEIGHT, PowerUpImage4+TANKHEIGHT
+    
+TanksRemainingPF1Mask
+	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
+
+TanksRemainingPF2Mask		
+	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
+    
+    
+    
+;----------------End Some Data Stuck Here	
 	
 	 
     PAGEALIGN 2
@@ -5171,7 +5230,10 @@ SkipCreatingConnectingPassageLeft
     
     
 
-	
+	;--this is for testing:  enclose top left tank
+	lda PF1Left+MAZEROWS-2
+	ora #$CF
+	sta PF1Left+MAZEROWS-2
 	
 	
 	;--and clear GAMEOFF flag and turn off maze generation flag, and make base reappear
@@ -5332,16 +5394,6 @@ IsTankOnScreen
 ;frame odd  12 1P   3P 32   2P 31
 ;frame even P1 P3   23 21   13 2P
 
-TankCollisionRotationTables
-    .word TankCollisionBitsEven, TankCollisionBitsOdd
-
-TankCollisionBitsOdd
-    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -player tank
-    .byte %11000100 ;M0 to P0, M0 to P1, and M0 to M1   -enemy tank 1
-    .byte %10011000 ;M0 to P0, M1 to P0, and P0 to P1   -enemy tank 2
-    .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3
-TankCollisionBitsEven
-    .byte %11000100, %10011000, %00110100, %01101000
 	
 	;Rotation:		Frame odd		Frame even
 	;Framecounter = xxxxxxx1        xxxxxxx0
@@ -5356,14 +5408,6 @@ TankCollisionBitsEven
 	;Tank 2			P1 to P0		M1 to M0
 	;Tank 3			M1 to P0		P0 to M0
 	
-P0CollisionTable
-	.byte 3, 0
-P1CollisionTable
-	.byte 1, 2
-M0CollisionTable
-	.byte 0, 1
-M1CollisionTable
-	.byte 2, 3	
 ;****************************************************************************
 
 CollisionsSubroutine
@@ -5455,11 +5499,8 @@ NoBulletToBaseCollision
     ldy #3
 TankCollisionLoop
     lda Temp+1    ;get all collision registers
-;     beq NoTankCollisionsAtAll
-; YesTankCollisions
     and (MiscPtr),Y
     beq NoTankCollision
-; YesTankCollision   
     ;--check to see if what we are colliding into is already dead:
     sta Temp
     sty Temp+2
@@ -5471,17 +5512,9 @@ CheckForExplosionCollisionLoop
     beq NoCollisionWithThisTank
     ;--now check if tank is dead
     lda TankStatus,Y
-;     and #TANKINPLAY
-;     bne TankHitLiveTank
     lsr     ;get TANKINPLAY bit into carry
     bcs TankHitLiveTank
     ;--now see if explosion or powerup
-;     and #TANKDOWN>>1        ;shifted over following LSR above
-;     beq NoCollisionWithThisTank
-;     ;--else we hit a powerup
-;     ;--so we change to explosion?
-;     lda #0
-;     sta TankStatus,Y
 NoCollisionWithThisTank    
 CheckForExplosionCollisionLoopEntry
     dey
@@ -5503,8 +5536,6 @@ TankHitLiveTank
     tax ;
     ;--check if tank in play (can be on screen but not in play, if dead)
     lda TankStatus,X        
-;     and #TANKINPLAY
-;     beq TankAlreadyDeadCannotDie
     lsr     ;get TANKINPLAY bit into carry
     bcs TankNotDeadYetKillIt
     ;--tank is not in play, is it an explosion or a powerup?
@@ -5519,8 +5550,8 @@ TankHitLiveTank
     tya
     pha     ;save Y
     jsr TankRespawnRoutine
-    pla
-    tay
+;     pla
+;     tay
     ;--second actually activate powerup
     lda MazeGenerationPass  ;used for powerups during levels
     and #POWERUPACTIVATEDBITS
@@ -5532,8 +5563,15 @@ TankHitLiveTank
     and #~POWERUPACTIVATEDBITS
     ora NextPowerUpActivation,X
     sta MazeGenerationPass
-    ;--third play powerup sound (only if player hit it!)
-   ; sta TankX,X
+    ;--third play powerup sound only if it is speed boost (i.e., x = 0)
+    txa ;set flags based on X
+    bne NotSpeedBoostPowerUpNoSound
+    ldy #SPEEDBOOSTSOUND
+    jsr StartSoundSubroutineBank2
+
+NotSpeedBoostPowerUpNoSound    
+    pla ;restore Y
+    tay
     jmp TankAlreadyDeadCannotDie        ;branch always 
 
 
@@ -5547,14 +5585,11 @@ TankNotDeadYetKillIt
     bne EnemyTankDied   ;only get points if player runs into tank, not if tanks run into each other.
  	;--score for killing enemy tank
  	jsr ScoreForKillingTank
-	;--turn off player movement sound
-; 	lda #0
-; 	sta AUDV0
-;     beq PlayerTankDead
 EnemyTankDied
     tya
     tax
     jsr PlayerHitTank   ;this routine uses X to index into which tank got hit.
+
 TankAlreadyDeadCannotDie
 TankNotOnScreenCannotDie    
 NoTankCollision
@@ -5658,16 +5693,10 @@ KillAllTanksInLoop
     lda TankY,X
     cmp Temp+3
     bcc NotInsideBlastRadius
-    cmp Temp+2
+    cmp Temp+1
     bcs NotInsideBlastRadius
     ;--it is KILL KILL KILL
-;     tya
-;     pha
-    lda TankDeadStatus,X
-    sta TankStatus,X    ;%%%
-    
-;     pla
-;     tay    
+    jsr PlayerHitTank
 NotInsideBlastRadius
     dex
     bpl KillAllTanksInLoop  
@@ -5993,8 +6022,6 @@ ScoreForKillingTank
 ;****************************************************************************
     
     
-NextPowerUpActivation
-    .byte %01000000, %10000000, %11000000, %11000000    
 
 
 ;****************************************************************************
@@ -6181,8 +6208,6 @@ TopRowEnemyTankRespawn
 
 ;****************************************************************************
 
-TankDeadStatus
-    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
     
     SUBROUTINE   
 KillAllTanksBonus
@@ -6253,9 +6278,6 @@ EnemyTankHit
 	lda TankStatus
 	and #~TANKSPEED
 	sta TankStatus
-	;--kill 
-; 	lda #0		
-; 	sta AUDV1
     txa
     pha
 	jsr MoveBulletsOffScreen	;--returns with X=255
@@ -6263,7 +6285,24 @@ EnemyTankHit
 	tax	
 	
 LevelNotComplete
-    ;--first, reduce powerup tank kill countdown
+    ;--first, reduce powerup tank kill countdown BUT only if a powerup is not already on the screen
+    ;X=tank we killed.  0 is player.
+    stx Temp    ;save this
+    txa
+    tay
+CheckForPowerUpOnscreenLoop    
+    dey
+    bne CheckThisTankForPowerUp
+    ldy #3
+CheckThisTankForPowerUp    
+    cpy Temp    
+    beq NoPowerUpOnscreen
+    lda TankStatus,Y
+    and #TANKUP|TANKDOWN|TANKINPLAY
+    cmp #TANKUP|TANKDOWN
+    beq NoUpdateToPowerUpCountdown
+    bne CheckForPowerUpOnscreenLoop
+NoPowerUpOnscreen    
     lda MazeGenerationPass  ;used for powerup stuff during levels
     and #POWERUPCOUNTDOWNBITS
     beq NoUpdateToPowerUpCountdown
@@ -6320,7 +6359,7 @@ MoreThanFourTanksRemainingStill
 StartSoundSubroutineBank2
 	
 	lda Channel1Decay
-	and #$F0
+	and #$70
 	bne .DoNotStartSound
 	lda ToneBank2,Y
 	sta AUDC1
@@ -6439,9 +6478,6 @@ PositionASpriteSubroutineBank2
 
 
     
-EntryPointRowOffsetTable
-    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
-    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
 
 
 	
@@ -6775,8 +6811,15 @@ PlayerTankUp4b
         .byte #%11011011;--7
         .byte #%11011011;--9
         .byte #%11011011;--1
-        .byte 0			
-		
+        .byte 0		
+        
+        	
+EntryPointRowOffsetTable
+    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
+    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
+StartingTankStatus
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+
 		PAGEALIGN 4
 	
 DigitData
@@ -7077,7 +7120,6 @@ PowerUpImage1b
         
         
 TanksRemainingGfx
-;	.byte 0
 	.byte %11101110
 	.byte %11101110
 	.byte %11101110
@@ -7161,45 +7203,58 @@ PlayerTankDown4b
         .byte #%11011000;--1
         .byte 0
 
-PowerUpImage2
-        .byte #%00000000;--
-        .byte #%00000110;--
-        .byte #%00011110;--
-        .byte #%00111110;--
-        .byte #%01111110;--
-        .byte #%01111100;--
-        .byte #%01110100;--
-        .byte #%01111100;--
-        .byte #%01111000;--
-        .byte #%01100000;--
-        .byte #%00110000;--
-        .byte #%00011100;--
-PowerUpImage3
-        .byte #%00000000;--
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%01111110;--
-        .byte #%01111110;--
-        .byte #%01111110;--
-        .byte #%11111111;--
-        .byte #%10000001;--
-        .byte #%10000001;--
-        .byte #%11000011;--
-PowerUpImage4
-        .byte #%00000000;--
-        .byte #%01100000;--
-        .byte #%01111000;--
-        .byte #%01111100;--
-        .byte #%01111110;--
-        .byte #%00111110;--
-        .byte #%00101110;--
-        .byte #%00111110;--
-        .byte #%00011110;--
-        .byte #%00000110;--
-        .byte #%00001100;--
-        .byte #%00111000;--
+PowerUpImage2 = * - 1
+        .byte #%00000110;--2
+        .byte #%00111110;--4
+        .byte #%01111100;--6
+        .byte #%01111100;--8
+        .byte #%01100000;--10
+        .byte #%00011100;--12
+        
+PowerUpImage2b        
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%00011110;--3
+        .byte #%01111110;--5
+        .byte #%01110100;--7
+        .byte #%01111000;--9
+        .byte #%00110000;--11
+        .byte 0
+        
+PowerUpImage3 = * - 1
+        .byte #%00111100;--2
+        .byte #%00111100;--4
+        .byte #%01111110;--6
+        .byte #%01111110;--8
+        .byte #%10000001;--10
+        .byte #%11000011;--12
+        
+PowerUpImage3b
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%00111100;--3
+        .byte #%00111100;--5
+        .byte #%01111110;--7
+        .byte #%11111111;--9
+        .byte #%10000001;--11
+        .byte 0        
+PowerUpImage4 = * - 1
+        .byte #%01100000;--2
+        .byte #%01111100;--4
+        .byte #%00111110;--6
+        .byte #%00111110;--8
+        .byte #%00000110;--10
+        .byte #%00111000;--12
+PowerUpImage4b
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%01111000;--3
+        .byte #%01111110;--5
+        .byte #%00101110;--7
+        .byte #%00011110;--9
+        .byte #%00001100;--11
+        .byte 0        
+        
         
         
 PlayerStartingStatus
@@ -7219,11 +7274,6 @@ DigitDataMissileLo
 	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
 	.byte <MissileEight, <MissileNine
 		
-TanksRemainingPF1Mask
-	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
-
-TanksRemainingPF2Mask		
-	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
 		
 
 RotationTables
@@ -7259,11 +7309,27 @@ BulletLeftBank2
 BulletRightBank2
 	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 	
+TankCollisionRotationTables
+    .word TankCollisionBitsEven, TankCollisionBitsOdd
+
+TankCollisionBitsOdd
+    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -player tank
+    .byte %11000100 ;M0 to P0, M0 to P1, and M0 to M1   -enemy tank 1
+    .byte %10011000 ;M0 to P0, M1 to P0, and P0 to P1   -enemy tank 2
+    .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3
+TankCollisionBitsEven
+    .byte %11000100, %10011000, %00110100, %01101000
 	
     PAGEALIGN 6
 
-
-
+P1CollisionTable
+	.byte 1, 2
+M0CollisionTable
+	.byte 0, 1
+M1CollisionTable
+	.byte 2, 3	
+P0CollisionTable
+	.byte 3, 0
 
 	
 	ds BLOCKHEIGHT+1 - (* & $FF)
@@ -7289,11 +7355,12 @@ DigitBlank
 	ds BLOCKHEIGHT, 17
 	
 
-
+TankDeadStatus
+    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
 
 RemoveBrickColumnShift
     .byte 1,1,-2,2
-    .byte -2,1,1,0
+    .byte -2,1,1;,0
     
 RemoveBrickRowShift
     .byte 0,0,-1,0
@@ -7303,24 +7370,20 @@ RemoveBrickRowShift
 ToneBank2
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
 	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE
 
 FrequencyBank2
 	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
 	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ
-
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ
+	
 SoundLengthBank2
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
-	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
 	
-StartingTankStatus
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
-
-	
-	
-	
+NextPowerUpActivation
+    .byte %01000000, %10000000, %11000000, %11000000    
 
 	
 NumberOfBitsSetBank2
