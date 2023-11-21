@@ -88,8 +88,8 @@ BALLOFFSCREEN            0000              (R )
 BallX                    00ab              (R )
 BallY                    00b0              (R )
 BallYTemp                00b8                  
-BankSwitchSubroutine1    1fda              (R )
-BankSwitchSubroutine2    3fda              (R )
+BankSwitchSubroutine1    1fe0              (R )
+BankSwitchSubroutine2    3fe0              (R )
 BASECOLOR                0010              (R )
 BASSSOUND                0006                  
 BeatPattern              175d              (R )

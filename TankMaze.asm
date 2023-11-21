@@ -3793,10 +3793,10 @@ TankDeadStatusBank0
     
 ;------------------------------------------------------------------------------------------
 	
-    echo "----", ($1FDA-*), " bytes left (ROM) at end of Bank 1"
+    echo "----", ($1FE0A-*), " bytes left (ROM) at end of Bank 1"
 
-	org $1FDA
-	rorg $1FDA
+	org $1FE0
+	rorg $1FE0
 	
 	;BRK vector comes here, call with:
 	;   BRK
@@ -3833,13 +3833,14 @@ BankSwitchSubroutine1
 	inc $01,X       ;+6
 	lda ($01,X)     ;+6         high byte of routine we are jumping to
 	sta MiscPtr+1   ;+3     36
-   	lsr
-	lsr
-	lsr
-	lsr
-	lsr
-	tax             ;+12    48
-	nop $1FF8,X     ;+5     53  uses top 3 bits of address to determine which bank to switch to
+;    	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	tax             ;+12    48
+; 	nop $1FF8,X     ;+5     53  uses top 3 bits of address to determine which bank to switch to
+    nop $1FF9
 
 	jmp (MiscPtr)   ;+5     58
 	
@@ -7468,10 +7469,10 @@ NumberOfBitsSetBank2
 	.byte 2, 3, 3, 4
 ;****************************************************************************	
 
-    echo "----", ($3FDA-*), " bytes left (ROM) at end of Bank 2"
+    echo "----", ($3FE0-*), " bytes left (ROM) at end of Bank 2"
 
-   	org $2FDA
-	rorg $3FDA
+   	org $2FE0
+	rorg $3FE0
 	
 	
 BankSwitchSubroutine2 
@@ -7483,14 +7484,14 @@ BankSwitchSubroutine2
 	inc $01,X       ;+6
 	lda ($01,X)     ;+6
 	sta MiscPtr+1   ;+3
-	lsr             
-	lsr
-	lsr
-	lsr
-	lsr             ;+10
-	tax             ;+2
-	nop $1FF8,X     ;+4
-;     nop $1FF8
+; 	lsr             
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr             ;+10
+; 	tax             ;+2
+; 	nop $1FF8,X     ;+4
+    nop $1FF8
 
 	jmp (MiscPtr)   ;+5     57
 	
