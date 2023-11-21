@@ -2696,7 +2696,6 @@ TankNotTurning
 	cpx #0
 	bne NoTankSoundForEnemyTanks
 	lda Channel1Decay
-	and #$7F
 	cmp #PLAYERTANKENGINEVOLUME
 	bcs DoNotStartPlayerTankSound
 	ldy #PLAYERTANKENGINESOUND
@@ -2807,7 +2806,7 @@ TriggerDebounced
 	;--bullet sound
 	;--if explosion sound in early stages, do not make bullet sound
 	lda Channel1Decay
-	and #$78
+	and #$F8
 	bne NoBulletSound
 	ldy #BULLETSOUND
 	jsr StartSoundSubroutine
@@ -4409,11 +4408,8 @@ TanksRemainingPF1Mask
 TanksRemainingPF2Mask		
 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
     
-PFClearLookup
-	.byte $3F, $CF, $F3, $FC
-	.byte $FC, $F3, $CF, $3F
-	.byte $3F, $CF, $F3, $FC
-	.byte $FC, $F3, $CF, $3F
+    
+    
 ;----------------End Some Data Stuck Here	
 	
 	 
@@ -5690,9 +5686,9 @@ NoTankCollisionsAtAll
 
 BallHasNotHitBlock
 	;--now check if bullet has hit an enemy tank
-
+	;--new routine using collision registers instead of loop.  <--actually, reject this because occasionally bullets pass through tanks
+	;   works better with redesigned tank graphics but shots occasionally miss still when on the edge of the tank.  not sure if acceptable or not.
 	
-	;--we check only the bullet that was just displayed on the screen using the hardware collision registers	
 	lda FrameCounter
 	and #1
 	tay
@@ -5725,6 +5721,8 @@ BulletCollisionM1
 FoundDeadTankNowKill
     ;--check if tank is already dead (but still on screen)
     lda TankStatus,X
+;     and #TANKINPLAY
+;     beq TankAlreadyDeadCannotBeShot
     lsr     ;get TANKINPLAY bit into carry
     bcs TankAliveKillIt
     ;--so we hit a not-in-play tank.  
@@ -5744,7 +5742,7 @@ KillAllTanksWithinBlastRadius
     lda TankX,X
     sec
     sbc #12
-    sta Temp+4        ;left boundary
+    sta Temp        ;left boundary
     lda TankY,X
     clc
     adc #(TANKHEIGHT+TANKHEIGHT/2)+1
@@ -5761,7 +5759,7 @@ KillAllTanksWithinBlastRadius
     ldx #3
 KillAllTanksInLoop
     lda TankX,X
-    cmp Temp+4
+    cmp Temp
     bcc NotInsideBlastRadius
     cmp Temp+2
     bcs NotInsideBlastRadius
@@ -5915,21 +5913,11 @@ CheckNextTankForNewDeath
 ;****************************************************************************
     SUBROUTINE
 PowerUpExplosionRemoveBricks  
-        ;come in with X = tank (powerup icon) index
-
-    ;--remove bullet from screen
-    lda FrameCounter
-    and #3
-    tay
-    lda #BALLOFFSCREEN
-    sta BulletX,Y
-    sta BulletY,Y
-    
-    ;--and now we don't need bullet index any longer 
-        
-        
+        ;come in with X = tank (powerup icon) index, Y is bullet index  
     txa
     pha             ;save index into tank (powerup icon) that got hit
+	tya
+	pha             ;save Y index into bullet    
     ;--we will loop through the 8 bricks we want to blow up, starting in upper left and moving right and down
     ;first, get X position of upper left brick and convert to column
     ;--it ACTUALLY DOESN'T matter if bullet is moving left or right since we are starting from the tank (=powerup) position, not bullet position
@@ -5969,8 +5957,8 @@ PowerUpExplosionRemoveBricks
 	;now remove bricks in a loop
 	ldy #7
 .RemoveBricksLoop
-    sty Temp+6      ;MiscPtr = Temp+4, MiscPtr+1 = Temp+5
-;     pha ;save loop index
+    tya
+    pha ;save loop index
     ;--first, move to next row and column
     lda Temp+2  ;column
     clc
@@ -5978,7 +5966,7 @@ PowerUpExplosionRemoveBricks
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
     lda Temp+3  ;row
-;     clc       ;--not necessary after CLC/ADC above, that addition should never overflow
+    clc
     adc RemoveBrickRowShift,Y
     sta Temp+3
 	lda #<PF1Left
@@ -5994,20 +5982,15 @@ PowerUpExplosionRemoveBricks
 	bne .NotRowZero
 	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
 	lda Temp+2
-	;cmp #6
-	sbc #5      ;--actually subtracting 6, but carry is clear following not-taken BCS branch above
-	beq .ItIsBrick6Row0
-; 	bne .NotBrick6Row0
-; 	lda #0
-; 	sta LastRowL
-; 	beq .GoToNextBrick  ;branch always
+	cmp #6
+	bne .NotBrick6Row0
+	lda #0
+	sta LastRowL
+	beq .GoToNextBrick  ;branch always
 .NotBrick6Row0
-;     cmp #9
-    sbc #3
+    cmp #9
     bne .NotBrick9Row0	
-.ItIsBrick6Row0    
-    ;--following subtractions, A holds zero
-;     lda #0        
+    lda #0
     sta LastRowR
     beq .GoToNextBrick  ;branch always	
 	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
@@ -6022,26 +6005,32 @@ PowerUpExplosionRemoveBricks
     ldx Temp+2
     ;--get which PF register and use it to adjust our pointer
     lda PFRegisterLookupBank2,X
-;     clc   ;--not necessary following not-taken BCS branch above
+    clc
     adc MiscPtr
     sta MiscPtr
     ;--then lookup specific brick mask
-    lda PFClearLookup,X    
+    lda PFMaskLookupBank2,X
+    eor #$FF
     ;--then erase brick
     and (MiscPtr),Y
     sta (MiscPtr),Y
 .NotBrick9Row0    
 .OffMazeGoToNext  
 .GoToNextBrick 
-;     pla
-;     tay ;restore loop index
-    ldy Temp+6
+    pla
+    tay ;restore loop index
     dey
     bpl .RemoveBricksLoop
 
 
 
+    pla
+    tay     ;restore Y index into bullet
     
+    ;--and remove bullet from screen
+    lda #BALLOFFSCREEN
+    sta BulletX,Y
+    sta BulletY,Y
     
     
     pla
