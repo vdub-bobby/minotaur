@@ -38,7 +38,7 @@
             FireEnemyBulletRoutine
             SetInitialEnemyTankSpeedRoutine
             MoveEnemyTanksSubroutine
-            SoundSubroutine
+            PlaySoundSubroutine
             PositionASpriteSubroutine (no longer needed)
             PositionASpriteNoHMOVESubroutine (no longer needed)
             DivideByTwoSubroutine (no longer needed)
@@ -256,8 +256,8 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 ;-------------------------Constants Below---------------------------------
 
 
-VBLANK_TIMER = 44       ;--this jitters a bit at times.
-OVERSCAN_TIMER = 31     ;--this seems to be fine 
+VBLANK_TIMER = 42       ;--this jitters a bit at times.
+OVERSCAN_TIMER = 29     ;--this seems to be fine 
 
 
 TANKHEIGHT	=	7
@@ -873,7 +873,7 @@ OverscanRoutine
 	sta TIM64T
 	
 	;--keep playing sound even when game not on
-	jsr SoundSubroutine
+	jsr PlaySoundSubroutine
 	
 	jsr UpdateRandomNumber  ;--once per frame
 
@@ -888,10 +888,6 @@ OverscanRoutine
 	lda TankMovementCounter
 	lsr
 	lsr
-; 	sta Temp
-; 	lda #31
-; 	sec
-; 	sbc Temp
 	sta AUDF1
 	lda #GAMEOVERSOUND
 	sta AUDC1
@@ -1150,14 +1146,14 @@ NotOnTitleScreen
 
 WaitForOverscanEnd
 	lda INTIM
-; 	bpl WaitForOverscanEnd
-	bmi OverTimeOverscan
-	cmp #1
-	bne WaitForOverscanEnd
-	beq EndOverscan
-OverTimeOverscan
-	nop
-EndOverscan	
+ 	bpl WaitForOverscanEnd
+; 	bmi OverTimeOverscan
+; 	cmp #1
+; 	bne WaitForOverscanEnd
+; 	beq EndOverscan
+; OverTimeOverscan
+; 	nop
+; EndOverscan	
 	
 ; 	sta WSYNC		;last line...I think?
 
@@ -2118,7 +2114,7 @@ PowerUpFrequencyTable
     .byte 27, 28, 29, 30
 
 
-SoundSubroutine
+PlaySoundSubroutine
 	;--no sound for enemy tanks; too annoying
 	
 	;  tentative:
@@ -2234,9 +2230,11 @@ NoPercussionDownBeat
     ora #$3
     sta FrameCounter
     inc FrameCounter
-    jsr GetPercussionSound
-    pla
+    jsr GetPercussionSound      ;returns with 0
+    tay     ;save this value
+    pla     ;restore frame counter
     sta FrameCounter
+    cpy #0
     beq PlayRegularNote
 ;     ;--else keep playing percussion
     rts
@@ -3795,10 +3793,10 @@ TankDeadStatusBank0
     
 ;------------------------------------------------------------------------------------------
 	
-    echo "----", ($1FD5-*), " bytes left (ROM) at end of Bank 1"
+    echo "----", ($1FDA-*), " bytes left (ROM) at end of Bank 1"
 
-	org $1FD1
-	rorg $1FD1
+	org $1FDA
+	rorg $1FDA
 	
 	;BRK vector comes here, call with:
 	;   BRK
@@ -3846,15 +3844,16 @@ BankSwitchSubroutine1
 	jmp (MiscPtr)   ;+5     58
 	
 ReturnFromBSSubroutine1
-	tsx             ;+2
-	lda $02,X       ;+4      6  get high byte of return address
-	lsr
-	lsr
-	lsr
-	lsr
-	lsr
-	tax             ;+12    18
-	nop $1FF8,X     ;+5     23  uses top 3 bits of address to determine which bank to switch to
+; 	tsx             ;+2
+; 	lda $02,X       ;+4      6  get high byte of return address
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	tax             ;+12    18
+; 	nop $1FF8,X     ;+5     23  uses top 3 bits of address to determine which bank to switch to
+    nop $1FF9
 	rts             ;+6     29
 EndBankSwitchRoutine1
 
@@ -4196,18 +4195,18 @@ SetWallColor
 
 WaitForVblankEnd
 	lda INTIM
-; 	bpl WaitForVblankEnd
-	bmi OverTimeVBLANK
-	cmp #1
-	bne WaitForVblankEnd
-	beq EndVBLANK
-OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
-	nop
-EndVBLANK	
+	bpl WaitForVblankEnd
+; 	bmi OverTimeVBLANK
+; 	cmp #1
+; 	bne WaitForVblankEnd
+; 	beq EndVBLANK
+; OverTimeVBLANK				;this nonsense is here just so I can trap an overtime condition in an emulator, if needed
+; 	nop
+; EndVBLANK	
 
 	
 	
-	ldy #0
+	lda #0
 	sta WSYNC
 	sta VBLANK
 	lda #SCORECOLOR
@@ -6205,12 +6204,6 @@ NoSoundForBrickExplosion
     
 ;****************************************************************************
 
-; TankRespawnRoutineWrapper
-;     tsx
-;     lda $03,X
-;     tax
-;     jsr TankRespawnRoutine
-;     jmp ReturnFromBSSubroutine2
     
 TankRespawnRoutineWrapperPlayer
     ldx #0    
@@ -7475,10 +7468,11 @@ NumberOfBitsSetBank2
 	.byte 2, 3, 3, 4
 ;****************************************************************************	
 
-    echo "----", ($3FD5-*), " bytes left (ROM) at end of Bank 2"
+    echo "----", ($3FDA-*), " bytes left (ROM) at end of Bank 2"
 
-   	org $2FD1
-	rorg $3FD1
+   	org $2FDA
+	rorg $3FDA
+	
 	
 BankSwitchSubroutine2 
 	plp             ;+4
@@ -7501,19 +7495,19 @@ BankSwitchSubroutine2
 	jmp (MiscPtr)   ;+5     57
 	
 ReturnFromBSSubroutine2
-	tsx             ;+2
-	lda $02,X       ;+4     get high byte of return address
-	lsr
-	lsr
-	lsr
-	lsr
-	lsr             ;+10
-	tax             ;+2
-	nop $1FF8,X     ;+4
-;     nop $1FF8
+; 	tsx             ;+2
+; 	lda $02,X       ;+4     get high byte of return address
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr
+; 	lsr             ;+10
+; 	tax             ;+2
+; 	nop $1FF8,X     ;+4
+    nop $1FF8
 
 	rts             ;+6     28
-
+EndBankSwitchRoutine2
 	;--reserve space for hot spots
     org $2FF8
     rorg $3FF8
