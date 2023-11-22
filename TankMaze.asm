@@ -61,7 +61,7 @@
             GenerateMazeSubroutine
             UpdateRandomNumberBank2
             MoveEnemyTanksOffScreen
-            MoveBulletsOffScreen
+            
             IncreaseScoreSubroutine
             IsTankOnScreen
             CollisionsSubroutine
@@ -5415,15 +5415,6 @@ SetStartingEnemyTankLocationsLoop
 	
 ;****************************************************************************
 	
-MoveBulletsOffScreen
-	ldx #3
-	lda #BALLOFFSCREEN
-RemoveBulletsFromScreenLoop
-	sta BulletX,X
-	sta BulletY,X
-	dex
-	bpl RemoveBulletsFromScreenLoop
-	rts
 
 ;****************************************************************************
 
@@ -5581,7 +5572,7 @@ TankCollisionLoop
     ;--check to see if what we are colliding into is already dead:
     sta Temp
     sty Temp+2
-    jmp CheckForExplosionCollisionLoopEntry
+    bne CheckForExplosionCollisionLoopEntry ;branch always following not-taken BEQ above
 CheckForExplosionCollisionLoop
     
     lda Temp
@@ -5654,8 +5645,7 @@ NotSpeedBoostPowerUpNoSound
 
     
 TankNotDeadYetKillIt    
-    jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not
-    and #$FF    ;--sets flags
+    jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not, and zero flag set appropriately
     beq TankNotOnScreenCannotDie
     ;--tank is onscreen
     tya ;--set flags based on which tank
@@ -5678,8 +5668,7 @@ NonPlayerTankHitPowerUp
 NoTankCollisionsAtAll
 
 
-    ;--alternate collision routine for bullet-to-wall using collision registers
-    
+    ;--bullet (ball) to wall collision check    
     bit CXBLPF
     bpl BallHasNotHitBlock
     ;--bullet hit the wall, now identify which bullet.
@@ -6316,16 +6305,12 @@ PlayerHitTank
 	tya
 	pha
 
-; 	txa
-; 	bne EnemyTanksNotMovedOffScreen
-; 	jsr TankRespawnRoutine
 EnemyTanksNotMovedOffScreen
 
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2
 	
 	;--clear "in play" flag, set wait counter, and set direction
-;     lda TankDeadStatus,X
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
     sta TankStatus,X
 
@@ -6354,30 +6339,42 @@ EnemyTankHit
 	lda TankStatus
 	and #~TANKSPEED
 	sta TankStatus
-    txa
-    pha
-	jsr MoveBulletsOffScreen	;--returns with X=255
-	pla
-	tax	
+	
+	ldy #3
+	lda #BALLOFFSCREEN
+RemoveBulletsFromScreenLoop
+	sta BulletX,Y
+	sta BulletY,Y
+	dey
+	bpl RemoveBulletsFromScreenLoop
+	
 	
 LevelNotComplete
     ;--first, reduce powerup tank kill countdown BUT only if a powerup is not already on the screen
     ;X=tank we killed.  0 is player.
-    stx Temp    ;save this
-    txa
-    tay
-CheckForPowerUpOnscreenLoop    
-    dey
-    bne CheckThisTankForPowerUp
+;     stx Temp    ;save this
+;     ldy Temp    ;and get X into Y
+; CheckForPowerUpOnscreenLoop    
+;     dey
+;     bne CheckThisTankForPowerUp
+;     ldy #3
+; CheckThisTankForPowerUp    
+;     cpy Temp    
+;     beq NoPowerUpOnscreen
+;     lda TankStatus,Y
+;     and #TANKUP|TANKDOWN|TANKINPLAY
+;     cmp #TANKUP|TANKDOWN
+;     beq NoUpdateToPowerUpCountdown
+;     bne CheckForPowerUpOnscreenLoop
     ldy #3
-CheckThisTankForPowerUp    
-    cpy Temp    
-    beq NoPowerUpOnscreen
+CheckForPowerUpOnscreenLoop   
     lda TankStatus,Y
     and #TANKUP|TANKDOWN|TANKINPLAY
     cmp #TANKUP|TANKDOWN
     beq NoUpdateToPowerUpCountdown
+    dey
     bne CheckForPowerUpOnscreenLoop
+
 NoPowerUpOnscreen    
     lda MazeGenerationPass  ;used for powerup stuff during levels
     and #POWERUPCOUNTDOWNBITS
@@ -6392,9 +6389,9 @@ NoPowerUpOnscreen
 NoUpdateToPowerUpCountdown    
     ;--what I want to do here is IF the # of tanks remaining <= 3, 
     ;   increase all enemy tank speeds by .... 4?  constant value.
-    lda TanksRemaining
-    cmp #4
-    bcs MoreThanFourTanksRemainingStill
+;     lda TanksRemaining
+;     cmp #4
+;     bcs MoreThanFourTanksRemainingStill
     ;--loop through tanks and increase speed?
     ;--use Y variable... or save X and restore?
 ;     txa
