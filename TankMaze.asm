@@ -845,7 +845,6 @@ InBetweenLevels
 ; 	;--keep playing sound even when game not on
 ; 	jsr SoundSubroutine
 ; 	
-; 	jsr UpdateRandomNumber  ;--once per frame
 
     lda GameStatus
     and #GENERATINGMAZE|GAMEOVER
@@ -853,7 +852,7 @@ InBetweenLevels
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
 
-
+	jsr UpdateRandomNumber  ;--once per frame
 
 
 
@@ -875,7 +874,6 @@ OverscanRoutine
 	;--keep playing sound even when game not on
 	jsr PlaySoundSubroutine
 	
-	jsr UpdateRandomNumber  ;--once per frame
 
 	lda GameStatus
 	and #GAMEOVER
@@ -983,8 +981,6 @@ GameNotOver
 	
 	jsr PowerUpBonusRoutine
 
-	
-	
 	
 	jmp WaitForOverscanEnd
 GameNotOn
@@ -1247,7 +1243,7 @@ StartNewLevel
 	bne AlreadyStartingNewLevel
 	lda GameStatus
 	ora #GENERATINGMAZE	;--start generating maze
-	and #~TITLESCREEN	;--turn off title screen
+	and #~(TITLESCREEN|LEVELCOMPLETE)	;--turn off title screen and turn off "level complete" 
 	sta GameStatus
 	
 MoveAllTanksOffScreenSubroutine     ;called from gameover routine
@@ -1637,8 +1633,9 @@ DoNotBringTankOnscreenYet
 PlayerTankMovementRoutine
     ;--first, if TANKINPLAY is cleared, we wait
     lda TankStatus
-    and #TANKINPLAY
-    beq WaitForPlayerExplosion
+    lsr     ;get TANKINPLAY into carry
+    bcc WaitForPlayerExplosion
+
 	;--if tank off left edge of screen, we don't read joystick, we just wait (??) and then move it on to the maze from the left
 	lda TankX
 	cmp #16
@@ -1679,104 +1676,23 @@ DoneWaitingBringPlayerTankOnScreen
 	lda #~J0RIGHT
 	jmp SkipReadingControllers
 PlayerTankOnscreenMoveIt
-    ldx #0	
+    ldx #0
+	lda TankX
+	and #$07
+	beq AtIntersectionX	    ;+10	10
+	jmp NotAtIntersection	;+3	    14
 TankOnscreenMoveIt
 	;--plan for now:  every time enemy tank hits intersection, change direction
 	;push X, Y target for tank onto stack and then call ChooseTankDirectionSubroutine
 	;--intersection means X mod 8 = 0 and Y mod 7 = 0
 	lda TankX,X
 	and #$07
-	beq AtIntersectionX
-	cpx #0      ;check if enemy tank
-	beq PlayerTankDoesNotReverse
-EnemyTankPossibleReversal
-	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
-	lda TankMovementCounter
-	bne NoTankReversal
-TankReverseDirection
-    ;--only reverse if tank is fully on screen
-    jsr IsTankOnScreenBank0
-    beq NoTankReversal
-	lda TankStatus,X
-	lsr
-	lsr
-	lsr
-	lsr
-	tay
-	lda PreventReverses,Y
-	eor #$FF
-	sta Temp
-	lda TankStatus,X
-	and #~TANKDIRECTION
-	ora Temp
-	sta TankStatus,X
-PlayerTankDoesNotReverse
-NoTankReversal	
-	jmp NotAtIntersection
+	beq AtIntersectionX             
+    jmp NotAtIntersection
 AtIntersectionX
 	lda TankY,X
 	sec
 	sbc #1
-	
-	
-	;--could use giant table instead.... 
-	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
-	;	post gives credit to December '84 Apple Assembly Line
-	;--constant cycle count divide by 7 !!!!
-	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-; 	sta Temp+1 ;save for below --- necessary?  yes.
-; 	sta Temp
-; 	lsr
-; 	lsr
-; 	lsr
-; 	adc Temp
-; 	ror
-; 	lsr
-; 	lsr
-; 	adc Temp
-; 	ror
-; 	lsr
-; 	lsr         ;+30
-; 	
-; 	;--need modulo BLOCKHEIGHT (=7)
-; 	;	so now multiply by 7 
-;     ;       new routine x * 7 = x * 4 + x + x + x
-;     sta Temp
-;     asl
-;     asl
-;     adc Temp
-;     adc Temp
-;     adc Temp
-;     sta Temp    ;+19 uses one byte RAM
-; 	;--now subtract from original number (all we care is if modulo = 0 or not)
-; 	sec
-; 	sbc Temp+1  ;+5
-
-    ;--old routine (above) takes a flat 54 cycles.  
-       ;    30 cycles to divide by 7 (throwing away remainder)
-       ;    19 cycles to multiply by 7, 
-       ;     5 cycles to subtract the original number, then test for zero (=evenly divisible by seven)
-    ;--new routine is varying but worst case for the range we have (1-84) is 52 (when Tank Y = 81).  And mostly is much less.
-    ;---if enter this with A = 0 it will get stuck in an endless loop
-    ;   created this routine myself based on the top answer here: https://math.stackexchange.com/questions/2228122/general-rule-to-determine-if-a-binary-number-is-divisible-by-a-generic-number 
-    ;       basic outline is:
-    ;       say our starting number is n
-    ;       write n as 2k + j (where j is the final binary digit), so n=2k+j
-    ;       subtract 7j from both sides: n-7j=2k-6j  
-    ;       if we assume n is divisible by 7, and obviously 7j is divisible by 7, then the right side is also divisible by 7, or
-    ;       2k-6j is divisible by seven
-    ;       this simplifies to 2(k-3j), since 2 and 7 are relative primes, we now know that k-3j is divisible by seven IF n is divisible by seven.
-    ;       so test this repeatedly:
-    ;           k = n>>1 and 3j = 0 (if n is even) or 3 (if n is odd)
-
-; EvenlyDivisibleBySevenLoop
-;     lsr                             ;k=n>>1
-;     bcc EvenlyDivisibleBySevenLoop  ;if n was odd (carry clear) we subtract zero
-;     sbc #3                          ;if n was even (carry set) we subtract three
-;     bcc NotEvenlyDivisibleBySeven   ;if we end up with a negative number, then it is not evenly divisible by 7
-;     bne EvenlyDivisibleBySevenLoop  ;if we end up with a positive non-zero number, then repeat
-; 	beq AtIntersectionY             ;if we end up with zero, then it is evenly divisible by 7
-; NotEvenlyDivisibleBySeven
 
     ;--new new routine is a binary search.  Worst case is 27 cycles, best is 5.
     cmp #ROWHEIGHT*6        ;middle value
@@ -1814,7 +1730,31 @@ Lower3
     beq AtIntersectionY
     ;--else not at an intersection
 NotAtIntersectionY
-   	jmp NotAtIntersection
+EnemyTankPossibleReversal
+	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
+	lda TankMovementCounter
+	bne NoTankReversal
+TankReverseDirection
+    ;--only reverse if tank is fully on screen
+    jsr IsTankOnScreenBank0
+    beq NoTankReversal
+	lda TankStatus,X
+	lsr
+	lsr
+	lsr
+	lsr
+	tay
+	lda ReverseDirection,Y
+; 	eor #$FF
+	sta Temp
+	lda TankStatus,X
+	and #~TANKDIRECTION
+	ora Temp
+	sta TankStatus,X
+PlayerTankDoesNotReverse
+NoTankReversal	
+	jmp NotAtIntersection
+
 AtIntersectionY	
 	;--here is where we choose which way each tank will go
 
@@ -3571,6 +3511,10 @@ NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
 	
 PreventReverses = *-1	;--the FF are wasted bytes
 	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
+ReverseDirection = *-1	;--the FF are wasted bytes
+	.byte 	J0DOWN, J0UP, $FF, J0RIGHT, $FF, $FF, $FF, J0LEFT
+	
+	
 	
 	;tank 0 = player, so don't need initial byte
 	;tank 1 target = upper left corner
@@ -3793,7 +3737,7 @@ TankDeadStatusBank0
     
 ;------------------------------------------------------------------------------------------
 	
-    echo "----", ($1FE0A-*), " bytes left (ROM) at end of Bank 1"
+    echo "----", ($1FE0-*), " bytes left (ROM) at end of Bank 1"
 
 	org $1FE0
 	rorg $1FE0
@@ -5694,7 +5638,7 @@ BallHasNotHitBlock
 	bvs BulletCollisionM0
 	bit CXM1FB
 	bvs BulletCollisionM1
-	bvc NoBulletToTankCollision
+	jmp NoBulletToTankCollision
 	
 BulletCollisionP0
     lda P0CollisionTable,Y
@@ -5747,6 +5691,9 @@ KillAllTanksWithinBlastRadius
     sbc #(TANKHEIGHT+TANKHEIGHT/2)
     sta Temp+3      ;lower boundary
     ;--discarding X (powerup icon index) at this point
+    lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
+    sta TankStatus,X
+    stx Temp+5
     ldx #3
 KillAllTanksInLoop
     lda TankX,X
@@ -5760,7 +5707,10 @@ KillAllTanksInLoop
     cmp Temp+1
     bcs NotInsideBlastRadius
     ;--it is KILL KILL KILL
+    cpx Temp+5  ;are we killing the  powerup?
+    beq DoNotKillPowerUp
     jsr PlayerHitTank
+DoNotKillPowerUp
 NotInsideBlastRadius
     dex
     bpl KillAllTanksInLoop  
@@ -5967,7 +5917,7 @@ PowerUpExplosionRemoveBricks
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
     lda Temp+3  ;row
-;     clc       ;--not necessary after CLC/ADC above, that addition should never overflow
+    clc       
     adc RemoveBrickRowShift,Y
     sta Temp+3
 	lda #<PF1Left
