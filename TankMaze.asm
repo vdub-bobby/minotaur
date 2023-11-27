@@ -80,7 +80,8 @@
 
 
 	To do:
-	DONE Stuck enemies do not fire.  They always fire to the right, which would be a problem if they are stuck at the right edge.
+	DONE Stuck enemies do not fire.  FIX: They always fire to the right, which would be a problem if they are stuck at the right edge.  Not sure if I should care.  Maybe it's fine?
+	    I've only ever seen this once, I think only way is in scenario outlined a little below.
 	Difficulty ramping.  Two things:
 	    1. Increase initial difficulty - potentially increase firing rate for level 1
 	    2. Tweak difficulty ramping.  Currently -
@@ -100,11 +101,11 @@
 			??? other?
 			DONE Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
     Attract mode?
-	Turn music off with B&W switch (or pause on 7800?)
+	NOT GOING TO DO THIS: Turn music off with B&W switch (or pause on 7800?).  abandoned this, music is unobtrusive enough that I don't think it is a big deal.
 	Turn powerups off with difficulty (or use select?)
 	DONE Adjust scoring:
-	    DONE 50 points for each tank killed plus combo system: for each tank killed before dying in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
-	        Killing all tanks without dying means last tank is worth 525 points.
+	    DONE 50 points for each tank killed plus combo system: for each tank killed since last death in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
+	        Bonus maxes out at 375 points
 	    DONE Powerup that kills all tanks on screen - give 1000 points per tank killed 
 	        STILL CONSIDERING (plus 500?)
 	    Shooting powerup - points?
@@ -137,7 +138,7 @@
 	DONE replace placeholder font
 	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 	PAL60 version
-	2-player?  (unlikely but...)
+	NOT GOING TO HAPPEN: 2-player?  (unlikely but...)
 	Other...?
 	sound tweaking/improvements
 	DONE: Game Over logic of some kind
@@ -186,49 +187,14 @@
 */
 
 
-/*
 
-        rando notes:
-        if tank not at intersection, and bullet not on the screen, entire vblank takes 10 scanlines (before we jump to "kernel", which 
-        has a bunch of stuff before it actually starts drawing the screen)
-        
-        takes ... 6 scanlines to get through "rotation" loop ... which is varying.
-        
-        another 2 scanlines to set up graphics pointers for tanks
-        another 2 scanlines to set up score pointers
-        
-        and then that's the end of the actual vblank.  seems like approx best case scenario is we have something like 15 extra scanlines.
-        
-        
-        next frame, tank is at intersection -
-         9 scanlines to check for wall (!!!!)  this is probably the biggest thing
-         5 scanlines to check for enemy tank (this has been reduced to 1-3 I think)
-         1 scanline for "ChooseTankDirection"
-         1 scanline for "EliminateDiagonal..."
-        
-        we are at scanline 20 (almost) when we get to TankMovementSubroutine
-        
-        at scanline #21 when we reach the end (currently drops through to see if player wants to shoot)
-        
-        finally done with enemy tank movement at scanline #22 (halfway through)
-        
-        bullet is onscreen this time ...so takes 4 scanlines to move bullet
-        
-        
-        SoundSubroutine - 3 scanlines
-        ReadConsoleSwitch... - if nothing pressed, back in half a scanline
-        
-        so tank is at intersection, bullet on screen means vblank  takes 29 scanlines (before we jump to kernel)
-        
-
-
-*/
 
 DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
-
+POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset/restart are all set to 1 
+ 
 	processor 6502
 	include vcs.h
 	include macro.h
@@ -259,6 +225,8 @@ DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter a
 VBLANK_TIMER = 42       ;--this jitters a bit at times.
 OVERSCAN_TIMER = 29     ;--this seems to be fine 
 
+SOUNDTIMEBUFFER     =   (6*76)/64
+
 
 TANKHEIGHT	=	7
 BLOCKHEIGHT = 	7
@@ -275,10 +243,16 @@ PLAYERDEATHCOUNTMAX         =   3
 POWERUPACTIVATEDBITS        =   %11000000       ;4 possible powerups?
 POWERUPCOUNTDOWNBITS        =   %00111100       ;number of enemies to be killed without any deaths to activate a powerup
 POWERUPCOUNTDOWNDECREMENT   =   %00000100       ;subtract this to decrement the powerup countdown 
+    IF POWERUPTESTING == 1
+POWERUPCOUNTDOWNRESTART     =   %00001000       ;this is what the counter gets restarted at after gaining a powerup
+POWERUPCOUNTDOWNRESET       =   %00001000       ;this is what the counter gets reset to after player dies
+POWERUPCOUNTDOWNDEFAULT     =   %00001000       ;this is default if random start is zero
+    ELSE
 POWERUPCOUNTDOWNRESTART     =   %00011000       ;this is what the counter gets restarted at after gaining a powerup
 POWERUPCOUNTDOWNRESET       =   %00111100       ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   %00011000       ;this is default if random start is zero
-
+    ENDIF
+    
 ;--TankStatus bits
 TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
 TANKSPEED       =   %00001110       ;ASL ASL ASL ASL ORA #$1F and then added to TankFractional
@@ -883,8 +857,6 @@ OverscanRoutine
 	lda #OVERSCAN_TIMER
 	sta TIM64T
 	
-	;--keep playing sound even when game not on
-	jsr PlaySoundSubroutine
 	
 
 	lda GameStatus
@@ -994,7 +966,7 @@ GameNotOver
 	jsr PowerUpBonusRoutine
 
 	
-	jmp WaitForOverscanEnd
+	jmp CheckTimeForSound
 GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	and #LEVELCOMPLETE
@@ -1151,7 +1123,21 @@ WaitToDrawTitleScreen
 
 NotOnTitleScreen
 
+CheckTimeForSound
 
+    ;we need .... some time for this.
+    ;--I *believe* we only end up skipping this when you shoot a powerup, which causes a loud, long explosion, 
+    ;   so skipping the sound routine for a frame is unnoticeable.  More testing to confirm.
+    lda INTIM
+    cmp #SOUNDTIMEBUFFER
+    bcc NoTimeForSoundThisFrame
+
+
+	;--keep playing sound even when game not on
+	jsr PlaySoundSubroutine
+
+
+NoTimeForSoundThisFrame
 WaitForOverscanEnd
 	lda INTIM
  	bpl WaitForOverscanEnd
@@ -3881,8 +3867,7 @@ UsePowerUpGraphic
     and #%11100000
     bne StaticPowerUpIcon
     lda FrameCounter
-    and #%00011000
-    lsr
+    and #%00011100
     lsr
     tax
 StaticPowerUpIcon    
@@ -4307,7 +4292,8 @@ PlayerTankRightFrame
 	.word PlayerTankRight4+TANKHEIGHT, PlayerTankRight3+TANKHEIGHT, PlayerTankRight2+TANKHEIGHT, PlayerTankRight1+TANKHEIGHT
    
 PowerUpIconFrame
-    .word PowerUpImage1+TANKHEIGHT, PowerUpImage2+TANKHEIGHT, PowerUpImage3+TANKHEIGHT, PowerUpImage4+TANKHEIGHT
+    .word PowerUpImage1+TANKHEIGHT, PowerUpImage3+TANKHEIGHT, PowerUpImage2+TANKHEIGHT, PowerUpImage3+TANKHEIGHT
+    .word PowerUpImage1+TANKHEIGHT, PowerUpImage5+TANKHEIGHT, PowerUpImage4+TANKHEIGHT, PowerUpImage5+TANKHEIGHT
     
 TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
@@ -7199,59 +7185,71 @@ PlayerTankDown4b
         .byte #%11011000;--1
         .byte 0
 
-PowerUpImage2 = * - 1
+PowerUpImage2 = * - 1       ;straight right
         .byte #%00000110;--2
         .byte #%00111110;--4
-        .byte #%01111100;--6
-        .byte #%01111100;--8
-        .byte #%01100000;--10
-        .byte #%00011100;--12
-        
+        .byte #%01110100;--6
+        .byte #%01111000;--8
+        .byte #%00110000;--10
+        .byte #%00000000;--12      
 PowerUpImage2b        
         .byte 0
         .byte #%00000000;--1
         .byte #%00011110;--3
         .byte #%01111110;--5
-        .byte #%01110100;--7
-        .byte #%01111000;--9
-        .byte #%00110000;--11
+        .byte #%01111100;--7
+        .byte #%01100000;--9
+        .byte #%00011110;--11
         .byte 0
-        
-PowerUpImage3 = * - 1
-        .byte #%00111100;--2
-        .byte #%00111100;--4
-        .byte #%01111110;--6
-        .byte #%01111110;--8
-        .byte #%10000001;--10
-        .byte #%11000011;--12
-        
+PowerUpImage3 = * - 1       ;angled right
+        .byte #%00001110;--2
+        .byte #%00111110;--4
+        .byte #%01101000;--6
+        .byte #%01111000;--8
+        .byte #%00100100;--10
+        .byte #%00000000;--12
 PowerUpImage3b
-        .byte 0
+     .byte 0
         .byte #%00000000;--1
-        .byte #%00111100;--3
-        .byte #%00111100;--5
-        .byte #%01111110;--7
-        .byte #%11111111;--9
-        .byte #%10000001;--11
-        .byte 0        
-PowerUpImage4 = * - 1
+        .byte #%00011110;--3
+        .byte #%01111100;--5
+        .byte #%01111100;--7
+        .byte #%01001000;--9
+        .byte #%00011011;--11
+        .byte 0     
+
+PowerUpImage4 = * - 1       ;straight left
         .byte #%01100000;--2
         .byte #%01111100;--4
-        .byte #%00111110;--6
-        .byte #%00111110;--8
-        .byte #%00000110;--10
-        .byte #%00111000;--12
+        .byte #%00101110;--6
+        .byte #%00011110;--8
+        .byte #%00001100;--10
+        .byte #%00000000;--12
 PowerUpImage4b
         .byte 0
         .byte #%00000000;--1
         .byte #%01111000;--3
         .byte #%01111110;--5
-        .byte #%00101110;--7
-        .byte #%00011110;--9
-        .byte #%00001100;--11
+        .byte #%00111110;--7
+        .byte #%00000110;--9
+        .byte #%01111000;--11
         .byte 0        
-        
-        
+PowerUpImage5 = * - 1       ;angled left
+        .byte #%01110000;--2
+        .byte #%01111100;--4
+        .byte #%00010110;--6
+        .byte #%00011110;--8
+        .byte #%00100100;--10
+        .byte #%00000000;--12
+PowerUpImage5b
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%01111000;--3
+        .byte #%00111110;--5
+        .byte #%00111110;--7
+        .byte #%00010010;--9
+        .byte #%11011000;--11
+        .byte 0        
         
 PlayerStartingStatus
     .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
@@ -7281,11 +7279,6 @@ RotationEven
 	.byte 2, 1, 3, 0
     ;--have a lot of space left here. (currently $2F bytes)
 	
-AllowCarveDownTable ;can't carve downward in the outer two columns
-    .byte 0, 0, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 1, 1
-    .byte 1, 1, 0, 0		
 P0M0Color
     .byte TANKCOLOR1, TANKCOLOR3
 
@@ -7387,6 +7380,15 @@ NumberOfBitsSetBank2
 	.byte 1, 2, 2, 3
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
+
+	
+AllowCarveDownTable ;can't carve downward in the outer two columns
+    .byte 0, 0, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 1, 1
+    .byte 1, 1, 0, 0		
+	
+	
 ;****************************************************************************	
 
     echo "----", ($3FE0-*), " bytes left (ROM) at end of Bank 2"
