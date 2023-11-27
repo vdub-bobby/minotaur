@@ -270,10 +270,14 @@ MAZEAREAHEIGHT 	= 	TANKAREAHEIGHT
 DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 
 ;--MazeGenerationPass bits during a level (used to count player deaths and track powerups)
-PLAYERDEATHCOUNTBITS        =   %00000111
-PLAYERDEATHCOUNTMAX         =   7
+PLAYERDEATHCOUNTBITS        =   %00000011
+PLAYERDEATHCOUNTMAX         =   3
 POWERUPACTIVATEDBITS        =   %11000000       ;4 possible powerups?
-POWERUPCOUNTDOWNBITS        =   %00111000       ;number of enemies to be killed without any deaths to activate a powerup
+POWERUPCOUNTDOWNBITS        =   %00111100       ;number of enemies to be killed without any deaths to activate a powerup
+POWERUPCOUNTDOWNDECREMENT   =   %00000100       ;subtract this to decrement the powerup countdown 
+POWERUPCOUNTDOWNRESTART     =   %00011000       ;this is what the counter gets restarted at after gaining a powerup
+POWERUPCOUNTDOWNRESET       =   %00111100       ;this is what the counter gets reset to after player dies
+POWERUPCOUNTDOWNDEFAULT     =   %00011000       ;this is default if random start is zero
 
 ;--TankStatus bits
 TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
@@ -541,7 +545,15 @@ TANKSREMAININGCOLOR =   TURQUOISE|$A
 
 ;--old colors: GOLD|A and BLUE2|C
 
-TANKCOLOR1          =    GOLD|$6
+
+/*              even frame          odd frame
+player tank     TANKCOLOR1 (M0)     TANKCOLOR3 (P0)
+enemy tank 1    TANKCOLOR2 (P1)     TANKCOLOR3 (M0)
+enemy tank 2    TANKCOLOR2 (M1)     TANKCOLOR4 (P1)
+enemy tank 3    TANKCOLOR1 (P0)     TANKCOLOR4 (M1)
+*/
+
+TANKCOLOR1          =    GOLD|$6        
 TANKCOLOR2          =    BLUE2|$C
 TANKCOLOR3          =    RED|$4
 TANKCOLOR4          =    BROWN|$4
@@ -1582,19 +1594,26 @@ TankOffScreen
 	;tank offscreen
 	;--only bring tank onscreen if there are enemy tanks remaining
 	;--how many tanks onscreen?
-	lda #0  ;---A is zero already following BNE above
-	sta Temp    ;using this to count how many tanks onscreen
-	ldy #3
-CountTanksOnScreenLoop
-	lda TankStatus,Y
-	and #TANKINPLAY    ;--if tank has no direction set, it is offscreen and waiting to be respawned, and lower 4 bits hold wait counter until it is brought back onscreen
-	beq TankNotOnscreen
-	inc Temp
-TankNotOnscreen
-	dey
-	bne CountTanksOnScreenLoop
-	;--now compare with tanks remaining	
-	lda Temp
+    
+	ldy #0			    ;counting number of onscreen tanks in Y
+	lda TankStatus+3	
+	lsr
+	bcc Tank3OffScreen	
+	iny			;+9/8	10-11
+Tank3OffScreen
+	lda TankStatus+2
+	lsr
+	bcc Tank2OffScreen
+	iny			;+9/8	18-20
+Tank2OffScreen
+	lda TankStatus+1
+	lsr
+	bcc Tank1OffScreen
+	iny			;+9/8	26-29
+Tank1OffScreen
+	tya			;+2	28-31 cycles 
+
+
 	cmp TanksRemaining
 	bcs DoNotBringTankOnscreenYet
 	lda TankMovementCounter         ;tank movement counter .... this has effect of multiplying the delay (ranging from 4-60 frames) by 8
@@ -1604,7 +1623,6 @@ TankNotOnscreen
 ; 	sec             ;carry clear after not-taken BCS branch above
 	sbc #1          ;so we are actually subtracting 2 here
 	sta TankStatus,X
-; 	dec TankStatus,X
 	bpl DoNotBringTankOnscreenYet
 	;--wait counter has expired, so bring this tank on screen
 	; if tank off left edge of screen, move right.  if off right edge of screen, move left.  otherwise, move down
@@ -1707,14 +1725,14 @@ AtIntersectionX
     beq AtIntersectionY
     cmp #ROWHEIGHT*12
     beq AtIntersectionY
-    bne NotAtIntersectionY      ;branch always 
-Lower2
+    bne NotAtIntersectionY      ;       27  branch always, worst case
+Lower2                          ;       13
     cmp #ROWHEIGHT*8
     beq AtIntersectionY
     cmp #ROWHEIGHT*7
     beq AtIntersectionY
-    bne NotAtIntersectionY      ;branch always  worst case, 27 cycles
-Lower1
+    bne NotAtIntersectionY      ;+11    24  branch always
+Lower1                          ;        7
     cmp #ROWHEIGHT*3
     beq AtIntersectionY
     bcc Lower3
@@ -1722,13 +1740,13 @@ Lower1
     beq AtIntersectionY
     cmp #ROWHEIGHT*4    
     beq AtIntersectionY
-    bne NotAtIntersectionY      ;branch always
-Lower3
+    bne NotAtIntersectionY      ;+17    24  branch always
+Lower3                          ;       14
     cmp #ROWHEIGHT*2
     beq AtIntersectionY
     cmp #ROWHEIGHT*1
-    beq AtIntersectionY
-    ;--else not at an intersection
+    beq AtIntersectionY         ;+9     23
+    ;--else not at an intersection      22
 NotAtIntersectionY
 EnemyTankPossibleReversal
 	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
@@ -1745,7 +1763,6 @@ TankReverseDirection
 	lsr
 	tay
 	lda ReverseDirection,Y
-; 	eor #$FF
 	sta Temp
 	lda TankStatus,X
 	and #~TANKDIRECTION
@@ -1836,29 +1853,6 @@ SetNewTankDirection
 	sta TankStatus,X
 	jmp DirectionChosen
 MoreThanOneAllowedDirection
-;----cannot use this any longer, since directions can be eliminated by the presence of another tank, so the two directions may *not* include reversing back where the tank came from
-; 	;--if can only move in two directions, go whichever ISN'T back the way we came from
-; 	cmp #2
-; 	bne MoreThanTwoAllowedDirections
-; 	;--find current direction, clear it's opposite, and then move the one remaining direction
-; 	lda TankStatus,X
-; 	lsr
-; 	lsr
-; 	lsr
-; 	lsr			;index into table with opposite directions
-; 	tay
-; 	pla
-; 	and PreventReverses,Y
-; 	sta Temp
-; 	lda TankStatus,X
-; 	and #~(J0UP|J0DOWN|J0LEFT|J0RIGHT)
-; 	ora Temp
-; 	sta TankStatus,X
-; 	jmp DirectionChosen
-
-			
-	
-MoreThanTwoAllowedDirections	
 	;--find current direction, clear it's opposite, and then save the remaining allowable directions
 	lda TankStatus,X
 	lsr
@@ -1889,11 +1883,9 @@ MoreThanTwoAllowedDirections
 	bcc ChooseTankDirection ;branch always
 RegularMovement
 	;routine: 
-	; pick two targets, then take the midpoint between them.
-	;   each target is a ZP variable.  Have to update random number in between in case both targets are random numbers (like in the case of tank 3)
 	;---revamp this with three separate routines, "borrowing" from Pac-Man routines (steal from the best, I guess)
 	;       Tank 1 uses the Blinky chase routine (always aiming at player position)
-	;       Tank 2 uses the Pinky chase routine (always aiming X` "tiles" in front of player)
+	;       Tank 2 uses the Pinky chase routine (always aiming X "tiles" in front of player)
 	;       Tank 3 uses the Clyde chase routine (aiming for player if X tiles away or more, but when close aiming for base)
 	;--if player is dead, aim for base.
 	lda TankX
@@ -1967,7 +1959,7 @@ EnemyTank1Routine
 ChooseTankDirection
     ;have allowable directions in stack and target X and Y values in stack
 	jsr ChooseTankDirectionSubroutine	;returns with new direction in accumulator
-	;takes desired direction and sticks it in TankStatus
+	;takes desired direction and sticks it in Temp
 	sta Temp
 	pla
 	pla									;pull target for tank off stack and discard
@@ -1977,10 +1969,9 @@ ChooseTankDirection
 	;       if not, pick random direction from allowable and move that way.
 	pla	;	--get allowable directions off stack
 	pha	;	but leave on stack
-; 	and TankStatus,X
     and Temp
     beq DesiredDirectionsNotAllowed
-    ;--we may have more than one allowed direction, and both may be allowed.
+    ;--we may have more than one desired direction, and both may be allowed.
 	eor #$FF	;flip bits
 	jsr EliminateDiagonalSubroutine
 	eor #$FF
@@ -2008,10 +1999,7 @@ TryAnotherDirection
 	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction
 
 NoAllowedDirections	
-    ;--if no allowed directions, set speed to zero
-;     lda TankStatus,X
-;     and #~TANKSPEED
-;     sta TankStatus,X
+    ;--if no allowed directions, set direction to zero
     lda #0	
 FoundGoodDirection
 	sta Temp
@@ -2028,10 +2016,6 @@ NotAtIntersection
 
 
 	;push return address onto stack
-; 	lda #>(ReturnFromTankMovementSubroutine-1)
-; 	pha
-; 	lda #<(ReturnFromTankMovementSubroutine-1)
-; 	pha
 	;push movementflag (zero) onto stack
 	lda #0
 	pha
@@ -2907,10 +2891,8 @@ IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
 	lsr
 	tax                     ;+12    20
 	lda PFRegisterLookup,X
-; 	pha                     ;+7     27
     sta Temp+3          
 	lda PFMaskLookup,X
-; 	pha                     ;+7     34
     sta Temp+2
 	lda Temp+1              ;+3     37
 	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
@@ -2950,38 +2932,28 @@ NotOnBottomRow	                ;       44
 	;	post gives credit to December '84 Apple Assembly Line
 	;--constant cycle count divide by 7 !!!!
 	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-	sta Temp
+	sta Temp                    ;+3      3
 	lsr
 	lsr
 	lsr
-	adc Temp
+	adc Temp                    ;+9     12
 	ror
 	lsr
 	lsr
-	adc Temp
+	adc Temp                    ;+9     21
 	ror
 	lsr
-	lsr                         ;+27    71 
+	lsr                         ;+6    71 
 	
-	tax                         ;+2     73
-
-	;--now add X to 2nd element on stack
-	;txa
-; 	tsx
 	clc
-; 	adc $00+2,X
     adc Temp+3
 	tax                         ;+12    85
 	
 	lda PF1Left,X
-; 	tsx
-; 	and $00+1,X                 ;+10    95
     and Temp+2
 FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
 	;--result is now in A --nonzero means a block is there, zero means no
 	sta Temp		;result goes into Temp
-; 	pla
-; 	pla		;get intermediate results off of stack
 	pla
 	tax		;restore X from stack
 	rts                         ;+23    76-118  (which changes from using stack to using temp vars, we subtract 22 cycles for new totals: 54-96)
@@ -3299,10 +3271,7 @@ PowerUpBonusRoutine
     bcc .PlayerNotInPlayNoBonus
 
     ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
-    ;--new routine: if powerup activated, player gets speed boost AS long as he hasn't died!
-;     lda MazeGenerationPass
-;     and #PLAYERDEATHCOUNTBITS
-;     bne .PlayerHasDiedNoBonus    
+    ;--new routine: if powerup activated, player gets speed boost 
     lda MazeGenerationPass
     and #POWERUPACTIVATEDBITS
     beq .PowerUpNotActivated
@@ -3336,10 +3305,6 @@ PowerUpBonusRoutine
 	
 
 	
-	
-	
-
-
 
 
 	
@@ -3924,9 +3889,6 @@ StaticPowerUpIcon
     lda PowerUpIconFrame,X
     pha
     lda PowerUpIconFrame+1,X
-; 	lda #<(PowerUpImage1+TANKHEIGHT)
-; 	pha
-; 	lda #>(PowerUpImage1+TANKHEIGHT)
     bne SetTankGfxPtr   ;branch always
 
 	
@@ -4832,7 +4794,7 @@ MoveBulletsLoop
 ;     ldy Temp
 ;     lda NumberOfBitsSetBank2,Y       ;+42 (max) this is how many pixels to move
 
-    ;--try diff routine
+    ;--try diff routine - works because bullets move either 3 or 4 pixels every 4 frames.
     lda BulletFractional
     clc
     adc #BULLETFRACTIONALSPEED
@@ -5309,7 +5271,7 @@ SetNewLevelTankDelay
     pha     ;get actual random number but leave on stack
     and #POWERUPCOUNTDOWNBITS
     bne SetPowerUpCountdownValue
-    lda #POWERUPCOUNTDOWNBITS   ;make sure it doesn't start at zero
+    lda #POWERUPCOUNTDOWNDEFAULT   ;make sure it doesn't start at zero
 SetPowerUpCountdownValue   
     sta MazeGenerationPass
 	
@@ -5752,11 +5714,10 @@ SetTankStatusForDeadTanks
     bne TankNotNewlyDead
     ;--check to see if it should be a powerup
     ;   only a powerup if:
-    ;       player deaths in this level = 0
     ;       powerup countdown is zero
-    lda MazeGenerationPass
-    and #PLAYERDEATHCOUNTBITS
-    bne NoPowerUp
+;     lda MazeGenerationPass
+;     and #PLAYERDEATHCOUNTBITS
+;     bne NoPowerUp
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
     bne NoPowerUp
@@ -5765,8 +5726,8 @@ SetTankStatusForDeadTanks
     ora #TANKDOWN
     sta TankStatus,Y
     lda MazeGenerationPass
-    ora #POWERUPCOUNTDOWNBITS
-    sta MazeGenerationPass  ;reset counter to the max (7)
+    ora #POWERUPCOUNTDOWNRESTART
+    sta MazeGenerationPass  ;reset counter to the max (15)
     bne CheckNextTankForNewDeath
 NoPowerUp
     lda TankDeadStatus,Y
@@ -5992,14 +5953,16 @@ PowerUpExplosionRemoveBricks
     
 ;****************************************************************************
 
+
+
     SUBROUTINE    
 ScoreForKillingTank
     txa
     pha ;save X
     lda MazeGenerationPass      ;used for powerups and etc during level
     and #PLAYERDEATHCOUNTBITS
-    bne .PlayerDiedNoExtraScore
-    ;--else, give number of tanks killed so far (minus 1) x 25
+    bne .PlayerDiedUsePOWERUPCOUNTDOWN
+    ;--if player hasn't died, use tanks killed since start of level
     lda MazeNumber
     asl
     clc
@@ -6010,6 +5973,15 @@ ScoreForKillingTank
 .FoundInitialTankCount
     sec
     sbc TanksRemaining
+    bcs .FigureOutScoreBonus    ;branch always, the subtraction above should never result in a negative number
+.PlayerDiedUsePOWERUPCOUNTDOWN
+    ;--give number of tanks killed since last death x 25
+    lda MazeGenerationPass
+    and #POWERUPCOUNTDOWNBITS
+    lsr
+    lsr
+    lsr
+.FigureOutScoreBonus    
     tax
     sed
     lda #0
@@ -6266,9 +6238,10 @@ EnemyTanksNotMovedOffScreen
 
     txa
 	bne EnemyTankHit
-	;--if player hit, remove all powerups
+	;--if player hit, remove all powerups and restart the power up countdown
 	lda MazeGenerationPass
-	and #~POWERUPACTIVATEDBITS
+	and #~(POWERUPACTIVATEDBITS|POWERUPCOUNTDOWNBITS)
+	ora #POWERUPCOUNTDOWNRESET
 	sta MazeGenerationPass
 	
 	
@@ -6330,7 +6303,7 @@ NoPowerUpOnscreen
     and #POWERUPCOUNTDOWNBITS
     beq NoUpdateToPowerUpCountdown
     sec
-    sbc #8
+    sbc #POWERUPCOUNTDOWNDECREMENT
     sta Temp
     lda MazeGenerationPass
     and #~POWERUPCOUNTDOWNBITS
@@ -7281,8 +7254,8 @@ PowerUpImage4b
         
         
 PlayerStartingStatus
-    .byte TANKRIGHT|0, TANKRIGHT|2, TANKRIGHT|4, TANKRIGHT|6
-    .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
+    .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
+;     .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
 
     
 DigitDataLo
