@@ -519,7 +519,7 @@ ENEMYDEBOUNCEBITS =     %00011111
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
-BULLETFRACTIONALPERCENT =   87
+BULLETFRACTIONALPERCENT =   80          ;--was 87
 BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets down slightly so the collision detection works better
 
 BASECOLOR		    =		GOLD
@@ -1476,7 +1476,7 @@ DoNotShoot
 	
 ;****************************************************************************
 
-    	
+    SUBROUTINE
 SetInitialEnemyTankSpeedRoutine
     ;--come in here with X pointing to tank # (1-3)
     ;--and A holding new direction (in upper four bits)
@@ -1503,9 +1503,24 @@ SetInitialEnemyTankSpeedRoutine
 	lsr         ;divide by four for slower ramping of enemy tank speed (maximum speed for all four tanks not reached until level 32)
 	clc
 	adc NewTankSpeed,X
-	;--increase speed depending on tanks remaining
-    ldy TanksRemaining
-    adc TanksRemainingSpeedBoost,Y
+	;--increase speed depending on tanks killed so far
+;     ldy TanksRemaining         
+;     adc TanksRemainingSpeedBoost,Y
+	sta Temp
+    lda MazeNumber
+    asl
+    clc
+    adc #6
+    cmp #20
+    bcc .HaveInitialTanksRemaining
+    lda #20
+.HaveInitialTanksRemaining
+    sec
+    sbc TanksRemaining
+    tay
+    lda Temp
+    clc    
+    adc TanksKilledSpeedBoost,Y
 	cmp #15
 	bcc NewSpeedNotTooHigh
 	lda #TANKSPEED14
@@ -3455,14 +3470,19 @@ EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet f
 EnemyBulletDebounceEnd
     
 
-TanksRemainingSpeedBoost = * - 1 
-    .byte 15, 10, 8, 6
-    .byte 4, 4, 2, 2
-    .byte 2, 2, 0, 0
-    .byte 0, 0, 0, 0
-    .byte 0, 0, 0, 0
+; TanksRemainingSpeedBoost = * - 1 
+;     .byte 15, 10, 8, 6
+;     .byte 4, 4, 2, 2
+;     .byte 2, 2, 0, 0
+;     .byte 0, 0, 0, 0
+;     .byte 0, 0, 0, 0
     ;.byte 0, 0    
-	
+TanksKilledSpeedBoost
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 2, 2
+    .byte 2, 2, 4, 4
+    .byte 6, 8, 10, 15
 
 
 TankDirection
