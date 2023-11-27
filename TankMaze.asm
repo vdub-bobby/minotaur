@@ -80,6 +80,10 @@
 
 
 	To do:
+	Last tank shot in a level should not turn into a powerup (should always explode).
+	Harmonized music at title screen.  And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
+	Possibly only decrement powerup countdown counter when player shoots tank?
+	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
 	DONE Stuck enemies do not fire.  FIX: They always fire to the right, which would be a problem if they are stuck at the right edge.  Not sure if I should care.  Maybe it's fine?
 	    I've only ever seen this once, I think only way is in scenario outlined a little below.
 	Difficulty ramping.  Two things:
@@ -252,7 +256,10 @@ POWERUPCOUNTDOWNRESTART     =   %00011000       ;this is what the counter gets r
 POWERUPCOUNTDOWNRESET       =   %00111100       ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   %00011000       ;this is default if random start is zero
     ENDIF
+
     
+SPEEDBONUS          =   2       ;this is applied to player when power up activated    
+        
 ;--TankStatus bits
 TANKDIRECTION   =   %11110000       ;these 4 bits are used similarly to the joystick bits from INPT4
 TANKSPEED       =   %00001110       ;ASL ASL ASL ASL ORA #$1F and then added to TankFractional
@@ -270,12 +277,6 @@ TANKDOWN		=	J0DOWN          ;%00100000
 TANKUP			=	J0UP            ;%00010000
 
 
-;
-
-    ;delay uses TANKRESPAWNWAIT bits (%00001110) so these values have to be even numbers between 2 and 14
-ENEMYTANK1DELAY	=	6       ;# of frames of delay is x 4
-ENEMYTANK2DELAY	=	10
-ENEMYTANK3DELAY	=	14
 
 TANKDEADWAIT   =   2
 TANKDEADWAITPLAYER  =   8
@@ -309,9 +310,40 @@ GAMEOVERSTARTFREQ   =   5
 ;--some constants used by the tank AI routine
 TANKAISWITCH	=	64              ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
                                     ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
-CLYDEDISTANCE   =   30              ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30
+CLYDEDISTANCE   =   30              ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30 (note that distance from player is calculated using manhattan distance (delta X + delta Y)
 PINKYADJUSTMENTX    =   16          ;4 tiles in Pac-Man, equivalent in Minotaur is 2 tiles... I think.  In pixels X = 16.
 PINKYADJUSTMENTY    =   14          ; in pixels Y = 14
+
+BLINKYTANK  =   3
+PINKYTANK   =   1
+;clyde tank is whichever isn't specified above    
+    
+;delay uses TANKRESPAWNWAIT bits (%00001110) so these values have to be even numbers between 2 and 14
+ENEMYTANK1DELAY	=	14       ;# of frames of delay is x 4
+ENEMYTANK2DELAY	=	8
+ENEMYTANK3DELAY	=	2
+;--tank speed constants
+;--the way these are used:
+;   tank speed is in lower nibble (these bits: %00001110)
+;   the speed is shifted into the upper nibble (<<<<), ORAd with %00011111,
+;   and then added to TankFractional,X.  When TankFractional,X wraps, Tank 
+;   position (TankX,X or TankY,X) is updated.
+;   So, speed of 14 (%00001110) which is the highest, will *almost* wrap every time
+;   and the Tank will basically move 1 pixel per update.  Which brings us to...
+;   Player tank is moved every frame, but enemy tanks are moved every four frames.
+;   Which means approximate speed ranges are as follows:
+;               Player tank         Enemy tanks
+;   TANKSPEED0  1 px / 8 frames     1 px / 32 frames
+;   TANKSPEED2  1 px / 4 frames     1 px / 16 frames
+;   TANKSPEED4  1 px / 2.7 frames   1 px / 10.7 frames
+;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
+;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
+;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
+PLAYERTANKSPEED	    =   TANKSPEED2|1     
+ENEMYTANKBASESPEED0 =   TANKSPEED8
+ENEMYTANKBASESPEED1 = 	TANKSPEED6
+ENEMYTANKBASESPEED2 =   TANKSPEED4
+
 
 
 ;--tank starting locations
@@ -353,28 +385,6 @@ ENEMYSTARTINGYLOW	=	(BLOCKHEIGHT * ENEMYSTARTINGYLOWROW) + 1
 MAZEGENERATIONPASSES = MAZEROWS/2-1
 
 
-;--tank speed constants
-;--the way these are used:
-;   tank speed is in lower nibble (these bits: %00001110)
-;   the speed is shifted into the upper nibble (<<<<), ORAd with %00011111,
-;   and then added to TankFractional,X.  When TankFractional,X wraps, Tank 
-;   position (TankX,X or TankY,X) is updated.
-;   So, speed of 14 (%00001110) which is the highest, will *almost* wrap every time
-;   and the Tank will basically move 1 pixel per update.  Which brings us to...
-;   Player tank is moved every frame, but enemy tanks are moved every four frames.
-;   Which means approximate speed ranges are as follows:
-;               Player tank         Enemy tanks
-;   TANKSPEED0  1 px / 8 frames     1 px / 32 frames
-;   TANKSPEED2  1 px / 4 frames     1 px / 16 frames
-;   TANKSPEED4  1 px / 2.7 frames   1 px / 10.7 frames
-;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
-;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
-;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
-PLAYERTANKSPEED	    =   TANKSPEED2|1     
-ENEMYTANKBASESPEED0 =   TANKSPEED8
-ENEMYTANKBASESPEED1 = 	TANKSPEED8
-ENEMYTANKBASESPEED2 =   TANKSPEED8
-SPEEDBONUS          =   2
 ;--SOUND CONSTANTS
 ;   indexes into lookup table for sound effects
 BRICKSOUND              =   0
@@ -790,7 +800,7 @@ VSYNCWaitLoop2
 	dec FrameCounter
 	
 	lda GameStatus
-	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER
+	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER|GENERATINGMAZE
 	beq GameOnVBLANK	
 	and #GAMEOFF
 	beq InBetweenLevels
@@ -1482,6 +1492,8 @@ SetInitialEnemyTankSpeedRoutine
 	sta Temp
 	asl
 	asl
+	asl         ;this clears carry
+	adc Temp
 	adc Temp
 	sta Temp
 	lda MazeNumber
@@ -1513,7 +1525,7 @@ NewSpeedNotTooHigh
 	clc
 	adc Temp
 SetNewEnemyTankSpeed
-    and #TANKSPEED      ;make sure only the bits we want
+    and #TANKSPEED      ;make sure only the bits we want  --- shouldn't need to do this, since in theory the value should be <=15 and we set the lower bit just below anyway.
     ora #TANKINPLAY     ;tank in action now so set bit
 	ora TankStatus,X
 	sta TankStatus,X
@@ -1870,9 +1882,9 @@ MoreThanOneAllowedDirection
 RegularMovement
 	;routine: 
 	;---revamp this with three separate routines, "borrowing" from Pac-Man routines (steal from the best, I guess)
-	;       Tank 1 uses the Blinky chase routine (always aiming at player position)
-	;       Tank 2 uses the Pinky chase routine (always aiming X "tiles" in front of player)
-	;       Tank 3 uses the Clyde chase routine (aiming for player if X tiles away or more, but when close aiming for base)
+	;       Tank 3 uses the Blinky chase routine (always aiming at player position)
+	;       Tank 1 uses the Pinky chase routine (always aiming X "tiles" in front of player)
+	;       Tank 2 uses the Clyde chase routine (aiming for player if X tiles away or more, but when close aiming for base)
 	;--if player is dead, aim for base.
 	lda TankX
 	cmp #16
@@ -1880,11 +1892,11 @@ RegularMovement
 	bcc AimForBase  ;branch always
 	
 PlayerOnScreen
-	cpx #1
-	beq EnemyTank1Routine
-	cpx #2
-	beq EnemyTank2Routine
-EnemyTank3Routine
+	cpx #BLINKYTANK
+	beq BlinkyRoutine
+	cpx #PINKYTANK
+	beq PinkyRoutine
+ClydeRoutine
     ;--if further than N tank-lengths from player (using Manhattan distance formula)
     ;   then aim for player
     ;   else aim for base
@@ -1916,7 +1928,7 @@ AimForBase
     lda #0
     pha
     beq ChooseTankDirection ;branch always
-EnemyTank2Routine
+PinkyRoutine
     ;--aims for spot three tank-lengths in front of player tank
     lda TankStatus
     lsr
@@ -1936,7 +1948,7 @@ EnemyTank2Routine
     
     
 EnemyTankIsFarAimForPlayer
-EnemyTank1Routine
+BlinkyRoutine
     ;tank 1 aims for player tank
     lda TankX
     pha
@@ -3434,7 +3446,7 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 25, 20, 19, 18
+    .byte 20, 20, 19, 18
     .byte 17, 16, 15, 14
     .byte 13, 12, 11, 10
     .byte 9, 8, 7, 6
@@ -3443,12 +3455,13 @@ EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet f
 EnemyBulletDebounceEnd
     
 
-TanksRemainingSpeedBoost = * - 3 
-                        ;--just realized the first three values in this table have no effect.  not sure
-                        ;   yet if I want to shift the values or not.
-;     .byte 15, 10, 8
-    .byte 6, 4, 2, 2, 0, 0, 0
-    .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0    
+TanksRemainingSpeedBoost = * - 1 
+    .byte 15, 10, 8, 6
+    .byte 4, 4, 2, 2
+    .byte 2, 2, 0, 0
+    .byte 0, 0, 0, 0
+    .byte 0, 0, 0, 0
+    ;.byte 0, 0    
 	
 
 
@@ -3468,13 +3481,13 @@ ReverseDirection = *-1	;--the FF are wasted bytes
 	
 	
 	;tank 0 = player, so don't need initial byte
-	;tank 1 target = upper left corner
-	;tank 2 target = base (bottom center)
-	;tank 3 target = upper right corner
+	;tank 1 (pinky) target = base (center bottom)
+	;tank 2 (blinky) target = upper left corner
+	;tank 3 (clyde) target = upper right corner
 SwitchMovementX = *-1
-	.byte 0, 80, 255
+	.byte 80, 0, 255
 SwitchMovementY = *-1
-	.byte 255, 0, 255
+	.byte 0, 255, 255
 	
 	
 NumberOfBitsSet
