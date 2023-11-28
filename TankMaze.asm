@@ -244,8 +244,9 @@ DATASPACEBEFOREGFX	=	MAZEAREAHEIGHT
 ;--MazeGenerationPass bits during a level (used to count player deaths and track powerups)
 PLAYERDEATHCOUNTBITS        =   %00000011
 PLAYERDEATHCOUNTMAX         =   3
-POWERUPACTIVATEDBITS        =   %11000000       ;4 possible powerups?
-POWERUPCOUNTDOWNBITS        =   %00111100       ;number of enemies to be killed without any deaths to activate a powerup
+LASTTANKTHATFIRED           =   %11000000       ;track last tank that fired a bullet
+POWERUPACTIVATEDBITS        =   %00100000       ;4 possible powerups?
+POWERUPCOUNTDOWNBITS        =   %00011100       ;number of enemies to be killed without any deaths to activate a powerup
 POWERUPCOUNTDOWNDECREMENT   =   %00000100       ;subtract this to decrement the powerup countdown 
     IF POWERUPTESTING == 1
 POWERUPCOUNTDOWNRESTART     =   %00001000       ;this is what the counter gets restarted at after gaining a powerup
@@ -253,7 +254,7 @@ POWERUPCOUNTDOWNRESET       =   %00001000       ;this is what the counter gets r
 POWERUPCOUNTDOWNDEFAULT     =   %00001000       ;this is default if random start is zero
     ELSE
 POWERUPCOUNTDOWNRESTART     =   %00011000       ;this is what the counter gets restarted at after gaining a powerup
-POWERUPCOUNTDOWNRESET       =   %00111100       ;this is what the counter gets reset to after player dies
+POWERUPCOUNTDOWNRESET       =   %00011100       ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   %00011000       ;this is default if random start is zero
     ENDIF
 
@@ -1461,10 +1462,31 @@ EnemyShootingHorizontal
 ;     lsr     ;--get TANKINPLAY flag into carry
 ;     bcc TankOffscreenCannotShoot
 FireEnemyBulletNow
+    ;--store which enemy is shooting in top 2 bits of MazeGenerationPass
+    tya
+    lsr
+    ror
+    ror
+    sta Temp
+    lda MazeGenerationPass
+    and #LASTTANKTHATFIRED
+    cmp Temp
+    bne IsNotSameTankGoAheadAndShoot
+    lda MazeGenerationPass
+    and #~LASTTANKTHATFIRED
+    sta MazeGenerationPass
+    jmp SameTankCannotShootTwiceInARow
+IsNotSameTankGoAheadAndShoot
+    lda MazeGenerationPass
+    and #~LASTTANKTHATFIRED
+    ora Temp
+    sta MazeGenerationPass
+
 	jsr FireBulletRoutine
 	;--start enemy bullet sound
 	ldy #ENEMYBULLETSOUND
 	jsr StartSoundSubroutine
+SameTankCannotShootTwiceInARow
 TankNotInPlayCannotShoot
 TankOffscreenCannotShoot
 NoAvailableEnemyBalls
@@ -5548,21 +5570,31 @@ TankHitLiveTank
     ;--second actually activate powerup
     lda MazeGenerationPass  ;used for powerups during levels
     and #POWERUPACTIVATEDBITS
-    asl
-    rol
-    rol     ;get top two bits into lower two bits
-    tax
+    beq ActivateInitialPowerUp
+    jsr KillAllTanksBonus
+ActivateInitialPowerUp
     lda MazeGenerationPass
-    and #~POWERUPACTIVATEDBITS
-    ora NextPowerUpActivation,X
-    sta MazeGenerationPass
-    ;--third play powerup sound only if it is speed boost (i.e., x = 0)
-    txa ;set flags based on X
-    bne NotSpeedBoostPowerUpNoSound
+    ora #POWERUPACTIVATEDBITS
+    sta MazeGenerationPass    
     ldy #SPEEDBOOSTSOUND
     jsr StartSoundSubroutineBank2
-
-NotSpeedBoostPowerUpNoSound    
+;     
+;     and #POWERUPACTIVATEDBITS
+;     asl
+;     rol
+;     rol     ;get top two bits into lower two bits
+;     tax
+;     lda MazeGenerationPass
+;     and #~POWERUPACTIVATEDBITS
+;     ora NextPowerUpActivation,X
+;     sta MazeGenerationPass
+;     ;--third play powerup sound only if it is speed boost (i.e., x = 0)
+;     txa ;set flags based on X
+;     bne NotSpeedBoostPowerUpNoSound
+;     ldy #SPEEDBOOSTSOUND
+;     jsr StartSoundSubroutineBank2
+; 
+; NotSpeedBoostPowerUpNoSound    
     pla ;restore Y
     tay
     jmp TankAlreadyDeadCannotDie        ;branch always 
@@ -5737,6 +5769,7 @@ SetTankStatusForDeadTanks
 ;     lda MazeGenerationPass
 ;     and #PLAYERDEATHCOUNTBITS
 ;     bne NoPowerUp
+TankIsNewlyDead
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
     bne NoPowerUp
@@ -6231,8 +6264,10 @@ KillAllTanksBonus
 .TankAlreadyDeadCannotKillAgain
     dex
     bne .KillAllTanksLoop
-    jmp ReturnFromBSSubroutine2    
-        
+;     jmp ReturnFromBSSubroutine2    
+    rts       
+
+ 
 ;****************************************************************************
 
 BulletHitTank
