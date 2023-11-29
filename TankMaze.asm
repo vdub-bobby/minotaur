@@ -350,9 +350,18 @@ ENEMYTANK3DELAY	=	2
 ;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
 ;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
 PLAYERTANKSPEED	    =   TANKSPEED2|1     
-ENEMYTANKBASESPEED0 =   TANKSPEED10
-ENEMYTANKBASESPEED1 = 	TANKSPEED8
-ENEMYTANKBASESPEED2 =   TANKSPEED6
+
+;--so actual level-starting speeds are what is below + (the level # / 4) - the tank number (0-indexed).  truncated to an even number.
+;       or: ([base speed] + [level #] - [tank number - 1]) && $FE
+;       for example, at level 1 the initial tank speeds are as follows:
+;           Tank 1 = 10 +  (1 / 4) - 0 && $FE = 10 && $FE = 10
+;           Tank 2 = 8  +  (1 / 4) - 1 && $FE =  7 && $FE =  6
+;           Tank 3 = 6  +  (1 / 4) - 2 && $FE =  4 && $FE =  4
+;       the effect is to widen the gap between tank 1 and 3 (from 4 to 6)
+;       Tank 2 will alternate between being closer to tank 1 and tank 2 depending on whether the level # is odd or even.
+ENEMYTANKBASESPEED0 =   TANKSPEED8
+ENEMYTANKBASESPEED1 = 	TANKSPEED7
+ENEMYTANKBASESPEED2 =   TANKSPEED7      ;I know odd numbers don't work, but it affects when they switch from one speed to the next
 
 
 
@@ -1395,16 +1404,6 @@ FoundAvailableEnemyBall
     ;fix X index (enemy bullets indexed at 2 & 3)
 	inx
 	inx
-	;--shoot more often as levels increase
-	ldy MazeNumber
-    cpy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
-    bcc MazeNumberLessThanBulletDebounceLimit
-    ldy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
-MazeNumberLessThanBulletDebounceLimit    
-	lda Debounce    ;was EnemyDebounce
-	and #~ENEMYDEBOUNCEBITS ;this probably isn't necessary, but being safe for now
-    ora EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
-	sta Debounce    ;was EnemyDebounce
 	
 	;--first, look for tank that is stuck (i.e., in play but not moving)
 	;--this doesn't work right now because tank speed is not set to zero when tanks are stuck (!)
@@ -1454,15 +1453,15 @@ TankShootingVertically
     lda TankX,Y
     cmp #72
     bcc EnemyNotInCenterColumns    
-    cmp #80
+    cmp #81
     bcc FireEnemyBulletNow
 EnemyNotInCenterColumns
     ;--now see if close to player tank
-    clc
-    adc #COLUMNWIDTH*3
-    sec
+;     clc
+    adc #COLUMNWIDTH*2      ;carry is set, so this adds an additional 1 here.  But that's ok, because then the carry is cleared for the subtraction below, so it will subtract an additional 1.
+;     sec
     sbc TankX
-    cmp #(COLUMNWIDTH*6)+1
+    cmp #(COLUMNWIDTH*4)+1
     bcc FireEnemyBulletNow
     bcs EnemyNotAllowedToShootVertically    ;branch always
 EnemyShootingHorizontal    
@@ -1470,10 +1469,10 @@ EnemyShootingHorizontal
     cmp #ROWHEIGHT+1
     beq FireEnemyBulletNow
     clc
-    adc #ROWHEIGHT*3
-    sec
+    adc #(ROWHEIGHT*2)+1    ;add an additional 1 because the subtraction below has carry clear
+;     sec
     sbc TankY
-    cmp #(ROWHEIGHT*6)+1
+    cmp #(ROWHEIGHT*4)+1
     bcs EnemyNotAllowedToShootHorizontally
 
     ;%
@@ -1505,6 +1504,19 @@ IsNotSameTankGoAheadAndShoot
 	;--start enemy bullet sound
 	ldy #ENEMYBULLETSOUND
 	jsr StartSoundSubroutine
+	
+	;--reset debounce.  
+	;--shoot more often as levels increase
+	ldy MazeNumber
+    cpy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
+    bcc MazeNumberLessThanBulletDebounceLimit
+    ldy #(EnemyBulletDebounceEnd-EnemyBulletDebounce)
+MazeNumberLessThanBulletDebounceLimit    
+	lda Debounce    ;was EnemyDebounce
+	and #~ENEMYDEBOUNCEBITS ;this probably isn't necessary, but being safe for now
+    ora EnemyBulletDebounce-1,Y ;minus one because maze number starts at 1 (not zero)
+	sta Debounce    ;was EnemyDebounce
+	
 SameTankCannotShootTwiceInARow
 TankNotInPlayCannotShoot
 TankOffscreenCannotShoot
@@ -1806,7 +1818,9 @@ EnemyTankPossibleReversal
 	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
 	lda TankMovementCounter
 	bne NoTankReversal
-TankReverseDirection
+    ;--player tanks don't reverse:
+    txa     ;set flags based on tank index
+    beq PlayerTankDoesNotReverse
     ;--only reverse if tank is fully on screen
     jsr IsTankOnScreenBank0
     beq NoTankReversal
@@ -3508,9 +3522,12 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
-    .byte 20, 20, 19, 18
-    .byte 17, 16, 15, 14
-    .byte 13, 12, 11, 10
+;a tank's initial speed changes on level #s evenly divisible by 4  (i.e., 4, 8, 12, etc)
+;so let's not change bullet debounce on those levels, but DO change it on the other levels.
+;
+    .byte 1, 20, 16, 16
+    .byte 14, 12, 10, 10
+    .byte 8, 6, 4, 4
     .byte 9, 8, 7, 6
     .byte 5, 4, 3, 2
     .byte 1	
