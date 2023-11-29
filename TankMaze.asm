@@ -259,7 +259,7 @@ POWERUPCOUNTDOWNBITS        =   %00011100       ;number of enemies to be killed 
 POWERUPCOUNTDOWNMAX         =   %00011100
 POWERUPCOUNTDOWNDECREMENT   =   %00000100       ;subtract this to decrement the powerup countdown 
     IF POWERUPTESTING == 1
-POWERUPCOUNTDOWNRESTART     =   %00001000       ;this is what the counter gets restarted at after gaining a powerup
+POWERUPCOUNTDOWNRESTART     =   %00001000       ;this is what the counter gets restarted at after gaining or shooting a powerup
 POWERUPCOUNTDOWNRESET       =   %00001000       ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   %00001000       ;this is default if random start is zero
     ELSE
@@ -5738,7 +5738,10 @@ FoundDeadTankNowKill
     ;--so we hit a powerup.
     ;--want to kill everything - bricks, tanks - in a one-block radius
     jsr PowerUpExplosionRemoveBricks ;(also removes bullet from screen)
-    
+    ;--now reset powerup countdown
+    lda MazeGenerationPass      ;used for all kinds of crap during game play
+    ora #POWERUPCOUNTDOWNRESTART
+    sta MazeGenerationPass
 KillAllTanksWithinBlastRadius    
     ;--now, kill all tanks within blast radius }:-)
     ;   note: this will also as a side effect remove the powerup icon from the screen
@@ -5766,6 +5769,9 @@ KillAllTanksWithinBlastRadius
     stx Temp+5
     ldx #3
 KillAllTanksInLoop
+    cpx Temp+5  ;are we killing the powerup?
+    beq DoNotKillPowerUp        ;we don't kill it because the overall routine (PlayerHitTank) does all kinds of stuff like decrement TanksRemaining and etc. 
+                                ;just above we set it to dead so it's fine.
     lda TankX,X
     cmp Temp+4
     bcc NotInsideBlastRadius
@@ -5777,8 +5783,6 @@ KillAllTanksInLoop
     cmp Temp+1
     bcs NotInsideBlastRadius
     ;--it is KILL KILL KILL
-    cpx Temp+5  ;are we killing the  powerup?
-    beq DoNotKillPowerUp
     jsr PlayerHitTank
 DoNotKillPowerUp
 NotInsideBlastRadius
@@ -6208,12 +6212,12 @@ TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy
     
     inc MazeGenerationPass
     lda MazeGenerationPass
-    and #PLAYERDEATHCOUNTMAX
+    and #PLAYERDEATHCOUNTBITS
 PlayerHasDiedMaxTimes    
     tay
 	lda PlayerStartingStatus,Y
 	sta TankStatus,X
-    bne UsePlayerRespawnPosition    ;branch always
+    bne UsePlayerRespawnPosition    ;branch always - all values of PlayerStartingStatus are non-zero
 EnemyTankRespawnRoutine
 	lda StartingTankStatus,X  
 	sta TankStatus,X
@@ -6229,8 +6233,8 @@ EnemyTankRespawnRoutine
 
 ; ; UseRegularRespawnPosition
 UsePlayerRespawnPosition
-    txa
-    tay    
+    ldy #0             ;at this point X and Y should hold zero 
+    beq SetPlayerRespawnLocation
 FoundRespawnPosition
 
 	;--if player tank is in top part of screen, use different starting positions
@@ -6260,6 +6264,7 @@ PlayerLeft
     tay
 ; TopRowEnemyTankRespawn
 SetEnemyRespawnPosition
+SetPlayerRespawnLocation
     lda RespawnTankYPosition,Y
 	sta TankY,X
 	lda RespawnTankXPosition,Y
