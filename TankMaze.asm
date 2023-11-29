@@ -202,7 +202,7 @@
 
 
 
-DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
+DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
