@@ -3553,7 +3553,7 @@ TanksKilledSpeedBoost
     .byte 0, 0, 0, 0
     .byte 0, 0, 0, 0
     .byte 0, 0, 2, 2
-    .byte 2, 2, 4, 4
+    .byte 2, 2, 2, 2
     .byte 6, 8, 10, 15
 
 
@@ -4412,29 +4412,29 @@ TanksRemainingPF2Mask
 ;--tank 2 respawns middle
 ;--tank 3 respawns closest to player
 
-;for left/right: 0 = left, 8 = right
+;for left/right: 0 = left, 6 = right
 TankRespawnPlayerRight = * - 1
-    .byte 0, 8, 8
-TankRespawnPlayerLeft = * - 2       ;uses 8 from previous table
+    .byte 0, 6, 6
+TankRespawnPlayerLeft = * - 2       ;uses 6 from previous table
     .byte /*8, */0, 0
-; for top/bottom: 0 = top, 16 = bottom    
+; for top/bottom: 0 = top, 12 = bottom    
 TankRespawnPlayerTop = * - 1
-    .byte 16, 16, 0
+    .byte 12, 12, 0
 TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
-    .byte /*0, */0, 16
+    .byte /*0, */0, 12
 
 	
 RespawnTankXPosition
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY1TOPLEFTSTARTINGX2, ENEMY2TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX2, ENEMY3TOPLEFTSTARTINGX1, ENEMY3TOPLEFTSTARTINGX2
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1TOPRIGHTSTARTINGX1, ENEMY1TOPRIGHTSTARTINGX2, ENEMY2TOPRIGHTSTARTINGX1, ENEMY2TOPRIGHTSTARTINGX2, ENEMY3TOPRIGHTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX2
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1BOTTOMLEFTSTARTINGX, ENEMY1BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX
+	.byte /*PLAYERSTARTINGX, PLAYERSTARTINGX, */ENEMY1TOPLEFTSTARTINGX1, ENEMY1TOPLEFTSTARTINGX2, ENEMY2TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX2, ENEMY3TOPLEFTSTARTINGX1, ENEMY3TOPLEFTSTARTINGX2
+	.byte /*PLAYERSTARTINGX, PLAYERSTARTINGX, */ENEMY1TOPRIGHTSTARTINGX1, ENEMY1TOPRIGHTSTARTINGX2, ENEMY2TOPRIGHTSTARTINGX1, ENEMY2TOPRIGHTSTARTINGX2, ENEMY3TOPRIGHTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX2
+	.byte /*PLAYERSTARTINGX, PLAYERSTARTINGX, */ENEMY1BOTTOMLEFTSTARTINGX, ENEMY1BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX
+	.byte /*PLAYERSTARTINGX, PLAYERSTARTINGX, */ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX
 
 RespawnTankYPosition 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
 
@@ -4989,9 +4989,10 @@ CheckBulletIsOffScreenVertical
 	cmp #(MAZEAREAHEIGHT)+4
 	bcc BulletOnScreen	
 BulletOffScreen
-	lda #BALLOFFSCREEN
-	sta BulletX,X       ;<--is this necessary?
-	sta BulletY,X	
+    jsr MoveBulletOffScreenSubroutine
+; 	lda #BALLOFFSCREEN
+; 	sta BulletX,X       ;<--is this necessary?
+; 	sta BulletY,X	
 	;--make noise for when bullet hits outer wall
 	ldy #WALLSOUND
 	jsr StartSoundSubroutineBank2
@@ -5825,11 +5826,12 @@ TankAliveKillIt
     ;--let's remove the bullet
     lda FrameCounter
     and #3
-    tay
-    lda #BALLOFFSCREEN
-    sta BulletX,Y
-    sta BulletY,Y
-    jmp TankOffScreenCannotBeKilled
+    tax
+;     lda #BALLOFFSCREEN
+;     sta BulletX,X
+;     sta BulletY,X
+    jsr MoveBulletOffScreenSubroutine
+    beq TankOffScreenCannotBeKilled
     
 TankIsOnScreenKillIt    
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
@@ -5898,23 +5900,33 @@ CheckNextTankForNewDeath
 	jmp ReturnFromBSSubroutine2
 
 ;****************************************************************************
+
+MoveBulletOffScreenSubroutine
+    lda #BALLOFFSCREEN
+    sta BulletX,X
+    sta BulletY,X
+    rts
+;****************************************************************************
+
     SUBROUTINE
 PowerUpExplosionRemoveBricks  
         ;come in with X = tank (powerup icon) index
-
+    txa
+    pha             ;save index into tank (powerup icon) that got hit
     ;--remove bullet from screen
     lda FrameCounter
     and #3
-    tay
-    lda #BALLOFFSCREEN
-    sta BulletX,Y
-    sta BulletY,Y
-    
+    tax
+    jsr MoveBulletOffScreenSubroutine
+;     lda #BALLOFFSCREEN
+;     sta BulletX,Y
+;     sta BulletY,Y
+    pla
+    tax
+    pha     ;restore X and also save it (again)
     ;--and now we don't need bullet index any longer 
         
         
-    txa
-    pha             ;save index into tank (powerup icon) that got hit
     ;--we will loop through the 8 bricks we want to blow up, starting in upper left and moving right and down
     ;first, get X position of upper left brick and convert to column
     ;--it ACTUALLY DOESN'T matter if bullet is moving left or right since we are starting from the tank (=powerup) position, not bullet position
@@ -6195,10 +6207,11 @@ BulletMovingLeft
 	tax
 RemovedWallBlock
 	;--bullet has hit block, remove bullet from screen:
-	lda #BALLOFFSCREEN
-	sta BulletX,X
-	sta BulletY,X
-	
+	jsr MoveBulletOffScreenSubroutine
+; 	lda #BALLOFFSCREEN
+; 	sta BulletX,X
+; 	sta BulletY,X
+; 	
 	;--play brick explosion sound
 	;--only start if longer explosion not happening
 	ldy #BRICKSOUND
@@ -6239,8 +6252,13 @@ TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy
 PlayerHasDiedMaxTimes    
     tay
 	lda PlayerStartingStatus,Y
-	sta TankStatus,X
-    bne UsePlayerRespawnPosition    ;branch always - all values of PlayerStartingStatus are non-zero
+	sta TankStatus
+	lda #PLAYERSTARTINGX
+	sta TankX
+	lda #PLAYERSTARTINGY
+	sta TankY
+	rts
+;     bne UsePlayerRespawnPosition    ;branch always - all values of PlayerStartingStatus are non-zero
 EnemyTankRespawnRoutine
 	lda StartingTankStatus,X  
 	sta TankStatus,X
@@ -6249,16 +6267,18 @@ EnemyTankRespawnRoutine
 	;   formula is tank # times 2 + rand(0, 1)
 	lda RandomNumber
 	lsr
+	dex                 ;change index from 1-3 to 0-2
 	txa
+	inx                 ;get X back to 1-3
 	rol
-	tay	
-	bne FoundRespawnPosition    ;branch always, since enemy tank = 1, 2, or 3.  so Y holds either 2, 3, 4, 5, 6, 7 (but not 0 or 1)
+	tay	                ;at this point Y holds 0, 1, 2, 3, 4, 5
+; 	bne FoundRespawnPosition    ;branch always, since enemy tank = 1, 2, or 3.  so Y holds either 2, 3, 4, 5, 6, 7 (but not 0 or 1)
 
 ; ; UseRegularRespawnPosition
-UsePlayerRespawnPosition
-    ldy #0             ;at this point X and Y should hold zero 
-    beq SetPlayerRespawnLocation
-FoundRespawnPosition
+; UsePlayerRespawnPosition
+;     ldy #0             ;at this point X and Y should hold zero 
+;     beq SetPlayerRespawnLocation
+; FoundRespawnPosition
 
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
@@ -6326,6 +6346,8 @@ KillAllTanksBonus
 ;****************************************************************************
 
 BulletHitTank
+    ;  Y is index into bullet
+    ;  X is index into which tank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
 	lda #BALLOFFSCREEN
