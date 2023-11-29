@@ -202,7 +202,7 @@
 
 
 
-DEBUGNOENEMYBULLETS = 0 ;enemies cannot shoot
+DEBUGNOENEMYBULLETS = 1 ;enemies cannot shoot
 DEBUGMAZE = 0           ;makes entire top row blank and 2nd row solid so tanks are confined up there.
 DEBUGPFPRIORITY = 0     ;leaves objects with priority over the playfield so can see where enemies respawn
 DEBUGTANKAICOUNTER = 0  ;if this is set, the top 4 bits of TankMovementCounter are set to the brightness of the maze walls
@@ -3521,16 +3521,24 @@ PFMaskLookup
 	
 
 		
-EnemyBulletDebounce ;these values * 4 is number of frames between enemy bullet firing
+EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bullet firing
 ;a tank's initial speed changes on level #s evenly divisible by 4  (i.e., 4, 8, 12, etc)
 ;so let's not change bullet debounce on those levels, but DO change it on the other levels.
 ;
-    .byte 1, 20, 16, 16
-    .byte 14, 12, 10, 10
-    .byte 8, 6, 4, 4
-    .byte 9, 8, 7, 6
-    .byte 5, 4, 3, 2
-    .byte 1	
+;   30 is equivalent to firing  0.45 bullets / sec
+;   0 is equivalent to firing 15 bullets / sec
+;   values below chosen to start at 30 and go to 0 in steps of as close to 10% as possible.
+;   so for example, the change from 30 to 27 is a 10.71% increase in firing rate, and
+;   27 to 24 is a 12% increase, and so on.  Obviously, near the end the increase is much greater.
+;   E.g., going from 2 to 1 is a 50% increase.
+    .byte 30, 27, 24, 24        ;levels 1-4
+    .byte 22, 20, 18, 18        ;levels 5-8
+    .byte 16, 14, 13, 13        ;levels 9-12
+    .byte 12, 11, 10, 10        ;levels 13-16
+    .byte 9, 8, 7, 7            ;levels 17-20
+    .byte 6, 5, 4, 4            ;levels 21-24
+    .byte 3, 2, 1, 1            ;levels 25-28
+    .byte 0	                    ;levels 29+
 EnemyBulletDebounceEnd
     
 
@@ -4404,15 +4412,17 @@ TanksRemainingPF2Mask
 ;--tank 2 respawns middle
 ;--tank 3 respawns closest to player
 
+;for left/right: 0 = left, 8 = right
 TankRespawnPlayerRight = * - 1
     .byte 0, 8, 8
-TankRespawnPlayerLeft = * - 1
-    .byte 8, 0, 0
-	
-	
-;0 = respawn along top
-;8 = respawn along left
-;16 = respawn along right	
+TankRespawnPlayerLeft = * - 2       ;uses 8 from previous table
+    .byte /*8, */0, 0
+; for top/bottom: 0 = top, 16 = bottom    
+TankRespawnPlayerTop = * - 1
+    .byte 16, 16, 0
+TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
+    .byte /*0, */0, 16
+
 	
 RespawnTankXPosition
 	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY1TOPLEFTSTARTINGX2, ENEMY2TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX2, ENEMY3TOPLEFTSTARTINGX1, ENEMY3TOPLEFTSTARTINGX2
@@ -4427,10 +4437,6 @@ RespawnTankYPosition
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
-StartingTankYPosition	
-	.byte PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-StartingTankXPosition
-	.byte PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX1
 
 	
 ;----------------End Some Data Stuck Here	
@@ -6260,10 +6266,15 @@ FoundRespawnPosition
 ; 	bcc TopRowEnemyTankRespawn
     bcs PlayerNearTop
     tya
-    adc #16
+    adc TankRespawnPlayerBottom,X
     tay
-;     bcc SetEnemyRespawnPosition     ;branch always 
+    bcc LeftRightRespawnAdjust     ;branch always 
 PlayerNearTop    
+    tya
+    clc
+    adc TankRespawnPlayerTop,X
+    tay
+LeftRightRespawnAdjust
 	;--use alternate positions
 	;--if player is on left part of screen, use variable respawn locations
 	lda TankX
@@ -6562,8 +6573,6 @@ PositionASpriteSubroutineBank2
 	
 	
 	
-	
-
 
 
 
@@ -6975,6 +6984,14 @@ Nine
         .byte #%01101100;--
 
 	
+P1CollisionTable
+	.byte 1, 2
+M0CollisionTable
+	.byte 0, 1
+M1CollisionTable
+	.byte 2, 3	
+P0CollisionTable
+	.byte 3;, 0     --uses zero in next table
 
     ALIGNGFXDATA 2
 		
@@ -7406,14 +7423,14 @@ PFClearLookup
 	
     PAGEALIGN 6
 
-P1CollisionTable
-	.byte 1, 2
-M0CollisionTable
-	.byte 0, 1
-M1CollisionTable
-	.byte 2, 3	
-P0CollisionTable
-	.byte 3, 0
+    
+	
+StartingTankYPosition	
+	.byte PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+StartingTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX1
+    
+    
 
 	
 	ds BLOCKHEIGHT+1 - (* & $FF)
