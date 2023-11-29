@@ -263,7 +263,7 @@ POWERUPCOUNTDOWNRESTART     =   %00001000       ;this is what the counter gets r
 POWERUPCOUNTDOWNRESET       =   %00001000       ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   %00001000       ;this is default if random start is zero
     ELSE
-POWERUPCOUNTDOWNRESTART     =   %00011100                   ;this is what the counter gets restarted at after gaining a powerup
+POWERUPCOUNTDOWNRESTART     =   POWERUPCOUNTDOWNMAX         ;this is what the counter gets restarted at after gaining a powerup
 POWERUPCOUNTDOWNRESET       =   POWERUPCOUNTDOWNMAX         ;this is what the counter gets reset to after player dies
 POWERUPCOUNTDOWNDEFAULT     =   POWERUPCOUNTDOWNMAX         ;this is default if random start is zero
     ENDIF
@@ -350,9 +350,9 @@ ENEMYTANK3DELAY	=	2
 ;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
 ;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
 PLAYERTANKSPEED	    =   TANKSPEED2|1     
-ENEMYTANKBASESPEED0 =   TANKSPEED8
-ENEMYTANKBASESPEED1 = 	TANKSPEED6
-ENEMYTANKBASESPEED2 =   TANKSPEED4
+ENEMYTANKBASESPEED0 =   TANKSPEED10
+ENEMYTANKBASESPEED1 = 	TANKSPEED8
+ENEMYTANKBASESPEED2 =   TANKSPEED6
 
 
 
@@ -360,19 +360,25 @@ ENEMYTANKBASESPEED2 =   TANKSPEED4
 PLAYERSTARTINGX	=	8
 PLAYERSTARTINGY =   TANKHEIGHT+1
 
-ENEMY01STARTINGX	=	24
-ENEMY02STARTINGX	=	112
-ENEMY11STARTINGX	=	64
-ENEMY12STARTINGX	=	88
-ENEMY21STARTINGX	=	128
-ENEMY22STARTINGX	=	40
+ENEMY1TOPLEFTSTARTINGX1	    =	24      ;column=1
+ENEMY1TOPLEFTSTARTINGX2     =   56      ;column=5
+ENEMY1TOPRIGHTSTARTINGX1	=	112     ;column=12
+ENEMY1TOPRIGHTSTARTINGX2    =   136     ;column=15
+ENEMY2TOPLEFTSTARTINGX1	    =	64      ;column=6
+ENEMY2TOPLEFTSTARTINGX2     =   32      ;column=2
+ENEMY2TOPRIGHTSTARTINGX1	=	88      ;column=9
+ENEMY2TOPRIGHTSTARTINGX2    =   120     ;column=13
+ENEMY3TOPLEFTSTARTINGX1	    =	40      ;column=3
+ENEMY3TOPLEFTSTARTINGX2     =   16      ;column=0
+ENEMY3TOPRIGHTSTARTINGX1	=	128     ;column=14
+ENEMY3TOPRIGHTSTARTINGX2    =   96      ;column=10
 
-ENEMY0STARTINGX2	=	144
-ENEMY1STARTINGX2	=	144
-ENEMY2STARTINGX2	=	144
-ENEMY0STARTINGX3	=	8
-ENEMY1STARTINGX3	=	8
-ENEMY2STARTINGX3	=	8
+ENEMY1BOTTOMRIGHTSTARTINGX	=	144
+ENEMY2BOTTOMRIGHTSTARTINGX	=	144
+ENEMY3BOTTOMRIGHTSTARTINGX	=	144
+ENEMY1BOTTOMLEFTSTARTINGX	=	8
+ENEMY2BOTTOMLEFTSTARTINGX	=	8
+ENEMY3BOTTOMLEFTSTARTINGX	=	8
 
 TANKOFFSCREEN	=	127
 
@@ -1857,7 +1863,7 @@ TankNotAboveMaze
 	lda #J0RIGHT
 	bne SetNewTankDirection	;branch always
 TankNotLeftOfMaze
-	cmp #ENEMY2STARTINGX2-1
+	cmp #ENEMY1BOTTOMRIGHTSTARTINGX-1
 	bcc TankInMaze
 	lda #J0LEFT
 	bne SetNewTankDirection
@@ -3062,21 +3068,22 @@ CheckForEnemyTankSubroutine
     lda Temp
     and #J0LEFT
     bne .NotMovingLeft
-   
-    ;see if an enemy tank within 1.5 blocks (12 pix) to the left
+    ;--moving left:  CHECK FOR TANK TO THE LEFT
+    ;see if an enemy tank within 2 blocks (16 pix) to the left
     lda TankX,X
 ;     sec       ;carry set following not-taken BCC branch above
     sbc #1      ;--have to subtract one so equal values are ignored
     sbc TankX,Y
-    cmp #14
+    cmp #15
     bcs .ThisTankNotToLeft
-    ;if so, see if that tank is between 1.5 blocks up and 1.5 blocks down 
+    ;if so, see if that tank is between just under 2 blocks up and 2 blocks down.
+    ;   block height = 7.  So add 13, subtract other tank Y, then compare to 26
     lda TankY,X
 ;     clc       ;carry clear following not-taken BCS branch above
-    adc #11     ;actual value is +10 but carry-subtraction below subtracts one more than the TankY
+    adc #14     ;actual value is +13 but carry-subtraction below subtracts one more than the TankY
 ;     sec       ;skip because we adjust above
     sbc TankY,Y
-    cmp #20
+    cmp #26
     bcs .ThisTankNotToLeft
     ;--there is a tank there!  can't move left!
     lda Temp
@@ -3087,19 +3094,22 @@ CheckForEnemyTankSubroutine
     lda Temp
     and #J0RIGHT
     bne .NotMovingRight
-    ;--moving right.
+    ;--moving right:  CHECK FOR TANK TO THE RIGHT
+    ;see if an enemy tank within 2 blocks (16 pix) to the right
     lda TankX,Y
     sec     
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankX,X
-    cmp #14
+    cmp #15
     bcs .ThisTankNotToRight
+    ;if so, see if that tank is between just under 2 blocks up and 2 blocks down.
+    ;   block height = 7.  So add 13 (2-times block height minus 1), subtract other tank Y, then compare to 26
     lda TankY,X
 ;     clc       ;carry clear following not-taken BCS branch above
-    adc #11     ;actual value is +10 but carry-subtraction below subtracts one more than the TankY
+    adc #14     ;actual value is +13 but carry-subtraction below subtracts one more than the TankY
 ;     sec       ;skip because we adjust above
     sbc TankY,Y
-    cmp #20
+    cmp #26
     bcs .ThisTankNotToRight
     ;--there is a tank there!  can't move right!
     lda Temp
@@ -3110,20 +3120,22 @@ CheckForEnemyTankSubroutine
     lda Temp
     and #J0UP
     bne .NotMovingUp
-    ;--moving up.
-    ;see if an enemy tank is above
+    ;--moving up:  CHECK FOR TANK ABOVE
+    ;see if an enemy tank within 2 blocks (14 pix) to the top
     lda TankY,Y
     sec       
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,X
-    cmp #12
+    cmp #13     ;we want to see if Y2-Y1<=14.  Since we subtracted one above, we want to see if (Y2-1)-Y1<=13
     bcs .ThisTankNotToUp
+    ;if so, see if that tank is between just under 2 blocks left and 2 blocks right.
+    ;   block width = 8.  So add 15 (2-times block width minus 1), subtract other tank Y, then compare to 30
     lda TankX,X
 ;     clc       ;carry clear following not-taken BCS branch above
-    adc #13     ;actual value is +12 but carry-subtraction below subtracts one more than the TankY
+    adc #16     ;actual value is +15 but carry-subtraction below subtracts one more than the TankY
 ;     sec       ;skip because we adjust above
     sbc TankX,Y
-    cmp #24
+    cmp #30
     bcs .ThisTankNotToUp
     ;--there is a tank there!  can't move up!
     lda Temp
@@ -3136,20 +3148,20 @@ CheckForEnemyTankSubroutine
     lda Temp
     and #J0DOWN
     bne .NotMovingDown
-    ;--moving down.
-    ;see if an enemy tank is below
+    ;--moving down:  CHECK FOR TANK BELOW
+    ;see if an enemy tank within 2 blocks (14 pix) to the bottom
     lda TankY,X
     sec       
     sbc #1      ;--have to add one so equal values are ignored
     sbc TankY,Y
-    cmp #12
+    cmp #13     ;we want to see if Y2-Y1<=14.  Since we subtracted one above, we want to see if (Y2-1)-Y1<=13
     bcs .ThisTankNotToDown
     lda TankX,X
 ;     clc       ;carry clear following not-taken BCS branch above
-    adc #13     ;actual value is +12 but carry-subtraction below subtracts one more than the TankY
+    adc #16     ;actual value is +15 but carry-subtraction below subtracts one more than the TankY
 ;     sec       ;skip because we adjust above
     sbc TankX,Y
-    cmp #24
+    cmp #30
     bcs .ThisTankNotToDown
     ;--there is a tank there!  can't move up!
     lda Temp
@@ -3158,10 +3170,10 @@ CheckForEnemyTankSubroutine
 .ThisTankNotToDown    
 .NoCompareTankToItself
 .TankOffScreenIgnore
+.NotMovingDown
     dey
     beq .DoneWithEnemyTankChecks
     jmp .CheckForEnemyTankLoop
-.NotMovingDown
 .DoneWithEnemyTankChecks
 
     lda Temp    ;restore allowed directions to Accumulator
@@ -4369,21 +4381,40 @@ TanksRemainingPF1Mask
 TanksRemainingPF2Mask		
 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
     
-PFClearLookup
-	.byte $3F, $CF, $F3, $FC
-	.byte $FC, $F3, $CF, $3F
-	.byte $3F, $CF, $F3, $FC
-	.byte $FC, $F3, $CF, $3F
-	
-StartingTankXPosition
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY01STARTINGX, ENEMY02STARTINGX, ENEMY11STARTINGX, ENEMY12STARTINGX, ENEMY21STARTINGX, ENEMY22STARTINGX
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX2, ENEMY0STARTINGX2, ENEMY1STARTINGX2, ENEMY1STARTINGX2, ENEMY2STARTINGX2, ENEMY2STARTINGX2
-	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY0STARTINGX3, ENEMY0STARTINGX3, ENEMY1STARTINGX3, ENEMY1STARTINGX3, ENEMY2STARTINGX3, ENEMY2STARTINGX3
 
-StartingTankYPosition 
+;--these tables are offset into RespawnTankXPosition and RespawnTankYPosition	
+;--tank 1 respawns farthest from player
+;--tank 2 respawns middle
+;--tank 3 respawns closest to player
+
+TankRespawnPlayerRight = * - 1
+    .byte 0, 8, 8
+TankRespawnPlayerLeft = * - 1
+    .byte 8, 0, 0
+	
+	
+;0 = respawn along top
+;8 = respawn along left
+;16 = respawn along right	
+	
+RespawnTankXPosition
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY1TOPLEFTSTARTINGX2, ENEMY2TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX2, ENEMY3TOPLEFTSTARTINGX1, ENEMY3TOPLEFTSTARTINGX2
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1TOPRIGHTSTARTINGX1, ENEMY1TOPRIGHTSTARTINGX2, ENEMY2TOPRIGHTSTARTINGX1, ENEMY2TOPRIGHTSTARTINGX2, ENEMY3TOPRIGHTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX2
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1BOTTOMLEFTSTARTINGX, ENEMY1BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY2BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX, ENEMY3BOTTOMLEFTSTARTINGX
+	.byte PLAYERSTARTINGX, PLAYERSTARTINGX, ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY1BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY2BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX, ENEMY3BOTTOMRIGHTSTARTINGX
+
+RespawnTankYPosition 
+	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	.byte PLAYERSTARTINGY, PLAYERSTARTINGY, ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+	
+	
+StartingTankYPosition	
+	.byte PLAYERSTARTINGY, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+StartingTankXPosition
+	.byte PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX1
+
 	
 ;----------------End Some Data Stuck Here	
 	
@@ -5188,7 +5219,7 @@ LastPassThroughMazeGeneration
 
    	ELSE
 	    
-    	ldx #$0C
+    	ldx #$00
     	txa
     	;clear blocks in top row that are entry points
     	and PF1Left+MAZEROWS-2
@@ -5199,7 +5230,7 @@ LastPassThroughMazeGeneration
     	and PF1Right+MAZEROWS-2
     	sta PF1Right+MAZEROWS-2
 	
-;     	ldx #$0C
+     	ldx #$C3
     	txa
     	and PF2Left+MAZEROWS-2
     	sta PF2Left+MAZEROWS-2
@@ -5369,14 +5400,14 @@ UpdateRandomNumberBank2
 MoveEnemyTanksOffScreen
 	sta Temp
 	ldx #3
-	ldy #6
+; 	ldy #6
 SetStartingEnemyTankLocationsLoop
-	lda StartingTankXPosition,Y
+	lda StartingTankXPosition,X
 	sta TankX,X
-	lda StartingTankYPosition,Y
+	lda StartingTankYPosition,X
 	sta TankY,X
-	dey
-	dey
+; 	dey
+; 	dey
 	dex
 	cpx Temp                ;6, 4, 2, 0, 254
 	bne SetStartingEnemyTankLocationsLoop
@@ -5604,10 +5635,12 @@ TankHitLiveTank
     sta MazeGenerationPass  ;reset counter to the max 
 
     ;--I think we can skip the subsequent stuff
-    bne TankAlreadyDeadCannotDie
+    pla ;restore Y
+    tay
+    jmp TankAlreadyDeadCannotDie
 ActivateInitialPowerUp
     lda MazeGenerationPass
-    ora #POWERUPACTIVATEDBITS
+    ora #POWERUPACTIVATEDBITS|POWERUPCOUNTDOWNRESTART
     sta MazeGenerationPass    
     ldy #SPEEDBOOSTSOUND
     jsr StartSoundSubroutineBank2
@@ -6171,12 +6204,12 @@ TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy
     lda MazeGenerationPass
     and #PLAYERDEATHCOUNTBITS
     cmp #PLAYERDEATHCOUNTMAX
-    beq PlayerHasDiedSevenTimes
-PlayerHasNotDiedSevenTimes    
+    beq PlayerHasDiedMaxTimes
+    
     inc MazeGenerationPass
     lda MazeGenerationPass
     and #PLAYERDEATHCOUNTMAX
-PlayerHasDiedSevenTimes    
+PlayerHasDiedMaxTimes    
     tay
 	lda PlayerStartingStatus,Y
 	sta TankStatus,X
@@ -6203,26 +6236,33 @@ FoundRespawnPosition
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
 	cmp #BLOCKHEIGHT*7
-	bcc TopRowEnemyTankRespawn
+; 	bcc TopRowEnemyTankRespawn
+    bcs PlayerNearTop
+    tya
+    adc #16
+    tay
+;     bcc SetEnemyRespawnPosition     ;branch always 
+PlayerNearTop    
 	;--use alternate positions
-	;--if player is on left part of screen, use right respawn locations
+	;--if player is on left part of screen, use variable respawn locations
 	lda TankX
 	cmp #80
-	bcc RightSideEnemyTankRespawn
-    ;--else left side
+	bcc PlayerLeft
+    ;--else player right
     tya
     clc
-    adc #8
+    adc TankRespawnPlayerRight,X
     tay
-RightSideEnemyTankRespawn
+    bcc SetEnemyRespawnPosition     ;branch always 
+PlayerLeft
     tya
-;     clc   ;not needed since carry clear after addition above and BCC branch that took us directly here
-    adc #8
+    adc TankRespawnPlayerLeft,X    ;carry already clear following BCC 
     tay
-TopRowEnemyTankRespawn
-    lda StartingTankYPosition,Y
+; TopRowEnemyTankRespawn
+SetEnemyRespawnPosition
+    lda RespawnTankYPosition,Y
 	sta TankY,X
-	lda StartingTankXPosition,Y
+	lda RespawnTankXPosition,Y
 	sta TankX,X
 
     rts
@@ -7334,6 +7374,13 @@ TankCollisionBitsOdd
     .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3
 TankCollisionBitsEven
     .byte %11000100, %10011000, %00110100, %01101000
+    
+PFClearLookup
+	.byte $3F, $CF, $F3, $FC
+	.byte $FC, $F3, $CF, $3F
+	.byte $3F, $CF, $F3, $FC
+	.byte $FC, $F3, $CF, $3F
+    
 	
     PAGEALIGN 6
 
