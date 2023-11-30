@@ -849,8 +849,8 @@ VSYNCWaitLoop2
     ora #TRIGGERDEBOUNCEFLAG
     sta Debounce
 	
-	lda #0
-	sta MazeNumber
+; 	lda #0
+; 	sta MazeNumber
 	jsr StartNewGame
 	jmp DoneStartingNewGameWithTrigger
 NoTriggerToStartGameClearTriggerDebounce
@@ -1251,17 +1251,52 @@ RESETPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
 	bne RESETNotReleased
-    lda #0
+StartNewGame	
+	;--if RESET pressed, set MazeNumber to $01 if not on the title screen.  Else leave it as-is.
+	lda MazeNumber
+	beq SetMazeNumberToOne
+	lda GameStatus
+	and #TITLESCREEN
+	bne ResetConsoleSwitchDebounce
+SetMazeNumberToOne	
+    lda #$01
     sta MazeNumber
+    bne ResetConsoleSwitchDebounce  ;branch always
 SELECTPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
 	bne RESETNotReleased
+    ;--if on title screen, increase starting level to 5 and then 10 and then back to 1
+    ;--if not on the title screen, ignore
+    lda GameStatus
+    and #TITLESCREEN
+    beq DoneWithConsoleSwitches
+    lda MazeNumber
+    cmp #$01
+    bne StartingMazeNotOne
+    lda #$05
+    bne SetStartingMazeNumber   ;branch always
+StartingMazeNotOne    
+    cmp #$05
+    bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
+    ;--not one and not ten means it is five
+    lda #$10
+    bne SetStartingMazeNumber
+SetStartingMazeToOne
+    lda #$01    
+SetStartingMazeNumber
+    sta MazeNumber
+	lda Debounce
+	ora #CONSOLEDEBOUNCEFLAG
+	sta Debounce
+    rts    
+    
+ResetConsoleSwitchDebounce
 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
 	sta Debounce
 	
-StartNewGame	
+	
 	;--reset score here 
 	lda #0
 	ldx #3
@@ -5059,7 +5094,15 @@ FillMazeLoop
 
 	
 	
-	;--update maze number on first pass also
+	;--update maze number on first pass also ONLY if score != 000000 (i.e., don't do it at game start)
+	lda Score
+	ora Score+1
+	ora Score+2
+	bne NotGameStartUpdateMazeNumber
+	lda MazeNumber
+	clc
+	bcc SetMazeSeed
+NotGameStartUpdateMazeNumber	
 	sed
 	lda MazeNumber
 UpdateMazeNumber
@@ -5068,6 +5111,7 @@ UpdateMazeNumber
 	sta MazeNumber
 	beq UpdateMazeNumber
 	cld
+SetMazeSeed	
     adc #99  ;--don't like the initial maze, too hard with long vertical corridor from the top to the base
 	;and set seed for maze
 	sta RandomNumber	
@@ -5288,8 +5332,7 @@ LastPassThroughMazeGeneration
 	;--clear left and right blocks on the rows where tanks enter when player is near top of screen
 	ldy #5
 ClearSideEntryPointsLoop
-    lda EntryPointRowOffsetTable,Y
-    tax
+    ldx EntryPointRowOffsetTable,Y
     lda #$3F
     and PF1Left,X
     sta PF1Left,X
