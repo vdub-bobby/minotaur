@@ -80,6 +80,7 @@
 
 
 	To do:
+	Some kind of indicator that player tank is respawning (countdown something or other?)
 	DONE: Last tank shot in a level should not turn into a powerup (should always explode).
 	Harmonized music at title screen.  And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
 	DONE: Possibly only decrement powerup countdown counter when player shoots tank?
@@ -87,15 +88,15 @@
 	        After dying, only credit for tanks he kills.  In other words, this sequence gives these points (assuming base score of 50 pts and 25-pt bonus per tank killed/died)
 	            1. Player kills tank:    50 points
 	            2. Tank kills tank:       0 points (credited as a kill for score bonus purposes)
-	            3. Player kills tank:   100 points
+	            3. Player kills tank:   100 points (base points + bonus x2)
 	            4. Tank kills player:     0 points
 	            5. Player kills tank:    50 points
 	            6. Tank kills tank:       0 points (not credited as a kill for score bonus purposes)
-	            7. Player kills tank:    75 points
+	            7. Player kills tank:    75 points (base points + bonus x1)
 	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
 	DONE Stuck enemies do not fire.  FIX: They always fire to the right, which would be a problem if they are stuck at the right edge.  Not sure if I should care.  Maybe it's fine?
 	    I've only ever seen this once, I think only way is in scenario outlined a little below.
-	Difficulty ramping.  Two things:
+	IN PROGRESS but this is very close or maybe even done.  Difficulty ramping.  Two things:
 	    1. Increase initial difficulty - potentially increase firing rate for level 1
 	    2. Tweak difficulty ramping.  Currently -
 	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
@@ -104,8 +105,8 @@
                         what if we made them 8 lines tall
 	        tanks reach maximum fire rate at level 21
 	DONE Add explosion graphics  or ????.  STILL TO DO: Player tank also should explode.  And make it so explosion graphic doesn't kill other tanks.
-    Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
-	IN PROGRESS Power-Ups - ???
+    DONE Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
+	DONE Power-Ups - ???
 		keep this simple: 
 			DONE speed
 			NIX - extra life
@@ -115,7 +116,7 @@
 			DONE Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
     Attract mode?
 	NOT GOING TO DO THIS: Turn music off with B&W switch (or pause on 7800?).  abandoned this, music is unobtrusive enough that I don't think it is a big deal.
-	Turn powerups off with difficulty (or use select?)
+	Turn powerups off with difficulty switch (or use select?)
 	DONE Adjust scoring:
 	    DONE 50 points for each tank killed plus combo system: for each tank killed since last death in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
 	        Bonus maxes out at 375 points
@@ -1019,7 +1020,7 @@ GameNotOn
 	bcc .LevelExplosionComplete
 	jmp .LevelNotComplete
 .LevelExplosionComplete
-	;--move all tanks (and explosiong gfx) offscreen
+	;--move all tanks (and explosion gfx) offscreen
 	;--move tanks offscreen
 	ldx #3
 	ldy #0
@@ -1726,7 +1727,7 @@ PlayerTankMovementRoutine
 	bcs PlayerTankOnscreenMoveIt
 	;--wait only if TankX == 8
 	cmp #8
-	bne DoneWaitingBringPlayerTankOnScreen
+	bne NotWaitingBringPlayerTankOnScreen
 WaitForPlayerExplosion
 	lda TankStatus
 	and #TANKRESPAWNWAIT
@@ -1734,7 +1735,7 @@ WaitForPlayerExplosion
 	;--else still waiting
 	;--update counter every 8 frames
 	lda FrameCounter
-	and #31         ;--make wait longer for tank to respawn
+	and #15         ;--make wait longer for tank to respawn
 	bne WaitToUpdateRespawnCounter
 	lda TankStatus
 	sec
@@ -1751,10 +1752,11 @@ FinishedWaitingPlayerDelay
 	brk 
 	.word TankRespawnRoutineWrapperPlayer
 	rts
+DoneWaitingBringPlayerTankOnScreen
 	;--set player to move immediately 
 	lda #255
 	sta TankFractional
-DoneWaitingBringPlayerTankOnScreen
+NotWaitingBringPlayerTankOnScreen	
  	lda #0		
 	pha			;movement flag
 	lda #~J0RIGHT
@@ -4437,7 +4439,9 @@ RespawnTankYPosition
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
-
+RespawnCountdownGraphic
+    .byte $00, $80, $C0, $E0
+    .byte $F0, $F8, $FC, $FE
 	
 ;----------------End Some Data Stuck Here	
 	
@@ -4719,8 +4723,8 @@ DoneWithKernelLastRowLoop
 	ldy #0                  ;+2
 	sty PF0                 
 	sty PF1
-	sty PF2
-	sty COLUPF
+ 	sty PF2
+; 	sty COLUPF
 	sty REFP0
 	sty REFP1
 	sty VDELP0
@@ -4744,29 +4748,46 @@ DoneWithKernelLastRowLoop
 	lsr
 	lsr
 	lsr
-	tay
-	lda DigitDataMissileLo,Y
+	tax
+	lda DigitDataMissileLo,X
 	sta Player0Ptr+2
 	lda MazeNumber
 	and #$0F
-	tay
-	lda DigitDataMissileLo,Y
+	tax
+	lda DigitDataMissileLo,X
 	sta Player1Ptr
 
 	
     ;this masks the missiles before we want them to show
     ;we will use the actual mask inside the loop below	
-	lda #$FF
-	sta PF0
-	sta PF2                     
-	
-	sta WSYNC                   ;
-	SLEEP 8                     ;+8      8
+; 	lda #$FF
+; 	sta PF0                     ;+18
+; 	sta PF2                     
+
+    lda TankStatus
+    and #TANKUP|TANKINPLAY      ;tank UP means explosion graphic (respawn is tankright.  TANKINPLAY is self-explanatory)
+    bne NoRespawnCounterGraphic
+    lda TankStatus
+    and #$0F
+    lsr
+    tax
+    lda RespawnCountdownGraphic,X
+    sta PF2
+NoRespawnCounterGraphic    
+    lda TanksRemaining
+    ;Y still holds zero
+
 
 	
-	lda TanksRemaining
+	sta WSYNC                   ;
+; 	SLEEP 8                     ;+8      8
+    sty COLUPF
+    dey
+    sty PF2                     ;+8      8
+    sty PF0                     ;+3     11
+	
 	lsr
-	tax                         ;+7     15
+	tax                         ;+4     15
 
 	lda TanksRemainingPF1Mask,X
 	sta PF1                     ;+7     22
@@ -4950,7 +4971,7 @@ BulletNotUp
 	bne BulletNotDown
 	;--move bullet down
 	lda BulletY,X
-	sec
+; 	sec         ;carry is set following not-taken BNE above
 	sbc Temp    ;was #BULLETSPEEDVER
 	sta BulletY,X
 	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
@@ -4972,7 +4993,7 @@ BulletNotRight
 	bne NoBulletMovement
 	;--move bullet left
 	lda BulletX,X
-	sec
+; 	sec         ;carry is set following not-taken BNE above
 	sbc Temp    ;was #BULLETSPEEDHOR
 	sta BulletX,X
 
@@ -4983,7 +5004,7 @@ CheckBulletIsOffScreenHorizontal
 	bcc BulletOffScreen
 	cmp #144
 	bcs BulletOffScreen
-	bcc BulletOnScreen
+	bcc BulletOnScreen      ;branch always
 CheckBulletIsOffScreenVertical
 	lda BulletY,X
 	cmp #(MAZEAREAHEIGHT)+4
@@ -5244,15 +5265,15 @@ LastPassThroughMazeGeneration
    	ELSE
 	    
     	ldx #$00
-    	txa
+;     	txa
     	;clear blocks in top row that are entry points
-    	and PF1Left+MAZEROWS-2
-    	sta PF1Left+MAZEROWS-2
+;     	and PF1Left+MAZEROWS-2
+    	stx PF1Left+MAZEROWS-2
     	
     	;clear upper R corner
-    	txa
-    	and PF1Right+MAZEROWS-2
-    	sta PF1Right+MAZEROWS-2
+;     	txa
+;     	and PF1Right+MAZEROWS-2
+    	stx PF1Right+MAZEROWS-2
 	
      	ldx #$C3
     	txa
@@ -5278,28 +5299,28 @@ ClearSideEntryPointsLoop
 	dey
 	bpl ClearSideEntryPointsLoop
 
-	
+	;no longer necessary since PF1 completely cleared on top rows
 	;--if top corner entry points are enclosed, add escape routes downward
-	lda PF1Left+MAZEROWS-2 ;top left
-	and #%00001100
-	beq TopLeftCornerNotEnclosed
-	lda PF1Left+MAZEROWS-3
-	and #%11001111
-	sta PF1Left+MAZEROWS-3
-	lda PF1Left+MAZEROWS-4
-	and #%11001111
-	sta PF1Left+MAZEROWS-4
-TopLeftCornerNotEnclosed
-	lda PF1Right+MAZEROWS-2 ;top right
-	and #%00001100
-	beq TopRightCornerNotEnclosed
-	lda PF1Right+MAZEROWS-3
-	and #%11001111
-	sta PF1Right+MAZEROWS-3
-	lda PF1Right+MAZEROWS-4
-	and #%11001111
-	sta PF1Right+MAZEROWS-4
-TopRightCornerNotEnclosed
+; 	lda PF1Left+MAZEROWS-2 ;top left
+; 	and #%00001100
+; 	beq TopLeftCornerNotEnclosed
+; 	lda PF1Left+MAZEROWS-3
+; 	and #%11001111
+; 	sta PF1Left+MAZEROWS-3
+; 	lda PF1Left+MAZEROWS-4
+; 	and #%11001111
+; 	sta PF1Left+MAZEROWS-4
+; TopLeftCornerNotEnclosed
+; 	lda PF1Right+MAZEROWS-2 ;top right
+; 	and #%00001100
+; 	beq TopRightCornerNotEnclosed
+; 	lda PF1Right+MAZEROWS-3
+; 	and #%11001111
+; 	sta PF1Right+MAZEROWS-3
+; 	lda PF1Right+MAZEROWS-4
+; 	and #%11001111
+; 	sta PF1Right+MAZEROWS-4
+; TopRightCornerNotEnclosed
 
     
     ;--more escape routes, this time for the right side
@@ -5776,16 +5797,16 @@ KillAllTanksWithinBlastRadius
     sbc #12
     sta Temp+4        ;left boundary
     lda TankY,X
-    clc
-    adc #(TANKHEIGHT+TANKHEIGHT/2)+1
+;     clc
+    adc #(TANKHEIGHT+TANKHEIGHT/2)       ;carry is set here so actual value being added is (TANKHEIGHT+TANKHEIGHT/2)+1
     sta Temp+1      ;upper boundary+1
     lda TankX,X
-    clc
-    adc #13
+;     clc
+    adc #13         ;carry clear following addition above
     sta Temp+2      ;right boundary+1
     lda TankY,X
-    sec
-    sbc #(TANKHEIGHT+TANKHEIGHT/2)
+;     sec
+    sbc #(TANKHEIGHT+TANKHEIGHT/2)-1     ;carry is clear here so actual value being subtracted is (TANKHEIGHT+TANKHEIGHT/2)
     sta Temp+3      ;lower boundary
     ;--discarding X (powerup icon index) at this point
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
