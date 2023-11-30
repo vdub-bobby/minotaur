@@ -80,9 +80,25 @@
 
 
 	To do:
-	Some kind of indicator that player tank is respawning (countdown something or other?)
+	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+	PAL60 version
+	DONE Turn powerups off with difficulty switch (or use select?).  Working, but look for a bit we can use to store this during a game so you can't turn it on and off during gameplay.  
+	    and then change color of score (or?) to indicate.
+	IN PROGRESS but this is very close or maybe even done.  Difficulty ramping.  Two things:
+	    1. Increase initial difficulty - potentially increase firing rate for level 1
+	    2. Tweak difficulty ramping.  Currently -
+	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
+                could we increase the maximum tank speed?  We can't move tanks more than once every 4 frames, but could we move >1 pixel at a time?
+                    could be possible except that we have to make sure they don't overrun intersections.  Which is an issue since bricks are 7 lines tall.
+                        what if we made them 8 lines tall
+	        tanks reach maximum fire rate at level 21
+	DONE Some kind of indicator that player tank is respawning (countdown something or other?)
 	DONE: Last tank shot in a level should not turn into a powerup (should always explode).
 	Harmonized music at title screen.  And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
+	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
+    Attract mode?
+	Other...?
+	sound tweaking/improvements
 	DONE: Possibly only decrement powerup countdown counter when player shoots tank?
 	    Note: for score bonus for killing consecutive tanks, before dying (on a level) the player gets credit for every tank that dies.
 	        After dying, only credit for tanks he kills.  In other words, this sequence gives these points (assuming base score of 50 pts and 25-pt bonus per tank killed/died)
@@ -93,17 +109,8 @@
 	            5. Player kills tank:    50 points
 	            6. Tank kills tank:       0 points (not credited as a kill for score bonus purposes)
 	            7. Player kills tank:    75 points (base points + bonus x1)
-	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
 	DONE Stuck enemies do not fire.  FIX: They always fire to the right, which would be a problem if they are stuck at the right edge.  Not sure if I should care.  Maybe it's fine?
 	    I've only ever seen this once, I think only way is in scenario outlined a little below.
-	IN PROGRESS but this is very close or maybe even done.  Difficulty ramping.  Two things:
-	    1. Increase initial difficulty - potentially increase firing rate for level 1
-	    2. Tweak difficulty ramping.  Currently -
-	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
-                could we increase the maximum tank speed?  We can't move tanks more than once every 4 frames, but could we move >1 pixel at a time?
-                    could be possible except that we have to make sure they don't overrun intersections.  Which is an issue since bricks are 7 lines tall.
-                        what if we made them 8 lines tall
-	        tanks reach maximum fire rate at level 21
 	DONE Add explosion graphics  or ????.  STILL TO DO: Player tank also should explode.  And make it so explosion graphic doesn't kill other tanks.
     DONE Respawn routine needs work.  I am wondering if should use location of other tanks rather than player tank to determine where to respawn.
 	DONE Power-Ups - ???
@@ -114,9 +121,7 @@
 			??? something that slows all enemies down?
 			??? other?
 			DONE Sound effect for when you get power up that gives speed boost.  A nice ascending lick would be cool but current sound FX code doesn't allow change in frequency so.
-    Attract mode?
 	NOT GOING TO DO THIS: Turn music off with B&W switch (or pause on 7800?).  abandoned this, music is unobtrusive enough that I don't think it is a big deal.
-	Turn powerups off with difficulty switch (or use select?)
 	DONE Adjust scoring:
 	    DONE 50 points for each tank killed plus combo system: for each tank killed since last death in the level, add 25 points.  So first tank is 50, second is 75, third is 100, etc.
 	        Bonus maxes out at 375 points
@@ -150,11 +155,7 @@
 	DECISION TO NOT DO THIS: OR NOT?  display player lives remaining
 	DONE: don't give points for enemy tank actions
 	DONE replace placeholder font
-	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
-	PAL60 version
 	NOT GOING TO HAPPEN: 2-player?  (unlikely but...)
-	Other...?
-	sound tweaking/improvements
 	DONE: Game Over logic of some kind
 	
 	BUG KILLING!
@@ -163,9 +164,9 @@
 	    FIXED: Bullets are getting stuck off screen but not in BALLOFFSCREEN location and so enemy tanks stop shooting mid level.
 	        seems to happen at higher levels, not sure of cause.  Think cause is when bullets are travelling down and hit BulletY==0 and 
 	        BulletX is not set to zero also.
-        Occasionally (cause?) a tank respawns when it shouldn't.  Haven't seen this in a while, need to confirm this is an issue still.
-        Tanks kill each other often when entering the screen.  Need to see if this can be fixed.  More urgent now that dead tank graphic stays on screen and will kill the entering tank.
-		scanline count is wonky, need to tighten up various subroutines that take too long
+        HAVE NOT SEEN THIS IN A LONG TIME - ASSUME FIXED Occasionally (cause?) a tank respawns when it shouldn't.  Haven't seen this in a while, need to confirm this is an issue still.
+        FIXED ENOUGH Tanks kill each other often when entering the screen.  Need to see if this can be fixed.  More urgent now that dead tank graphic stays on screen and will kill the entering tank.
+		FIXED I THINK scanline count is wonky, need to tighten up various subroutines that take too long
 	    FIXED: remove bullets from screen during level transitions
         FIXED: Tanks still firing when offscreen.  
             UPDATE: I think this is when tank 3 shoots downward a "ghost" shot occurs from offscreen. 
@@ -192,10 +193,10 @@
 	
   Notes from ZeroPage livestream on 9/1:
       FIXED KINDA: screen rolls are way more frequent than I thought, ugh.  Need to work on that.  Note: Seem to have stabilized it at 272 scanlines by increasing Overscan timer setting
-      if possible would like to speed up game play.
+      DONE if possible would like to speed up game play.
       FIXED: update spawn points to force player to move from bottom of screen ...
       FIXED: found bug that you can shoot tanks before they are on the screen (!)
-      need to make AI more aggressively chasing "base"
+      FIXED need to make AI more aggressively chasing "base"
       DONE: probably need to finally implement the "game over" logic for when a tank gets the base	
 
 */
@@ -307,6 +308,9 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
 FIRSTCOLUMNX    =   16
 
+
+;--bit 7 of FrameCounter used to track whether powerups are on or off, which is determined by difficulty switch A and only can be switched at the title screen
+POWERUPSENABLED = %10000000
 
 ;--constants for game over routine
 ;--TankMovementCounter is reused for this routine
@@ -552,10 +556,11 @@ BULLETSPEEDVER		=		1
 BULLETFRACTIONALPERCENT =   80          ;--was 87
 BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets down slightly so the collision detection works better
 
-BASECOLOR		    =		GOLD
-SCORECOLOR          =       GRAY|$C
-WALLCOLOR			=		RED|$8
-TANKSREMAININGCOLOR =   TURQUOISE|$A
+BASECOLOR		            =		GOLD
+SCORECOLOR_POWERUPSDISABLED =       GRAY|$C
+SCORECOLOR_POWERUPSENABLED  =       BROWNGREEN|$4
+WALLCOLOR			        =		RED|$8
+TANKSREMAININGCOLOR         =   TURQUOISE|$A
 
 ;--old colors: GOLD|A and BLUE2|C
 
@@ -713,7 +718,7 @@ MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
 Score ds 3
-TanksRemaining ds 1
+TanksRemaining ds 1     ;this holds a value from 0 to 20.  Wondering if we can use the top 3 bits for something else?
 
 Channel1Decay ds 1
 
@@ -826,8 +831,16 @@ VSYNCWaitLoop2
 	
 
 	
-	
-	dec FrameCounter
+	;--decrement FrameCounter while leaving upper bit untouched:
+	lda FrameCounter
+	sec
+	sbc #1
+	and #$7F
+	sta Temp
+	lda FrameCounter
+	and #$80
+	ora Temp
+	sta FrameCounter
 	
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER|GENERATINGMAZE
@@ -919,7 +932,7 @@ OverscanRoutine
 	;--now need to see if we have just finished flashing
 	lda TankMovementCounter
 	and #WALLDONEFLASHING
-	beq WallsStillFlashing  ;branch always
+	beq WallsStillFlashing  
     ;--walls done flashing:
     ;   remove tanks from screen
     ;   wait a bit, and then go back to title screen routine
@@ -983,6 +996,7 @@ ClearMazeLoop
 	;--also turn off sound
 ; 	sta AUDV0
 	sta TanksRemaining
+	lda #$01
 	sta MazeNumber
 GameOverRoutineStillGoing
 NoChangeToGameOverVolume
@@ -1143,10 +1157,16 @@ NotGeneratingMaze
 	jmp PutTanksOnTitleScreenNotYet
 NoLongerDrawingTitleScreen
     ;--let's put some stuff on the screen
+    lda TankStatus
+    lsr
+    bcs TanksAlreadyOnScreen
     lda SongIndex
-    and #$F0
-    cmp #$40
-    bcc PutTanksOnTitleScreenNotYet
+;     and #$F0
+    cmp #$20
+    bne PutTanksOnTitleScreenNotYet
+    ;--reset TankMovementCounter so animation of powerup icon is correct
+    lda #$FF
+    sta TankMovementCounter
     ldx #3
 PutTanksOnTitleScreenLoop
     lda TankTitleScreenX,X
@@ -1157,7 +1177,24 @@ PutTanksOnTitleScreenLoop
     sta TankStatus,X
     dex
     bpl PutTanksOnTitleScreenLoop
+TanksAlreadyOnScreen
+    ;--right here let's check to see if left difficulty switch = A.  If so, display third tank (not powerup)
+    lda FrameCounter
+    and #POWERUPSENABLED
+    beq DisplayTankInsteadOfPowerUp
+    and #P0DIFF
+    lda #TANKUP|TANKDOWN
+    .byte $2C
+DisplayTankInsteadOfPowerUp
+    lda #TANKLEFT|TANKINPLAY|TANKSPEED2
+    sta TankStatus+3
 
+;--at this point we need to update TankMovementCounter so the power up icon animates correctly (like it does during the game)
+	lda FrameCounter
+	and #3
+	bne DoNotUpdateTankMovementCounter
+	inc TankMovementCounter     ;tank movement counter incremented every four frames
+DoNotUpdateTankMovementCounter
 PutTanksOnTitleScreenNotYet
 WaitToDrawTitleScreen
 
@@ -1229,7 +1266,7 @@ SkipEOR
 	
 ;----------------------------------------------------------------------------
 
-
+    SUBROUTINE
 ReadConsoleSwitchesSubroutine
 
 	lda SWCHB
@@ -1241,6 +1278,22 @@ ReadConsoleSwitchesSubroutine
 	lda Debounce
 	and #~CONSOLEDEBOUNCEFLAG
 	sta Debounce
+	;--now check difficulty switch ONLY if on title screen
+	lda GameStatus
+	and #TITLESCREEN
+	beq DoneWithConsoleSwitches
+	lda SWCHB
+	and #P0DIFF
+	beq .PowerUpsOn
+	lda FrameCounter        ;bit 7 used to track powerups enabled or no
+	and #~POWERUPSENABLED
+	sta FrameCounter
+	rts
+.PowerUpsOn	
+	lda FrameCounter
+	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
+	sta FrameCounter
+	
 RESETNotReleased
 DoneWithConsoleSwitches
 	rts
@@ -1272,8 +1325,8 @@ SELECTPressed
     and #TITLESCREEN
     beq DoneWithConsoleSwitches
     lda MazeNumber
-    cmp #$01
-    bne StartingMazeNotOne
+    cmp #$02
+    bcs StartingMazeNotOne
     lda #$05
     bne SetStartingMazeNumber   ;branch always
 StartingMazeNotOne    
@@ -4005,8 +4058,10 @@ TankGfxIndexSet
     bne SetTankGfxPtr   ;branch always
 UsePowerUpGraphic
     ldx #0
-    lda FrameCounter
-    and #%11100000
+    lda TankMovementCounter
+    and #%00111000
+;     lda FrameCounter
+;     and #%11100000          ;was %11100000
     bne StaticPowerUpIcon
     lda FrameCounter
     and #%00011100
@@ -4226,6 +4281,17 @@ SetWallColor
 
     sta Temp+3
 
+    
+    lda FrameCounter
+    asl
+    bcc ScoreColorNoPowerUps
+    ldx #SCORECOLOR_POWERUPSENABLED
+    .byte $2C
+ScoreColorNoPowerUps
+    ldx #SCORECOLOR_POWERUPSDISABLED
+    
+    
+    
 
 WaitForVblankEnd
 	lda INTIM
@@ -4238,14 +4304,15 @@ WaitForVblankEnd
 ; 	nop
 ; EndVBLANK	
 
-	
+
 	
 	lda #0
 	sta WSYNC
 	sta VBLANK
-	lda #SCORECOLOR
-	sta COLUP0
-	sta COLUP1						;+11    11
+; 	lda #SCORECOLOR
+    nop
+	stx COLUP0
+	stx COLUP1						;+11    11
 		
 	
 
@@ -5930,7 +5997,11 @@ SetTankStatusForDeadTanks
     ;       powerup countdown is zero
     ;       and TanksRemaining > 0
     ;       and no powerup on screen
+    ;       and left difficulty switch = B
 TankIsNewlyDead
+    lda FrameCounter
+    and #POWERUPSENABLED
+    beq PowerUpsTurnedOff
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
     bne NoPowerUp
@@ -5950,6 +6021,7 @@ CheckForPowerUpOnscreenLoop
     ora #TANKDOWN
     sta TankStatus,Y
     bne CheckNextTankForNewDeath    ;branch always
+PowerUpsTurnedOff    
 NoPowerUp
     lda TankDeadStatus,Y
     sta TankStatus,Y
