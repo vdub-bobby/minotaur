@@ -435,32 +435,32 @@ PLAYERTANKVOLUME	=	8
 PLAYERTANKENGINEFREQ	=	8;31
 PLAYERTANKENGINETONE	=	2;ENGINESOUND
 PLAYERTANKENGINEVOLUME	=	3
-PLAYERTANKENGINELENGTH  =   3
+PLAYERTANKENGINELENGTH  =   3+1
 
 BULLETSOUNDTONE		=	ENGINESOUND
 BULLETSOUNDFREQ		=	13
-BULLETSOUNDLENGTH	=	12
+BULLETSOUNDLENGTH	=	12+1
 ENEMYBULLETSOUNDTONE    =   BULLETSOUNDTONE
 ENEMYBULLETSOUNDFREQ    =   17
 ENEMYBULLETSOUNDLENGTH  =   BULLETSOUNDLENGTH
 BRICKSOUNDTONE		=	NOISESOUND
 BRICKSOUNDFREQ		=	20
-BRICKSOUNDLENGTH	=	25
+BRICKSOUNDLENGTH	=	25+1
 ENEMYTANKSOUNDTONE	=	NOISESOUND
 ENEMYTANKSOUNDFREQ	=	30
-ENEMYTANKSOUNDLENGTH	=	50
+ENEMYTANKSOUNDLENGTH	=	50+1
 SHORTBRICKSOUNDTONE	=	BRICKSOUNDTONE
 SHORTBRICKSOUNDFREQ	=	BRICKSOUNDFREQ
-SHORTBRICKSOUNDLENGTH	=	7
+SHORTBRICKSOUNDLENGTH	=	7+1
 LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
 LONGEXPLOSIONLENGTH	=	127
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
 WALLSOUNDFREQ       =   10;8
-WALLSOUNDLENGTH     =   8
+WALLSOUNDLENGTH     =   8+1
 SCORESOUNDTONE      =   SQUARESOUND
 SCORESOUNDFREQ      =   20
-SCORESOUNDLENGTH    =   4
+SCORESOUNDLENGTH    =   4+1
 POWERUPEXPLOSIONSOUNDTONE   =   NOISESOUND   
 POWERUPEXPLOSIONSOUNDFREQ   =   15
 POWERUPEXPLOSIONSOUNDLENGTH =   63
@@ -492,6 +492,8 @@ SQUARE_26   =   $30
 SQUARE_31   =   $40
 LEAD_15     =   $50
 LEAD_17     =   $60
+LEAD_11     =   $70
+LEAD_13     =   $80
 
 PATTERNEND  =   255
 
@@ -1211,8 +1213,14 @@ CheckTimeForSound
 
 
 	;--keep playing sound even when game not on
+	ldx #0              ;choose channel (0 or 1) for music
 	jsr PlaySoundSubroutine
-
+	;--if no sound effects, play music in channel 1
+; 	lda Channel1Decay
+; 	bne SoundFXPlayingSkipMusicInChannel1
+    ldx #1
+    jsr PlaySoundSubroutine
+SoundFXPlayingSkipMusicInChannel1
 
 NoTimeForSoundThisFrame
 WaitForOverscanEnd
@@ -2218,7 +2226,20 @@ PlaySoundSubroutine
 	rts
 	
 PlaySoundGameNotOver
+    ;--check for music channel
+    txa
+    beq Channel0PlayMusicOnly
     ;--add some goofiness for the powerup routine
+    ;--
+Channel1PlaySoundFX
+	lda Channel1Decay
+	and #$7F
+	beq NoSoundEffectHappening
+	dec Channel1Decay
+	
+        
+    
+    
     lda Channel1Decay
     asl
     bcc NoFrequencyChange  
@@ -2234,18 +2255,17 @@ NoFrequencyChange
  	bcc SetChannel1Volume
  	lda #$07
 SetChannel1Volume
-	sta AUDV1
-	lda Channel1Decay
-	and #$7F
-	beq DoNotUpdateChannel1Decay
-	dec Channel1Decay
-DoNotUpdateChannel1Decay	
-ReturnFromTankMovementSubroutine       
-    
+	sta AUDV1       
+    rts
+NoSoundEffectHappening
+Channel0PlayMusicOnly
 
 
     ;--now play music.  
 MusicRoutine  
+    ;--come in with X pointing to channel (0 or 1)
+    ;   save in Temp+10
+    stx Temp+10
     ;--no music while maze is generating.  which besides being aesthetically what I want, also keeps the 
     ;   maze-generation routine from being screwed up, since it uses RandomNumberSaved, which is also used by
     ;   maze-generation routine, to save the random seed *across frames*
@@ -2255,9 +2275,13 @@ MusicRoutine
     beq MusicIsPlaying
 MusicIsNotPlaying
     lda #0
-    sta AUDV0
+    ldx Temp+10
+    sta AUDV0,X
     rts
 MusicIsPlaying
+    txa
+    asl
+    tax     ;get channel index x2 into X
     ;First, determine which song
     ;if on title screen play title screen song
     lda GameStatus
@@ -2268,9 +2292,9 @@ MusicIsPlaying
     lda GameStatus
     and #DRAWBASE
     beq MusicIsNotPlaying
-    lda #<TitleScreenSong
+    lda TitleScreenSongPointers,X
     sta MiscPtr+2
-    lda #>TitleScreenSong
+    lda #TitleScreenSongPointers+1,X
     sta MiscPtr+3
     bne PlayMusic
 NotOnTitleScreenAtAll
@@ -2279,6 +2303,12 @@ NotOnTitleScreenAtAll
     and #GENERATINGMAZE|GAMEOFF|DRAWBASE|LEVELCOMPLETE
     cmp #DRAWBASE       ;not generating maze, game is on, base is drawn, and level is not complete
     bne DoNotPlayLevelStartMusic
+    ;--no channel 1 music if not on title screen
+    lda Temp+10
+    beq LevelStartMusicChannel0
+    ;--else just return, sound FX playing in channel 1
+    rts
+LevelStartMusicChannel0    
     lda #<LevelStartSong
     sta MiscPtr+2
     lda #>LevelStartSong
@@ -2286,11 +2316,12 @@ NotOnTitleScreenAtAll
     bne PlayMusic   ;branch always
 DoNotPlayLevelStartMusic
     ;--this is default and is incorrect, need additional logic or different default here.
-    lda #<TitleScreenSong
+    lda TitleScreenSongPointers,X
     sta MiscPtr+2
-    lda #>TitleScreenSong
+    lda #TitleScreenSongPointers+1,X
     sta MiscPtr+3
 
+    
 
 PlayMusic
     lda FrameCounter
@@ -2312,7 +2343,7 @@ NoPercussionDownBeat
     ora #$3
     sta FrameCounter
     inc FrameCounter
-    jsr GetPercussionSound      ;returns with 0
+    jsr GetPercussionSound
     tay     ;save this value
     pla     ;restore frame counter
     sta FrameCounter
@@ -2364,7 +2395,11 @@ NoArticulation
     sta Temp+3
     jmp PlayMusicSound
 GetNewNote
+    ;--only do this for channel 0
+    lda Temp+10
+    bne SkipUpdateOfSongIndex
     inc SongIndex
+SkipUpdateOfSongIndex    
 BackToBeginningOfSong
     lda SongIndex
     and #$F0
@@ -2387,6 +2422,9 @@ BackToBeginningOfSong
     jmp BackToBeginningOfSong
 NotEndOfSong
     ;--when getting new note, save new random number at beginning of every measure (i.e., when SongIndex & $F = 0)
+    ;--but again, only for channnel 0
+    lda Temp+10
+    bne NoChangeToSavedRandomNumber
     lda SongIndex
     and #$F
     bne NoChangeToSavedRandomNumber
@@ -2437,12 +2475,16 @@ NotDownBeat
 
 
 PlayMusicSound
+
+
+    ldx Temp+10     ;??legit?
+
     lda Temp+1
-    sta AUDV0
+    sta AUDV0,X
     lda Temp+2
-    sta AUDC0
+    sta AUDC0,X
     lda Temp+3
-    sta AUDF0
+    sta AUDF0,X
 DoNotEndPercussion
 NoPercussion
 	rts
@@ -2453,6 +2495,12 @@ NoPercussion
 GetPercussionSound  ;trashes Y, A.  Returns with percussion value (0-3) in A
                     ;uses Temp, MiscPtr, MiscPtr+1
                     ;depends on MiscPtr+2 pointing at melody data
+    lda Temp+10 ;index into which channel
+    beq .Channel0
+    ;--channel 1 has no percussion
+    lda #0
+    rts    
+.Channel0           
     lda SongIndex
     and #$F0
     lsr
@@ -3688,28 +3736,35 @@ MovementMask
 ; RotationEvenBank1
 ; 	.byte 2, 1, 3, 0
 ; 
-    
+TitleScreenSongPointers
+    .word TitleScreenSong, TitleScreenSongChannel1    
 
-TitleScreenSong
+TitleScreenSong     ;could make this twice as long
     .word SilencePattern
-    .word SilencePattern
-    .word Fanfare1Pattern
-    .word Fanfare1Pattern
-    
     .word SilencePattern
     .word Fanfare1Pattern
     .word Fanfare2Pattern
+
     .word Fanfare1Pattern
-    
-    .word SilencePattern
-    .word Fanfare1Pattern
-    .word Fanfare2Pattern
     .word Fanfare3Pattern
-    
     .word Fanfare1Pattern
-    .word Fanfare1Pattern
+    .word SilencePattern
+            
     .word $FFFF
     .byte 0<<4
+
+    
+TitleScreenSongChannel1     ;--must be same length as matching channel 0  pattern
+    .word SilencePattern
+    .word SilencePattern
+    .word Fanfare1PatternC1    
+    .word Fanfare2PatternC1    
+
+    .word Fanfare1PatternC1    
+    .word Fanfare3PatternC1    
+    .word Fanfare1PatternC1    
+    .word SilencePattern    
+    ;--don't need end-of-song bytes for channel 1
 
 
 SilencePattern
@@ -3737,7 +3792,67 @@ LevelStartFanfarePattern
     .byte VOLUME6|LEAD_15
     .byte VOLUME6|LEAD_15|ARTICULATE
     
-      
+ 
+    
+    
+Fanfare1PatternC1
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11|ARTICULATE
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    
+Fanfare2PatternC1
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11|ARTICULATE
+    .byte VOLUME4|SQUARE_23
+    .byte VOLUME4|SQUARE_23
+    .byte VOLUME4|SQUARE_23
+    .byte VOLUME4|SQUARE_23|ARTICULATE
+    .byte VOLUME4|SQUARE_26
+    .byte VOLUME4|SQUARE_26
+    .byte VOLUME4|SQUARE_26
+    .byte VOLUME4|SQUARE_26|ARTICULATE
+
+    
+Fanfare3PatternC1
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|SQUARE_31
+    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11|ARTICULATE
+    .byte VOLUME4|LEAD_13
+    .byte VOLUME4|LEAD_13
+    .byte VOLUME4|LEAD_13
+    .byte VOLUME4|LEAD_13|ARTICULATE
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11
+    .byte VOLUME4|LEAD_11|ARTICULATE
+        
+    
+    
+         
 Fanfare1Pattern
     .byte VOLUME6|SQUARE_23
     .byte VOLUME6|SQUARE_23|ARTICULATE
@@ -3871,11 +3986,13 @@ ArticulationTable   ;--routine as currently written will never read the first an
     
 DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
-    .byte SQUARESOUND, LEADSOUND, LEADSOUND
+    .byte SQUARESOUND, LEADSOUND, LEADSOUND, LEADSOUND
+    .byte LEADSOUND
 
 FrequencyTable
     .byte 19, 20, 23, 26
-    .byte 31, 15, 17
+    .byte 31, 15, 17, 11
+    .byte 13
 
     
 TankDeadStatusBank0
