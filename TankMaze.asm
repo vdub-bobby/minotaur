@@ -72,11 +72,6 @@
         data
         bank switching logic
 
-    Note:
-        I used the bankswitching schema I came up with many moons ago, which uses the BRK vector and is super easy to use and allows 
-        subroutines to be moved from one bank to another without having to go fiddle with jump tables or whatever.  ON THE OTHER HAND
-        it is extremely slow:  it uses 65 cycles to jump to a routine in another bank and then it takes 28 cycles to return.
-        It also trashes the X and A registers.
 
 
 	To do:
@@ -94,7 +89,9 @@
 	        tanks reach maximum fire rate at level 21
 	DONE Some kind of indicator that player tank is respawning (countdown something or other?)
 	DONE: Last tank shot in a level should not turn into a powerup (should always explode).
-	Harmonized music at title screen.  And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
+	IN PROGRESS: 
+	    IN PROGRESS Harmonized music at title screen.  - the functionality is built, need to finish composing music
+	    NOT SURE IF NECESSARY And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
 	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
     Attract mode?
 	Other...?
@@ -368,7 +365,10 @@ ENEMYTANKBASESPEED0 =   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED7
 ENEMYTANKBASESPEED2 =   TANKSPEED7      ;I know odd numbers don't work, but it affects when they switch from one speed to the next
 
-
+SHOOTATBASELEFTCOLUMNBOUNDARY   =   72                  ; this is left-most pixel tank can be in when it will fire vertically at the base
+SHOOTATBASERIGHTCOLUMNBOUNDARY  =   81                  ; this is the right-most pixel (+1) tank can be in when it will fire vertically at the base
+SHOOTATBASEUPPERBOUNDARY        =   (6*ROWHEIGHT)+1+1   ; this is the highest the enemy tank can be (+1) when it will fire vertically at the base
+SHOOTATBASEROWBOUNDARY          =   ROWHEIGHT+2         ;this is the highest the enemy tank can be when it will fire horizontally at the base
 
 ;--tank starting locations
 PLAYERSTARTINGX	=	8
@@ -555,8 +555,8 @@ ENEMYDEBOUNCEBITS =     %00011111
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
-BULLETFRACTIONALPERCENT =   80          ;--was 87
-BULLETFRACTIONALSPEED   =   256/100*BULLETFRACTIONALPERCENT  ;slowing bullets down slightly so the collision detection works better
+BULLETFRACTIONALPERCENT =   55   
+BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down slightly so the collision detection works better
 
 BASECOLOR		            =		GOLD
 SCORECOLOR_POWERUPSDISABLED =       GRAY|$C
@@ -575,9 +575,9 @@ enemy tank 3    TANKCOLOR1 (P0)     TANKCOLOR4 (M1)
 */
 
 TANKCOLOR1          =    GOLD|$6        
-TANKCOLOR2          =    BLUE2|$C
+TANKCOLOR2          =    BLUE2|$A
 TANKCOLOR3          =    RED|$4
-TANKCOLOR4          =    BROWN|$4
+TANKCOLOR4          =    GREEN|$4
 
 ;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	100
@@ -1517,7 +1517,9 @@ FindStuckTank
 	lda RandomNumber
 	and #3
 	tay
-    beq DoNotShoot  ;change so evenly random between tanks, fire less often (by 25%)
+	bne ShootFromTank
+	jmp DoNotShoot
+;     beq DoNotShoot  ;change so evenly random between tanks, fire less often (by 25%)
 ; 	bne ShootFromTank   ;zero is player, so if non-zero we are fine, otherwise shoot from tank 1
 ; 	iny				;this routine shoots from tank 1 half the time and tanks 2 and 3 a quarter of the time each
 ShootFromTank
@@ -1548,9 +1550,14 @@ ShootFromTank
     ;--is tank in center two columns? (X between 72 and 80)
 TankShootingVertically
     lda TankX,Y
-    cmp #72
+    cmp #SHOOTATBASELEFTCOLUMNBOUNDARY    ;72
     bcc EnemyNotInCenterColumns    
-    cmp #81
+    cmp #SHOOTATBASERIGHTCOLUMNBOUNDARY   ;81
+;     bcc FireEnemyBulletNow
+    bcs EnemyNotInCenterColumns
+    ;--now check if enemy is in lower half of screen
+    lda TankY,Y
+    cmp #SHOOTATBASEUPPERBOUNDARY   ;44     this is in the lower 6 rows
     bcc FireEnemyBulletNow
 EnemyNotInCenterColumns
     ;--now see if close to player tank
@@ -1563,8 +1570,8 @@ EnemyNotInCenterColumns
     bcs EnemyNotAllowedToShootVertically    ;branch always
 EnemyShootingHorizontal    
     lda TankY,Y
-    cmp #ROWHEIGHT+1
-    beq FireEnemyBulletNow
+    cmp #SHOOTATBASEROWBOUNDARY         ;ROWHEIGHT+1
+    bcc FireEnemyBulletNow
     clc
     adc #(ROWHEIGHT*2)+1    ;add an additional 1 because the subtraction below has carry clear
 ;     sec
