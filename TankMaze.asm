@@ -2094,7 +2094,7 @@ FoundAbsoluteXDifference
 FoundAbsoluteYDifference
     clc
     adc Temp
-    cmp #CLYDEDISTANCE ;tanks are 8 pixels wide by 7-pixels tall (sort of).  7-tank lengths, using 7.5 pixels as a tank length = 53 pixels
+    cmp #CLYDEDISTANCE
     bcs EnemyTankIsFarAimForPlayer
     ;--else aim for base
 AimForBase
@@ -2341,7 +2341,7 @@ NoPercussionDownBeat
     ;--not on 32nd-note beat, so need to determine if we are playing percussion or playing note
     cmp #PERCUSSIONCUTOFF
     bcc PlayRegularNote
-        ;%%%
+        ;
     ;--otherwise, first see if percussion is playing
 ;     rts ;--if above percussion cutoff, keep playing whatever we were playing
 ;     ;--see if percussion should be playing
@@ -2811,7 +2811,16 @@ ProcessDirections
 
 	tay	;--save direction in Y
 	
-	;--if tank is turning, set fractional variable so tank moves immediately
+    pla             ;get movement flag into accumulator
+    sta Temp
+    bit Temp        ;movement flag in overflow
+	tya
+	pha             ;push Y (direction(s) tank wants to go) onto stack
+	;--if player tank, see if tank is turning and update TankFractional accordingly, then play tank engine sound
+	cpx #0
+	bne NoTankSoundForEnemyTanks
+	;--if tank is turning, set fractional variable so tank moves immediately -- I think this might be superfluous, since
+	;   we only actually turn when TankFractional overflows (but we ... aren't updating when we turn?).  Ok, not superfluous but only for tank 0 (player)
 	and #TANKDIRECTION
 	eor #$F0        ;flip bits
 	sta Temp
@@ -2819,17 +2828,12 @@ ProcessDirections
 	and #TANKDIRECTION
 	cmp Temp
 	beq TankNotTurning
+TankIsTurning	
 	;tank turning
 	lda #$FF
-	sta TankFractional,X
+	sta TankFractional,X    ;+24        (shorter if tank isn't turning)
 TankNotTurning
-    pla             ;get movement flag into accumulator
-    sta Temp
-    bit Temp        ;movement flag in overflow
-	tya
-	pha             ;push Y (direction(s) tank wants to go) onto stack
-	cpx #0
-	bne NoTankSoundForEnemyTanks
+	
 	lda Channel1Decay
 	and #$7F
 	cmp #PLAYERTANKENGINEVOLUME
@@ -3088,88 +3092,88 @@ IsTankPartiallyOnScreenBank0
 ;****************************************************************************
 
 
-IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
-	;--returns result in Temp
-	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
-	;--except now first row has walls at two positions (maybe!) only
-	;   this routine can't overwrite Y
-		
-	txa                     ;+2
-	pha			            ;+3      5  save X on stack
-	lda Temp                ;+3      8
-	sec
-	sbc #16
-	lsr
-	lsr
-	lsr
-	tax                     ;+12    20
-	lda PFRegisterLookup,X
-    sta Temp+3          
-	lda PFMaskLookup,X
-    sta Temp+2
-	lda Temp+1              ;+3     37
-	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
-	sec
-	sbc #BLOCKHEIGHT
-	bcs NotOnBottomRow      ;6/7    43/44
-OnBottomRow                 ;       43
-	;--on bottom row
-	;--only two blocks on bottom row
-	;	at X positions (LastRowL) 64-71 and (LastRowR) 88-95
-	lda LastRowL
-	beq LastRowNoWallOnLeft     ;+4/5   47/48
-	lda Temp                
-	cmp #72                     ;+5     52
-	bcs LastRowCheckRightBlock  ;+2/3   54/55
-	cmp #64
-	bcs FoundWhetherBlockExists ;+4/5   58/59
-LastRowNoWallOnLeft             ;       48/58    
-LastRowCheckRightBlock          ;            /55
-	lda LastRowR
-	beq FoundWhetherBlockExists ;+4/5   branch: 53/60/63 ...drop through: 52/59/62
-	lda Temp
-	cmp #96
-	bcs LastRowNoHit            ;+7/8   61/68/71 (branch) or 60/67/70 (drop through)
-	cmp #88
-	bcs FoundWhetherBlockExists ;+4/5   65/72/75 (branch) or 64/71/74 (drop through)
-LastRowNoHit                    ;                                                    or 61/68/71 (from branch above)
-	lda #0
-	beq FoundWhetherBlockExists ;+5     66/69/73/76/79 
-	;--in conclusion, we end this path by jumping below to the routine exit after this many cycles:
-	;           53/59/60/63/65/66/69/72/73/75/76/79 (one of these!)
-	;
-NotOnBottomRow	                ;       44
-	;--divide by blockheight
-
-	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
-	;	post gives credit to December '84 Apple Assembly Line
-	;--constant cycle count divide by 7 !!!!
-	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-	sta Temp                    ;+3      3
-	lsr
-	lsr
-	lsr
-	adc Temp                    ;+9     12
-	ror
-	lsr
-	lsr
-	adc Temp                    ;+9     21
-	ror
-	lsr
-	lsr                         ;+6    71 
-	
-	clc
-    adc Temp+3
-	tax                         ;+12    85
-	
-	lda PF1Left,X
-    and Temp+2
-FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
-	;--result is now in A --nonzero means a block is there, zero means no
-	sta Temp		;result goes into Temp
-	pla
-	tax		;restore X from stack
-	rts                         ;+23    76-118  (which changes from using stack to using temp vars, we subtract 22 cycles for new totals: 54-96)
+; IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
+; 	;--returns result in Temp
+; 	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
+; 	;--except now first row has walls at two positions (maybe!) only
+; 	;   this routine can't overwrite Y
+; 		
+; 	txa                     ;+2
+; 	pha			            ;+3      5  save X on stack
+; 	lda Temp                ;+3      8
+; 	sec
+; 	sbc #16
+; 	lsr
+; 	lsr
+; 	lsr
+; 	tax                     ;+12    20
+; 	lda PFRegisterLookup,X
+;     sta Temp+3          
+; 	lda PFMaskLookup,X
+;     sta Temp+2
+; 	lda Temp+1              ;+3     37
+; 	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
+; 	sec
+; 	sbc #BLOCKHEIGHT
+; 	bcs NotOnBottomRow      ;6/7    43/44
+; OnBottomRow                 ;       43
+; 	;--on bottom row
+; 	;--only two blocks on bottom row
+; 	;	at X positions (LastRowL) 64-71 and (LastRowR) 88-95
+; 	lda LastRowL
+; 	beq LastRowNoWallOnLeft     ;+4/5   47/48
+; 	lda Temp                
+; 	cmp #72                     ;+5     52
+; 	bcs LastRowCheckRightBlock  ;+2/3   54/55
+; 	cmp #64
+; 	bcs FoundWhetherBlockExists ;+4/5   58/59
+; LastRowNoWallOnLeft             ;       48/58    
+; LastRowCheckRightBlock          ;            /55
+; 	lda LastRowR
+; 	beq FoundWhetherBlockExists ;+4/5   branch: 53/60/63 ...drop through: 52/59/62
+; 	lda Temp
+; 	cmp #96
+; 	bcs LastRowNoHit            ;+7/8   61/68/71 (branch) or 60/67/70 (drop through)
+; 	cmp #88
+; 	bcs FoundWhetherBlockExists ;+4/5   65/72/75 (branch) or 64/71/74 (drop through)
+; LastRowNoHit                    ;                                                    or 61/68/71 (from branch above)
+; 	lda #0
+; 	beq FoundWhetherBlockExists ;+5     66/69/73/76/79 
+; 	;--in conclusion, we end this path by jumping below to the routine exit after this many cycles:
+; 	;           53/59/60/63/65/66/69/72/73/75/76/79 (one of these!)
+; 	;
+; NotOnBottomRow	                ;       44
+; 	;--divide by blockheight
+; 
+; 	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
+; 	;	post gives credit to December '84 Apple Assembly Line
+; 	;--constant cycle count divide by 7 !!!!
+; 	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
+; 	sta Temp                    ;+3      3
+; 	lsr
+; 	lsr
+; 	lsr
+; 	adc Temp                    ;+9     12
+; 	ror
+; 	lsr
+; 	lsr
+; 	adc Temp                    ;+9     21
+; 	ror
+; 	lsr
+; 	lsr                         ;+6    71 
+; 	
+; 	clc
+;     adc Temp+3
+; 	tax                         ;+12    85
+; 	
+; 	lda PF1Left,X
+;     and Temp+2
+; FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
+; 	;--result is now in A --nonzero means a block is there, zero means no
+; 	sta Temp		;result goes into Temp
+; 	pla
+; 	tax		;restore X from stack
+; 	rts                         ;+23    76-118  (which changes from using stack to using temp vars, we subtract 22 cycles for new totals: 54-96)
 
 	
 	
@@ -3342,123 +3346,241 @@ CheckForEnemyTankSubroutine
 
 ;****************************************************************************
 
+CheckForBrickColumnShift    ;we'll go around clockwise starting with the top and ending with the left
+    .byte -1, -1, 1, 0
+    
+CheckForBrickRowShift
+    .byte 1, -1, -1, 1    
+ 
+DirectionBlock
+    .byte TANKLEFT, TANKDOWN, TANKRIGHT, TANKUP    
+
+
+    SUBROUTINE
 CheckForWallSubroutine
 				;--X holds index into which tank, A holds direction (mask against joystick constants)
 				;return A holding allowed directions
-	tay			;save direction
-	and #J0LEFT
-	bne NotMovingLeft
-	;--moving left.
-	;--first, if at left edge, don't allow left movement
-	lda TankX,X
-	cmp #16
-	beq CannotMoveLeft
-	;--check for wall immediately to the left of upper left corner
-	lda TankX,X
-	sec
-	sbc #1
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #2
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
- 	beq NoWallL
-CannotMoveLeft
-	tya
-	ora #J0LEFT
-	tay
-	;jmp CheckVerticalMovement
-NoWallL
-NotMovingLeft
-	tya
-	and #J0RIGHT
-	bne NotMovingRight
-	;--moving right
-	;--first, if at right edge, don't allow rightward movement
-	lda TankX,X
-	cmp #136
-	beq CannotMoveRight
-	;--check for wall immediately to the right
-	lda TankX,X
-	clc
-	adc #8
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #2
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
- 	beq NoWallR
+				
+		;I wonder if this would be faster to just check all four directions every time, but loop through block positions
+		;rather than looping through pixel positions and calling "IsBlockAtPosition" every time.
 	
-CannotMoveRight
-	tya
-	ora #J0RIGHT
-	tay
-NoWallR	
-NotMovingRight
-CheckVerticalMovement
-	tya
-	and #J0UP
-	bne NotMovingUp
-	;--moving up
-	;--first, if at top edge, don't allow upward movement
-	lda TankY,X
-	cmp #TANKAREAHEIGHT+1
-	beq CannotMoveUp
-	;--check wall above
+	sta Temp        ;save directions
+	
+	;--get brick X and Y coordinates of Tank
 	lda TankX,X
-	sta Temp
-	lda TankY,X
+    lsr
+    lsr
+    lsr
+	sec
+	sbc #2
+	sta Temp+2  ;block X (column)
+	;--divide by 7
+	lda TankY,X ;technically should subtract 1 first but the divide by 7 will drop the remainder so we're cool
+	sta Temp+3
+	lsr
+	lsr
+	lsr
+	adc Temp+3
+	ror
+	lsr
+	lsr
+	adc Temp+3
+	ror
+	lsr
+	lsr
+	sec
+	sbc #1      ;adjust so zero indexed            
+    sta Temp+3  ;block Y (row)
+
+    txa
+    pha ;save tank index
+       
+    
+    ldy #3
+.LookForBrickLoop
+    sty Temp+1  ;save loop index
+    ;move our brick coords to the next brick to check
+    lda Temp+2
+    clc
+    adc CheckForBrickColumnShift,Y       
+    and #$1F
+    sta Temp+2
+    lda Temp+3
+    clc
+    adc CheckForBrickRowShift,Y
+    sta Temp+3
+    ;--now brick to check is at coords (Temp+2, Temp+3)
+    lda #<PF1Left
+    sta MiscPtr
+    lda #>PF1Left
+    sta MiscPtr+1
+    ;--check if column > 15 (means off left or right side of maze)
+    lda Temp+2
+    cmp #16
+    bcs .YesBrick
+    ;--check if we are checking the bottom row
+    lda Temp+3
+    bne .NotRowZero
+    ;--on row zero, so just check the two specific bricks in that row:
+    lda Temp+2
+    cmp #6
+    beq .CheckBrick6_0
+    cmp #9
+    bne .NoBrick
+    ;--else check brick (9, 0)
+    lda LastRowR
+    beq .NoBrick
+    bne .YesBrick
+.CheckBrick6_0
+    lda LastRowL
+    beq .NoBrick
+    bne .YesBrick
+.NotRowZero
+    ;--check if we are off top of bottom of maze
+    cmp #MAZEROWS
+    bcs .YesBrick
+    ;--ok, we are in the maze.  Check specific brick:
+    ldy Temp+3  ;row
+    dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
+    ldx Temp+2  ;column
+    lda PFRegisterLookup,X
+    clc
+    adc MiscPtr
+    sta MiscPtr
+    lda PFMaskLookup,X
+    and (MiscPtr),Y
+    beq .NoBrick
+.YesBrick
+    ldy Temp+1      ;restore loop index
+    lda Temp        ;get directions back in accumulator
+    ora DirectionBlock,Y
+    sta Temp
+.NoBrick   
+    ldy Temp+1      ;restore loop index 
+    dey
+    bpl .LookForBrickLoop
+
+    
+    pla
+    tax             ;restore tank index 
+    
+    lda Temp        ;get updated directions back in A
+    
+    
+; 	tay			;save direction
+; 	and #J0LEFT
+; 	bne NotMovingLeft
+; 	;--moving left.
+; 	;--first, if at left edge, don't allow left movement
+; 	lda TankX,X
+; 	cmp #16
+; 	beq CannotMoveLeft
+; 	;--check for wall immediately to the left of upper left corner
+; 	lda TankX,X
 ; 	sec
 ; 	sbc #1
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
- 	beq NoWallU
-CannotMoveUp
-	tya
-	ora #J0UP
-	tay
-	;jmp DoneWithMovementChecks
-NotAtTopEdge
-NoWallU	
-NotMovingUp	
-	tya
-	and #J0DOWN
-	bne NotMovingDown
-	;--moving down
-	;--first, if at bottom edge, don't allow downward movement
-	lda TankY,X
-	cmp #8
-	beq CannotMoveDown
-	;--check wall below
-	lda TankX,X
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #9
-	sta Temp+1
-	jsr IsBlockAtPosition
-	;result is in Temp
-	lda Temp
- 	beq NoWallD
-CannotMoveDown
-	tya
-	ora #J0DOWN
-	tay
-	;jmp DoneWithMovementChecks
-NotAtBottomEdge	
-NoWallD	
-NotMovingDown
-
-DoneWithMovementChecks
-	tya		;get allowed directions back into A
+; 	sta Temp
+; 	lda TankY,X
+; 	sec
+; 	sbc #2
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+;  	beq NoWallL
+; CannotMoveLeft
+; 	tya
+; 	ora #J0LEFT
+; 	tay
+; 	;jmp CheckVerticalMovement
+; NoWallL
+; NotMovingLeft
+; 	tya
+; 	and #J0RIGHT
+; 	bne NotMovingRight
+; 	;--moving right
+; 	;--first, if at right edge, don't allow rightward movement
+; 	lda TankX,X
+; 	cmp #136
+; 	beq CannotMoveRight
+; 	;--check for wall immediately to the right
+; 	lda TankX,X
+; 	clc
+; 	adc #8
+; 	sta Temp
+; 	lda TankY,X
+; 	sec
+; 	sbc #2
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+;  	beq NoWallR
+; 	
+; CannotMoveRight
+; 	tya
+; 	ora #J0RIGHT
+; 	tay
+; NoWallR	
+; NotMovingRight
+; CheckVerticalMovement
+; 	tya
+; 	and #J0UP
+; 	bne NotMovingUp
+; 	;--moving up
+; 	;--first, if at top edge, don't allow upward movement
+; 	lda TankY,X
+; 	cmp #TANKAREAHEIGHT+1
+; 	beq CannotMoveUp
+; 	;--check wall above
+; 	lda TankX,X
+; 	sta Temp
+; 	lda TankY,X
+; ; 	sec
+; ; 	sbc #1
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+;  	beq NoWallU
+; CannotMoveUp
+; 	tya
+; 	ora #J0UP
+; 	tay
+; 	;jmp DoneWithMovementChecks
+; NotAtTopEdge
+; NoWallU	
+; NotMovingUp	
+; 	tya
+; 	and #J0DOWN
+; 	bne NotMovingDown
+; 	;--moving down
+; 	;--first, if at bottom edge, don't allow downward movement
+; 	lda TankY,X
+; 	cmp #8
+; 	beq CannotMoveDown
+; 	;--check wall below
+; 	lda TankX,X
+; 	sta Temp
+; 	lda TankY,X
+; 	sec
+; 	sbc #9
+; 	sta Temp+1
+; 	jsr IsBlockAtPosition
+; 	;result is in Temp
+; 	lda Temp
+;  	beq NoWallD
+; CannotMoveDown
+; 	tya
+; 	ora #J0DOWN
+; 	tay
+; 	;jmp DoneWithMovementChecks
+; NotAtBottomEdge	
+; NoWallD	
+; NotMovingDown
+; 
+; DoneWithMovementChecks
+; 	tya		;get allowed directions back into A
 
 	rts
 
@@ -4908,19 +5030,19 @@ DoneWithKernelLastRowLoop
 	ldx Temp
 	txs			;+8		44
 
-	sty ENABL	;+3		47
+	sty ENABL	;+3		47      Y is zero
 	sty GRP0	;+3		50
-	ldy #$FF	;+2		52
-	ldx #0		;+2		54
+	ldx #$FF	;+2		54
 	sta WSYNC
-	sty PF2		;+3		57
-	sty PF1		;+3		60
-	stx GRP1	
-	stx ENAM0
-	stx ENAM1
+	stx PF2		;+3		57
+	stx PF1		;+3		60
+	sty GRP1	
+	sty ENAM0
+	sty ENAM1
 ;	sta PF0
 	
 ;     sta HMCLR
+    inx
 	lda #104
 ; 	jsr PositionASpriteNoHMOVESubroutine
     jsr PositionASpriteSubroutineBank2	
@@ -4943,72 +5065,72 @@ DoneWithKernelLastRowLoop
 	
 	;--done displaying maze
 	;--set up score, tanks remaining, lives remaining etc
-
- 	sta WSYNC
-; 	sta HMOVE
-	ldy #0                  ;+2
-	sty PF0                 
-	sty PF1
- 	sty PF2
-; 	sty COLUPF
+	;Y is still zero      
 	sty REFP0
 	sty REFP1
 	sty VDELP0
-	sty VDELBL              ;+24    26
+	sty VDELBL             
+ 	sta WSYNC
+	sty PF0               
+	sty PF1
+ 	sty PF2                 ;+9      9
 	lda #THREECOPIESCLOSE
 	sta NUSIZ0
-	lda #TWOCOPIESCLOSE
-	sta NUSIZ1              ;+10    36
+; 	lda #TWOCOPIESCLOSE
+    lsr                     ;               THREECOPIESCLOSE=3, TWOCOPIESCLOSE=1
+	sta NUSIZ1              ;+10    19
 	
 	lda #TANKSREMAININGCOLOR
 	sta COLUP0
 	sta COLUP1
-	sta HMCLR               ;+11    47
+	sta HMCLR               ;+11    30
 	
 
 	lda #>DigitDataMissile
 	sta Player0Ptr+3
-	sta Player1Ptr+1        ;+8     55
+	sta Player1Ptr+1        ;+8     38
 	lda MazeNumber
 	lsr
 	lsr
 	lsr
 	lsr
-	tax
+	tax                     ;+13    51
 	lda DigitDataMissileLo,X
-	sta Player0Ptr+2
+	sta Player0Ptr+2        ;+7     58
 	lda MazeNumber
 	and #$0F
-	tax
+	tax                     ;+7     65
 	lda DigitDataMissileLo,X
-	sta Player1Ptr
-
+	sta Player1Ptr          ;+7     72
 	
-    ;this masks the missiles before we want them to show
-    ;we will use the actual mask inside the loop below	
-; 	lda #$FF
-; 	sta PF0                     ;+18
-; 	sta PF2                     
+    ;--this displays a graphic showing how long until the player tank respawns after it dies
+	;--this makes the graphic indicator the same color(s) as the player tank
+	lda FrameCounter
+	and #1
+    tax
+    lda PlayerTankColor,X
+    sta COLUPF              ;+14    10
 
+	;--if tank is EITHER an explosion (TANKUP bit=1 and TANKINPLAY bit =0) OR in play (TANKINPLAY bit=1), don't show indicator
+	;--in other words, only if TANKUP=0 and TANKINPLAY=0 do we show this graphic
     lda TankStatus
-    and #TANKUP|TANKINPLAY      ;tank UP means explosion graphic (respawn is tankright.  TANKINPLAY is self-explanatory)
-    bne NoRespawnCounterGraphic
+    and #TANKUP|TANKINPLAY
+    bne NoRespawnCounterGraphic ;+7/8    17/18
     lda TankStatus
     and #$0F
     lsr
-    tax
+    tax                         
     lda RespawnCountdownGraphic,X
-    sta PF2
-NoRespawnCounterGraphic    
-    lda TanksRemaining
-    ;Y still holds zero
+    sta PF2                     ;+16    33      <----needs to happen prior to cycle 38
+NoRespawnCounterGraphic         ;               
 
 
-	
+    lda TanksRemaining          ;+3     47   
+    
+    
 	sta WSYNC                   ;
-; 	SLEEP 8                     ;+8      8
-    sty COLUPF
-    dey
+    sty COLUPF                  ;           Y=0
+    dey                         ;           make Y=$FF
     sty PF2                     ;+8      8
     sty PF0                     ;+3     11
 	
@@ -5018,9 +5140,10 @@ NoRespawnCounterGraphic
 	lda TanksRemainingPF1Mask,X
 	sta PF1                     ;+7     22
 	
-	lda #2
-	sta ENAM0
-	sta ENAM1                   ;+8     30
+	nop
+; 	lda #2
+	sty ENAM0
+	sty ENAM1                   ;+8     30  Y=$FF
 	ldy #8
 	bne BottomKernelLoopInner	;+5     35	branch always
 	
@@ -7666,6 +7789,8 @@ RotationEven
 	.byte 2, 1, 3, 0
     ;--have a lot of space left here. (currently $2F bytes)
 	
+    
+    
 P0M0Color
     .byte TANKCOLOR1, TANKCOLOR3
 
@@ -7782,7 +7907,10 @@ AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 1, 1, 1, 1
     .byte 1, 1, 0, 0		
 	
-	
+PlayerTankColor
+    .byte TANKCOLOR1, TANKCOLOR3
+    
+    
 ;****************************************************************************	
 
     echo "----", ($3FE0-*), " bytes left (ROM) at end of Bank 2"
