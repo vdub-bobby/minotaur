@@ -46,7 +46,7 @@
             EliminateDiagonalSubroutine
             TankFractionalAddition
             ReadControllersSubroutine
-            IsBlockAtPosition
+            
             StartSoundSubroutine
             CheckForEnemyTankSubroutine
             CheckForWallSubroutine
@@ -287,14 +287,13 @@ TANKDOWN		=	J0DOWN          ;%00100000
 TANKUP			=	J0UP            ;%00010000
 
 
-
 TANKDEADWAIT   =   2
 TANKDEADWAITPLAYER  =   8
 
 PLAYERRESPAWNDELAY = 14
 PLAYERINITIALDELAY  =   0
 
-; STARTINGENEMYTANKCOUNT	=	 20 ;--no longer used
+MAXTANKSREMAINING   =   20
 
 
 LEVELENDTANKSPEEDBOOST  =   4   ;when <= 3 tanks remaining, all on-screen tanks have speed boost applied immediately.
@@ -556,7 +555,7 @@ ENEMYDEBOUNCEBITS =     %00011111
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
 BULLETFRACTIONALPERCENT =   55   
-BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down slightly so the collision detection works better
+BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down so the collision detection works better
 
 BASECOLOR		            =		GOLD
 SCORECOLOR_POWERUPSDISABLED =       GRAY|$C
@@ -580,7 +579,7 @@ TANKCOLOR3          =    RED|$4
 TANKCOLOR4          =    GREEN|$4
 
 ;--used by maze generation algorithm
-MAZEPATHCUTOFF	=	100
+MAZEPATHCUTOFF	=	90;100
 
 TANKSPEED0  =   0
 TANKSPEED1	=	1
@@ -1652,6 +1651,8 @@ SetInitialEnemyTankSpeedRoutine
 	asl         ;this clears carry
 	adc Temp
 	adc Temp
+	sec
+	sbc #1      ;get to be zero-indexed instead of 1-indexed
 	sta Temp
 	lda MazeNumber
 	and #$0F
@@ -1666,11 +1667,12 @@ SetInitialEnemyTankSpeedRoutine
 	sta Temp
     lda MazeNumber
     asl
+    asl
     clc
-    adc #6
-    cmp #20
+    adc #4
+    cmp #MAXTANKSREMAINING
     bcc .HaveInitialTanksRemaining
-    lda #20
+    lda #MAXTANKSREMAINING
 .HaveInitialTanksRemaining
     sec
     sbc TanksRemaining
@@ -3070,112 +3072,29 @@ IsTankOnScreenBank0
 ;****************************************************************************
 
 
-    SUBROUTINE
-    
-IsTankPartiallyOnScreenBank0
-    ;--X holds tank number to check
-    ;--return in accumulator:  0 if offscreen, 1 if onscreen
-    lda TankX,X
-    cmp #TANKONSCREENLEFT-7
-    bcc .TankOffScreen
-    cmp #TANKONSCREENRIGHT+1+7
-    bcs .TankOffScreen
-    lda TankY,X
-    cmp #TANKONSCREENTOP+2+TANKHEIGHT
-    bcc .TankOnScreen    
-.TankOffScreen
-    lda #0
-    rts
-.TankOnScreen
-    lda #1
-    rts
+;     SUBROUTINE
+;     
+; IsTankPartiallyOnScreenBank0
+;     ;--X holds tank number to check
+;     ;--return in accumulator:  0 if offscreen, 1 if onscreen
+;     lda TankX,X
+;     cmp #TANKONSCREENLEFT-7
+;     bcc .TankOffScreen
+;     cmp #TANKONSCREENRIGHT+1+7
+;     bcs .TankOffScreen
+;     lda TankY,X
+;     cmp #TANKONSCREENTOP+2+TANKHEIGHT
+;     bcc .TankOnScreen    
+; .TankOffScreen
+;     lda #0
+;     rts
+; .TankOnScreen
+;     lda #1
+;     rts
 ;****************************************************************************
 
 
-; IsBlockAtPosition		;position in Temp (x), Temp+1 (y)
-; 	;--returns result in Temp
-; 	;--special case for first row which is mostly open (except for the base, but we'll deal with that later)
-; 	;--except now first row has walls at two positions (maybe!) only
-; 	;   this routine can't overwrite Y
-; 		
-; 	txa                     ;+2
-; 	pha			            ;+3      5  save X on stack
-; 	lda Temp                ;+3      8
-; 	sec
-; 	sbc #16
-; 	lsr
-; 	lsr
-; 	lsr
-; 	tax                     ;+12    20
-; 	lda PFRegisterLookup,X
-;     sta Temp+3          
-; 	lda PFMaskLookup,X
-;     sta Temp+2
-; 	lda Temp+1              ;+3     37
-; 	;--special case: if Temp+1 < BLOCKHEIGHT then check in a different way
-; 	sec
-; 	sbc #BLOCKHEIGHT
-; 	bcs NotOnBottomRow      ;6/7    43/44
-; OnBottomRow                 ;       43
-; 	;--on bottom row
-; 	;--only two blocks on bottom row
-; 	;	at X positions (LastRowL) 64-71 and (LastRowR) 88-95
-; 	lda LastRowL
-; 	beq LastRowNoWallOnLeft     ;+4/5   47/48
-; 	lda Temp                
-; 	cmp #72                     ;+5     52
-; 	bcs LastRowCheckRightBlock  ;+2/3   54/55
-; 	cmp #64
-; 	bcs FoundWhetherBlockExists ;+4/5   58/59
-; LastRowNoWallOnLeft             ;       48/58    
-; LastRowCheckRightBlock          ;            /55
-; 	lda LastRowR
-; 	beq FoundWhetherBlockExists ;+4/5   branch: 53/60/63 ...drop through: 52/59/62
-; 	lda Temp
-; 	cmp #96
-; 	bcs LastRowNoHit            ;+7/8   61/68/71 (branch) or 60/67/70 (drop through)
-; 	cmp #88
-; 	bcs FoundWhetherBlockExists ;+4/5   65/72/75 (branch) or 64/71/74 (drop through)
-; LastRowNoHit                    ;                                                    or 61/68/71 (from branch above)
-; 	lda #0
-; 	beq FoundWhetherBlockExists ;+5     66/69/73/76/79 
-; 	;--in conclusion, we end this path by jumping below to the routine exit after this many cycles:
-; 	;           53/59/60/63/65/66/69/72/73/75/76/79 (one of these!)
-; 	;
-; NotOnBottomRow	                ;       44
-; 	;--divide by blockheight
-; 
-; 	;got this here: https://forums.nesdev.org/viewtopic.php?f=2&t=11336
-; 	;	post gives credit to December '84 Apple Assembly Line
-; 	;--constant cycle count divide by 7 !!!!
-; 	;	if BLOCKHEIGHT is changed from 7, this routine will need to be updated
-; 	sta Temp                    ;+3      3
-; 	lsr
-; 	lsr
-; 	lsr
-; 	adc Temp                    ;+9     12
-; 	ror
-; 	lsr
-; 	lsr
-; 	adc Temp                    ;+9     21
-; 	ror
-; 	lsr
-; 	lsr                         ;+6    71 
-; 	
-; 	clc
-;     adc Temp+3
-; 	tax                         ;+12    85
-; 	
-; 	lda PF1Left,X
-;     and Temp+2
-; FoundWhetherBlockExists         ;end up here somewhere between 53 and 95 cycles after beginning of subroutine
-; 	;--result is now in A --nonzero means a block is there, zero means no
-; 	sta Temp		;result goes into Temp
-; 	pla
-; 	tax		;restore X from stack
-; 	rts                         ;+23    76-118  (which changes from using stack to using temp vars, we subtract 22 cycles for new totals: 54-96)
 
-	
 	
 	
 ;****************************************************************************
@@ -3467,120 +3386,6 @@ CheckForWallSubroutine
     lda Temp        ;get updated directions back in A
     
     
-; 	tay			;save direction
-; 	and #J0LEFT
-; 	bne NotMovingLeft
-; 	;--moving left.
-; 	;--first, if at left edge, don't allow left movement
-; 	lda TankX,X
-; 	cmp #16
-; 	beq CannotMoveLeft
-; 	;--check for wall immediately to the left of upper left corner
-; 	lda TankX,X
-; 	sec
-; 	sbc #1
-; 	sta Temp
-; 	lda TankY,X
-; 	sec
-; 	sbc #2
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
-;  	beq NoWallL
-; CannotMoveLeft
-; 	tya
-; 	ora #J0LEFT
-; 	tay
-; 	;jmp CheckVerticalMovement
-; NoWallL
-; NotMovingLeft
-; 	tya
-; 	and #J0RIGHT
-; 	bne NotMovingRight
-; 	;--moving right
-; 	;--first, if at right edge, don't allow rightward movement
-; 	lda TankX,X
-; 	cmp #136
-; 	beq CannotMoveRight
-; 	;--check for wall immediately to the right
-; 	lda TankX,X
-; 	clc
-; 	adc #8
-; 	sta Temp
-; 	lda TankY,X
-; 	sec
-; 	sbc #2
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
-;  	beq NoWallR
-; 	
-; CannotMoveRight
-; 	tya
-; 	ora #J0RIGHT
-; 	tay
-; NoWallR	
-; NotMovingRight
-; CheckVerticalMovement
-; 	tya
-; 	and #J0UP
-; 	bne NotMovingUp
-; 	;--moving up
-; 	;--first, if at top edge, don't allow upward movement
-; 	lda TankY,X
-; 	cmp #TANKAREAHEIGHT+1
-; 	beq CannotMoveUp
-; 	;--check wall above
-; 	lda TankX,X
-; 	sta Temp
-; 	lda TankY,X
-; ; 	sec
-; ; 	sbc #1
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
-;  	beq NoWallU
-; CannotMoveUp
-; 	tya
-; 	ora #J0UP
-; 	tay
-; 	;jmp DoneWithMovementChecks
-; NotAtTopEdge
-; NoWallU	
-; NotMovingUp	
-; 	tya
-; 	and #J0DOWN
-; 	bne NotMovingDown
-; 	;--moving down
-; 	;--first, if at bottom edge, don't allow downward movement
-; 	lda TankY,X
-; 	cmp #8
-; 	beq CannotMoveDown
-; 	;--check wall below
-; 	lda TankX,X
-; 	sta Temp
-; 	lda TankY,X
-; 	sec
-; 	sbc #9
-; 	sta Temp+1
-; 	jsr IsBlockAtPosition
-; 	;result is in Temp
-; 	lda Temp
-;  	beq NoWallD
-; CannotMoveDown
-; 	tya
-; 	ora #J0DOWN
-; 	tay
-; 	;jmp DoneWithMovementChecks
-; NotAtBottomEdge	
-; NoWallD	
-; NotMovingDown
-; 
-; DoneWithMovementChecks
-; 	tya		;get allowed directions back into A
 
 	rts
 
@@ -3616,21 +3421,24 @@ PowerUpBonusRoutine
     lda MazeGenerationPass
     and #POWERUPACTIVATEDBITS
     beq .PowerUpNotActivated
-    cmp #%10000000
-    bne .OnlySpeedBonus
-    
-    ;--kill all tanks (also gives score bonus there)
-    brk
-    .word KillAllTanksBonus
-    ;--also play some kind of sound effect
-    
-    
-    lda MazeGenerationPass
-    and #~POWERUPACTIVATEDBITS
-    ora #%01000000
-    sta MazeGenerationPass
-.OnlySpeedBonus    
-    ;--get starting tank amount
+;     cmp #%10000000
+;     bne .OnlySpeedBonus
+;     
+;     ;--kill all tanks (also gives score bonus there)
+;     brk
+;     .word KillAllTanksBonus
+;     ;--also play some kind of sound effect
+;     
+;     
+;     lda MazeGenerationPass
+;     and #~POWERUPACTIVATEDBITS
+;     ora #%01000000
+;     sta MazeGenerationPass
+; .OnlySpeedBonus    
+    ;--don't apply powerup if tank isn't moving!
+    lda TankStatus
+    and #TANKSPEED
+    beq .PlayerNotMovingNoSpeedBoost   
     lda TankStatus
     and #~TANKSPEED
     ora #PLAYERTANKSPEED+SPEEDBONUS
@@ -3638,6 +3446,7 @@ PowerUpBonusRoutine
 .PlayerHasDiedNoBonus    
 .PowerUpNotActivated
 .PlayerNotInPlayNoBonus
+.PlayerNotMovingNoSpeedBoost
     rts
 
 ;----------------------------------------------------------------------------
@@ -3786,36 +3595,52 @@ PFMaskLookup
 	.byte $03, $0C, $30, $C0
 
 	
+	
+/*
+    Notes on ramping difficulty.
+    Basically three variables we can control, maybe four.
+    1. Number of tanks player has to kill in a level
+    2. Speed of enemy tanks
+    3. Frequency of enemy tanks firing
+    4. Shape of maze (more vertical paths = harder)
+
+    1. starts at 8 and increases by 2 every level until it reaches maximum of 20 (on level 7)
+        (Note: considering changing this to start at 8 and increase by 4 every level until it reaches maximum at level 4
+    2. Enemy tanks have low base rates of speed that gradually increase, until all tanks begin the level at maximum speed starting at level 32 (or close to it)
+        Also enemy tanks get speed boosts when XX tanks have been killed in a level (see table just below)
+    3. This is increased by a table (immediately below) until it reaches a maximum.  
+    4. Can control this kind of but issue is the change isn't noticeable except over large values.
+    
+    Overall an issue is the possible range of levels is 1-99, but the effective range of levels (at least right now) is 1-15, maybe.  I don't think I've ever gotten past level 13.
+        
+    
+
+
+*/	
 
 		
 EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bullet firing
 ;a tank's initial speed changes on level #s evenly divisible by 4  (i.e., 4, 8, 12, etc)
 ;so let's not change bullet debounce on those levels, but DO change it on the other levels.
 ;
-;   30 is equivalent to firing  0.45 bullets / sec
-;   0 is equivalent to firing 15 bullets / sec
+;   30 is equivalent to firing  0.45 bullets / sec.  Or 1 bullet every 2.22 seconds
+;   0 is equivalent to firing 15 bullets / sec  Or 1 bullet every 0.07 seconds
 ;   values below chosen to start at 30 and go to 0 in steps of as close to 10% as possible.
 ;   so for example, the change from 30 to 27 is a 10.71% increase in firing rate, and
 ;   27 to 24 is a 12% increase, and so on.  Obviously, near the end the increase is much greater.
 ;   E.g., going from 2 to 1 is a 50% increase.
-    .byte 30, 27, 24, 24        ;levels 1-4
-    .byte 22, 20, 18, 18        ;levels 5-8
-    .byte 16, 14, 13, 13        ;levels 9-12
-    .byte 12, 11, 10, 10        ;levels 13-16
-    .byte 9, 8, 7, 7            ;levels 17-20
-    .byte 6, 5, 4, 4            ;levels 21-24
-    .byte 3, 2, 1, 1            ;levels 25-28
-    .byte 0	                    ;levels 29+
+    .byte 30, 30, 30, 30, 30    ;levels 1-5
+    .byte 27, 24, 22, 22        ;levels 6-9
+    .byte 20, 18, 16, 16        ;levels 10-13
+    .byte 14, 13, 12, 12        ;levels 14-17
+    .byte 11, 10, 9, 9          ;levels 18-21
+    .byte 8, 7, 6, 6            ;levels 22-25
+    .byte 5, 4, 3, 3            ;levels 26-29
+    .byte 2, 1, 0               ;levels 30-32 and higher
 EnemyBulletDebounceEnd
     
-
-; TanksRemainingSpeedBoost = * - 1 
-;     .byte 15, 10, 8, 6
-;     .byte 4, 4, 2, 2
-;     .byte 2, 2, 0, 0
-;     .byte 0, 0, 0, 0
-;     .byte 0, 0, 0, 0
-    ;.byte 0, 0    
+    ;--boost at 10 tanks killed
+    ;--boost at 16, 17, 18, 19
 TanksKilledSpeedBoost
     .byte 0, 0, 0, 0
     .byte 0, 0, 0, 0
@@ -5494,8 +5319,14 @@ MakeMazeLoopInner
 
 	;--are we at the end of our horizontal path?  compare random number to constant
 	jsr UpdateRandomNumberBank2 ;returns with RandomNumber in A
-	cmp #MAZEPATHCUTOFF
-	bcc EndOfRun
+	lda MazeNumber
+	clc
+	adc #MAZEPATHCUTOFF
+	cmp RandomNumber
+    bcs EndOfRun
+
+; 	cmp #MAZEPATHCUTOFF     ;higher value means more vertical passages, lower value means more horizontal.
+; 	bcc EndOfRun
 	;--not at the end of the run, so loop around
 	dec Temp+1
 	dex
@@ -5738,15 +5569,7 @@ SkipCreatingConnectingPassageLeft
 	
 	
 	;--does this nonsense below work?  Isn't MazeNumber a BCD value?  I think it still does work, but this is sloppy and probably should be fixed at some point.
-	lda MazeNumber
-	asl
-	clc
-	adc #6
-	;lda #STARTINGENEMYTANKCOUNT
-	cmp #20
-	bcc SetInitialTanksRemaining
-    lda #20
-SetInitialTanksRemaining
+	jsr GetInitialTankCountSubroutine   ;returns with initial count in A
 	sta TanksRemaining
 	
 	;--starting timers for when tanks enter the maze
@@ -6432,8 +6255,20 @@ PowerUpExplosionRemoveBricks
     
     
 ;****************************************************************************
-
-
+    SUBROUTINE
+GetInitialTankCountSubroutine
+    lda MazeNumber
+    asl
+    asl
+    clc
+    adc #4
+    cmp #MAXTANKSREMAINING
+    bcc .FoundInitialTankCount
+    lda #MAXTANKSREMAINING
+.FoundInitialTankCount
+    rts
+            
+;****************************************************************************
 
     SUBROUTINE    
 ScoreForKillingTank
@@ -6443,14 +6278,7 @@ ScoreForKillingTank
     and #PLAYERDEATHCOUNTBITS
     bne .PlayerDiedUsePOWERUPCOUNTDOWN
     ;--if player hasn't died, use tanks killed since start of level
-    lda MazeNumber
-    asl
-    clc
-    adc #6
-    cmp #20
-    bcc .FoundInitialTankCount
-    lda #20
-.FoundInitialTankCount
+    jsr GetInitialTankCountSubroutine   ;returns with initial count in A
     sec
     sbc TanksRemaining
     bcs .FigureOutScoreBonus    ;branch always, the subtraction above should never result in a negative number
