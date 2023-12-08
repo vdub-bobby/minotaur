@@ -622,7 +622,7 @@ ONECOPYNORMAL            0000              (R )
 ONECOPYQUAD              0007                  
 OnlyOnePlaceToCarve      362f              (R )
 ORANGE                   0020                  
-OVERSCAN_TIMER           001d              (R )
+OVERSCAN_TIMER           0020              (R )
 OverscanRoutine          1075                  
 P0CollisionTable         3d4c              (R )
 P0DIFF                   0040              (R )
@@ -1090,7 +1090,7 @@ UpdateRandomNumber       1240              (R )
 UpdateRandomNumberBank2  3715              (R )
 UsePowerUpGraphic        305a              (R )
 VBLANK                   0001              (R )
-VBLANK_TIMER             002a              (R )
+VBLANK_TIMER             0026              (R )
 VBLANKRoutine            1011              (R )
 vcs.h                    0000 ????         (R )
 VDELBL                   0027              (R )

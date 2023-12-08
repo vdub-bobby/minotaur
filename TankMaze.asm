@@ -234,8 +234,8 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ;-------------------------Constants Below---------------------------------
 
 ;--scanline count constants
-VBLANK_TIMER = 42       ;--I think this is fine
-OVERSCAN_TIMER = 29     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 38       ;--I think this (38) is fine
+OVERSCAN_TIMER = 32     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
 SOUNDTIMEBUFFER     =   (6*76)/64
 ;--scanline count constants end
