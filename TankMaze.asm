@@ -484,15 +484,31 @@ VOLUME10    =   10
 VOLUME12    =   12
 VOLUME14    =   14
 
-SQUARE_19   =   $00
-SQUARE_20   =   $10
-SQUARE_23   =   $20
-SQUARE_26   =   $30
-SQUARE_31   =   $40
-LEAD_15     =   $50
-LEAD_17     =   $60
-LEAD_11     =   $70
-LEAD_13     =   $80
+
+G5      =   $00
+Fs5     =   $10
+E5      =   $20
+D5      =   $30
+B4      =   $40
+E4      =   $50
+D4      =   $60
+A4      =   $70
+Fs4     =   $80
+A3      =   $90
+G3      =   $A0
+C5      =   $B0
+A5      =   $C0
+
+
+; SQUARE_19   =   $00
+; SQUARE_20   =   $10
+; SQUARE_23   =   $20
+; SQUARE_26   =   $30
+; SQUARE_31   =   $40
+; LEAD_15     =   $50
+; LEAD_17     =   $60
+; LEAD_11     =   $70
+; LEAD_13     =   $80
 
 PATTERNEND  =   255
 
@@ -1015,9 +1031,7 @@ GameNotOver
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
 	jsr PlayerTankMovementRoutine
-; 	brk
-; 	.word MoveBulletSubroutine
-	
+
 	jsr PowerUpBonusRoutine
 
 	
@@ -2238,8 +2252,6 @@ PlaySoundGameNotOver
     ;--check for music channel
     txa
     beq Channel0PlayMusicOnly
-    ;--add some goofiness for the powerup routine
-    ;--
 Channel1PlaySoundFX
 	lda Channel1Decay
 	and #$7F
@@ -3620,7 +3632,7 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bullet firing
-;a tank's initial speed changes on level #s evenly divisible by 4  (i.e., 4, 8, 12, etc)
+;a tank's initial speed changes on level plus 1 #s evenly divisible by 4  (i.e., 5, 9, 13, etc)
 ;so let's not change bullet debounce on those levels, but DO change it on the other levels.
 ;
 ;   30 is equivalent to firing  0.45 bullets / sec.  Or 1 bullet every 2.22 seconds
@@ -3630,13 +3642,19 @@ EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bul
 ;   27 to 24 is a 12% increase, and so on.  Obviously, near the end the increase is much greater.
 ;   E.g., going from 2 to 1 is a 50% increase.
     .byte 30, 30, 30, 30, 30    ;levels 1-5
-    .byte 27, 24, 22, 22        ;levels 6-9
-    .byte 20, 18, 16, 16        ;levels 10-13
-    .byte 14, 13, 12, 12        ;levels 14-17
-    .byte 11, 10, 9, 9          ;levels 18-21
-    .byte 8, 7, 6, 6            ;levels 22-25
-    .byte 5, 4, 3, 3            ;levels 26-29
-    .byte 2, 1, 0               ;levels 30-32 and higher
+    .byte 28, 26, 24, 26        ;levels 6-9
+    .byte 24, 22, 21, 22        ;levels 10-13
+    .byte 21, 20, 19, 20        ;levels 14-17
+    .byte 19, 18, 17, 18        ;levels 18-21
+    .byte 17, 16, 15, 16        ;levels 22-25
+    .byte 15, 14, 13, 14        ;levels 26-29
+    .byte 13, 12, 11, 12        ;levels 30-33
+    .byte 11, 10, 9, 10         ;levels 34-37
+    .byte 9, 8, 7, 8            ;levels 38-41
+    .byte 7, 6, 5, 6            ;levels 42-45
+    .byte 5, 4, 3, 4            ;levels 46-49
+    .byte 3, 2, 1, 2            ;levels 50-53
+    .byte 1, 0                  ;levels 54-55 and higher
 EnemyBulletDebounceEnd
     
     ;--boost at 10 tanks killed
@@ -3693,17 +3711,23 @@ MovementMask
 TitleScreenSongPointers
     .word TitleScreenSong, TitleScreenSongChannel1    
 
-TitleScreenSong     ;could make this twice as long
+TitleScreenSong     ;channel 0
     .word SilencePattern
     .word SilencePattern
-    .word Fanfare1Pattern
+    
+    .word SilencePattern
+    .word Fanfare2PatternC1
+    .word Fanfare4Pattern
+    .word SilencePattern
+    
+    .word Fanfare4Pattern
     .word Fanfare2Pattern
-
-    .word Fanfare1Pattern
+    .word Fanfare4Pattern
     .word Fanfare3Pattern
-    .word Fanfare1Pattern
-    .word SilencePattern
-            
+    
+    .word Fanfare4Pattern
+    .word Fanfare5Pattern
+    
     .word $FFFF
     .byte 0<<4
 
@@ -3711,13 +3735,20 @@ TitleScreenSong     ;could make this twice as long
 TitleScreenSongChannel1     ;--must be same length as matching channel 0  pattern
     .word SilencePattern
     .word SilencePattern
+    
+    .word Fanfare1PatternC1    
     .word Fanfare1PatternC1    
     .word Fanfare2PatternC1    
-
-    .word Fanfare1PatternC1    
-    .word Fanfare3PatternC1    
-    .word Fanfare1PatternC1    
     .word SilencePattern    
+
+    .word Fanfare3PatternC1    
+    .word Fanfare4PatternC1   
+    .word Fanfare3PatternC1   
+    .word Fanfare5PatternC1   
+    
+    .word Fanfare2PatternC1
+    .word Fanfare4Pattern
+     
     ;--don't need end-of-song bytes for channel 1
 
 
@@ -3729,138 +3760,206 @@ SilencePattern
  
   
 LevelStartFanfarePattern
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_17
-    .byte VOLUME6|LEAD_17|ARTICULATE
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
     
  
     
     
 Fanfare1PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|G3
+    .byte VOLUME4|G3|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
     
 Fanfare2PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23|ARTICULATE
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26|ARTICULATE
-
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
     
 Fanfare3PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-        
-    
-    
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+Fanfare4PatternC1
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+Fanfare5PatternC1
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4|ARTICULATE
+
          
 Fanfare1Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
 Fanfare2Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19|ARTICULATE
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5|ARTICULATE
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5|ARTICULATE
 
 Fanfare3Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+       
+Fanfare4Pattern
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+
+Fanfare5Pattern
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5|ARTICULATE
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
     
     
+        
 LevelStartSong
     .word LevelStartFanfarePattern
     .word SilencePattern
@@ -3938,15 +4037,24 @@ ArticulationTable   ;--routine as currently written will never read the first an
 	.byte 0,4, 2, 0
 	.byte 0,0,0,0
     
+	
+	
+	;--notes: 
+	;   G5, F#5, E5, D5
+	;   B4, E4, D4, A4
+	;   F#4, A3, G3, C5
+	;   A5
 DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
     .byte SQUARESOUND, LEADSOUND, LEADSOUND, LEADSOUND
-    .byte LEADSOUND
+    .byte LEADSOUND, LEADSOUND, LEADSOUND, SQUARESOUND
+    .byte SQUARESOUND
 
 FrequencyTable
     .byte 19, 20, 23, 26
     .byte 31, 15, 17, 11
-    .byte 13
+    .byte 13, 23, 26, 29
+    .byte 17
 
     
 TankDeadStatusBank0
