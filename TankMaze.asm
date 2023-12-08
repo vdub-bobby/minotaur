@@ -643,7 +643,7 @@ THREECOPIESCLOSE	=	$03
 TWOCOPIESWIDE		=	$04
 ONECOPYDOUBLE		=	$05
 THREECOPIESMED		=	$06
-ONECOPYQUAD		=	$07
+ONECOPYQUAD		    =	$07
 	;	missile:
 SINGLEWIDTHMISSILE	=	$00
 DOUBLEWIDTHMISSILE	=	$10
@@ -892,9 +892,14 @@ DoneStartingNewGameWithTrigger
 
 	jmp GameNotOnVBLANK
 GameOnVBLANK
+CallingMoveEnemyTank
 	jsr MoveEnemyTanksSubroutine
+CallingMoveBulletSubroutine	
 	brk
 	.word MoveBulletSubroutine
+FinishedWithMoveBulletSubroutine	
+    nop
+    
 GameAlreadyStarted
 GameNotOnVBLANK
 InBetweenLevels
@@ -3307,18 +3312,21 @@ CheckForWallSubroutine
 	sta Temp+2  ;block X (column)
 	;--divide by 7
 	lda TankY,X ;technically should subtract 1 first but the divide by 7 will drop the remainder so we're cool
-	sta Temp+3
-	lsr
-	lsr
-	lsr
-	adc Temp+3
-	ror
-	lsr
-	lsr
-	adc Temp+3
-	ror
-	lsr
-	lsr
+	tay
+	lda DivideBySevenBank0,Y
+	
+; 	sta Temp+3
+; 	lsr
+; 	lsr
+; 	lsr
+; 	adc Temp+3
+; 	ror
+; 	lsr
+; 	lsr
+; 	adc Temp+3
+; 	ror
+; 	lsr
+; 	lsr
 	sec
 	sbc #1      ;adjust so zero indexed            
     sta Temp+3  ;block Y (row)
@@ -3326,6 +3334,9 @@ CheckForWallSubroutine
     txa
     pha ;save tank index
        
+    lda #>PF1Left
+    sta MiscPtr+1
+
     
     ldy #3
 .LookForBrickLoop
@@ -3343,8 +3354,6 @@ CheckForWallSubroutine
     ;--now brick to check is at coords (Temp+2, Temp+3)
     lda #<PF1Left
     sta MiscPtr
-    lda #>PF1Left
-    sta MiscPtr+1
     ;--check if column > 15 (means off left or right side of maze)
     lda Temp+2
     cmp #16
@@ -4060,6 +4069,23 @@ FrequencyTable
 TankDeadStatusBank0
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
     
+    
+DivideBySevenBank0    
+	ds BLOCKHEIGHT, 0
+	ds BLOCKHEIGHT, 1
+	ds BLOCKHEIGHT, 2
+	ds BLOCKHEIGHT, 3
+	ds BLOCKHEIGHT, 4
+	ds BLOCKHEIGHT, 5
+	ds BLOCKHEIGHT, 6
+	ds BLOCKHEIGHT, 7
+	ds BLOCKHEIGHT, 8
+	ds BLOCKHEIGHT, 9
+	ds BLOCKHEIGHT, 10
+	ds BLOCKHEIGHT, 11
+	ds BLOCKHEIGHT, 12
+    
+    
 ;------------------------------------------------------------------------------------------
 	
     echo "----", ($1FE0-*), " bytes left (ROM) at end of Bank 1"
@@ -4470,6 +4496,8 @@ ScoreColorNoPowerUps
     ldx #SCORECOLOR_POWERUPSDISABLED
     
     
+PreWaitForVblankEnd    
+    nop
     
 
 WaitForVblankEnd
@@ -5122,7 +5150,7 @@ BottomKernelLoopInner			;		35
 	asl							;+2
 	asl							;+2
 	ora #3						;+2
-	sta NUSIZ0					;+3		56      ;this is too early sometimes and causes errant collisions
+	sta NUSIZ0					;+3		56      
 
 	lda (Player1Ptr),Y			;+5		
 	sta HMM1					;+3			
@@ -5146,7 +5174,7 @@ BottomKernelLoopInnerMiddle     ;       17
 	;	which is necessary to mask the missiles before we are ready to display them
 	lda TanksRemainingPF2Mask,X
 	sta PF2
-	SLEEP 6						;+13	30		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)--- OR?????
+	SLEEP 6						;+13	30		
 	dey
 	bpl BottomKernelLoopInner	;+5		35      
 
@@ -6460,18 +6488,23 @@ NoScoreForWallDestructionByEnemies
 	sec
 	sbc #2
 	;--use constant 27-cycle divide by 7 to get row instead of repeated-subtraction method
-	sta Temp
-	lsr
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr                 ;+27
+	
+	tay
+	lda BlockRowTable,Y     ;can use this as a divide table only in bank 1
+	
+	
+; 	sta Temp
+; 	lsr
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr                 ;+27
 	
 	tay
 ; FoundWhichRowBulletIsIn
