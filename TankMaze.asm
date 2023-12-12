@@ -833,6 +833,7 @@ Start
 ;----------------------------------------------------------------------------
 ;-------------------VBLANK Routine-------------------------------------------
 ;----------------------------------------------------------------------------
+    SUBROUTINE
 VBLANKRoutine
     lda #%00001111
 VSYNCWaitLoop2
@@ -895,10 +896,18 @@ GameOnVBLANK
 CallingMoveEnemyTank
 	jsr MoveEnemyTanksSubroutine
 CallingMoveBulletSubroutine	
-	brk
-	.word MoveBulletSubroutine
+
+    ;--this is faster than the BRK routine.   25 cycles to switch vs 52
+    lda #<MoveBulletSubroutine
+    sta MiscPtr
+    lda #>MoveBulletSubroutine
+    sta MiscPtr+1
+    jsr BankSwitchAltRoutine1
+
+; 	brk
+; 	.word MoveBulletSubroutine
 FinishedWithMoveBulletSubroutine	
-    nop
+    ;nop
     
 GameAlreadyStarted
 GameNotOnVBLANK
@@ -913,12 +922,25 @@ InBetweenLevels
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
 
-	jsr UpdateRandomNumber  ;--once per frame
+; 	jsr UpdateRandomNumber  ;--once per frame
+    ;--UpdateRandomNumber
+    lda RandomNumber
+    lsr
+    bcc .SkipEOR
+    eor #$B2
+.SkipEOR
+    sta RandomNumber
+   
 
+    ;--this is faster than the BRK routine.   25 cycles to switch vs 52
+    lda #<KernelRoutineGame
+    sta MiscPtr
+    lda #>KernelRoutineGame
+    sta MiscPtr+1
+    jsr BankSwitchAltRoutine1
 
-
-	brk
-	.word KernelRoutineGame
+; 	brk
+; 	.word KernelRoutineGame
 	
 	
 ;----------------------------------------------------------------------------
@@ -1185,7 +1207,16 @@ NoLongerDrawingTitleScreen
     cmp #$20
     bne PutTanksOnTitleScreenNotYet
     ;--reset TankMovementCounter so animation of powerup icon is correct
-    lda #$FF
+    lda FrameCounter
+    and #$7F
+    sec
+    sbc #1
+    lsr
+    lsr
+    sta Temp
+    lda #7
+    sec
+    sbc Temp    
     sta TankMovementCounter
     ldx #3
 PutTanksOnTitleScreenLoop
@@ -1277,16 +1308,15 @@ TankTitleScreenStatus
 ;----------------------Begin Functions---------------------------------------
 ;----------------------------------------------------------------------------
 
-
-
-UpdateRandomNumber
-    lda RandomNumber
-    lsr
-    bcc SkipEOR
-    eor #$B2
-SkipEOR
-    sta RandomNumber
-    rts
+    ;--inlining this (in two places!)
+; UpdateRandomNumber
+;     lda RandomNumber
+;     lsr
+;     bcc SkipEOR
+;     eor #$B2
+; SkipEOR
+;     sta RandomNumber
+;     rts
 	
 	
 	
@@ -1413,9 +1443,14 @@ MoveTanksOffscreenLoop
 	stx MazeGenerationPass
 AlreadyStartingNewLevel	
 	;--finally, cycle the random number
-	jmp UpdateRandomNumber				;--return from subroutine there
-	
-
+; 	jmp UpdateRandomNumber				;--return from subroutine there
+    lda RandomNumber
+    lsr
+    bcc .SkipEOR
+    eor #$B2
+.SkipEOR
+    sta RandomNumber
+    rts
 
 	
 ;*******************************************************************
@@ -2679,7 +2714,7 @@ EliminateDiagonalSubroutine
 	;--now get directions down to a single direction (i.e., no diagonals)
 	;--first, determine if trying to move diagonally:
 	;	need to count cleared bits in the top nibble
-	ldy #0					;will count bits set with Y
+; 	ldy #0					;will count bits set with Y     UNNECESSARY
 	pha						;save allowed directions on stack
 	txa
 	pha						;save X index on stack
@@ -2866,7 +2901,7 @@ NoTankSoundForEnemyTanks
 	pla						;get saved directions back in A	
 	asl
 	bcs NoRight
-	bvs TurnRightward		;overflow holds movement flag (clear=no movement)
+	bvs TurnRightward		;overflow holds movement flag (set=no movement (just turn tank))
 	jsr TankFractionalAddition
 	lda TankX,X
 	adc #0
@@ -2880,7 +2915,7 @@ TurnRightward
 NoRight
 	asl
 	bcs NoLeft
-	bvs TurnLeftward		;overflow holds movement flag (clear=no movement)
+	bvs TurnLeftward		;overflow holds movement flag (set=no movement)
 	jsr TankFractionalAddition
 	bcc TurnLeftward	;but don't move -- since TankFractional always adds, we can't then SBC #0 and use the carry flag here
 	dec TankX,X
@@ -4135,9 +4170,9 @@ BankSwitchSubroutine1
 ; 	lsr
 ; 	tax             ;+12    48
 ; 	nop $1FF8,X     ;+5     53  uses top 3 bits of address to determine which bank to switch to
+BankSwitchAltRoutine1
     nop $1FF9
-
-	jmp (MiscPtr)   ;+5     58
+	jmp (MiscPtr)   ;+9     45
 	
 ReturnFromBSSubroutine1
 ; 	tsx             ;+2
@@ -4264,6 +4299,8 @@ TankGfxIndexSet
 UsePowerUpGraphic
     ldx #0
     lda TankMovementCounter
+;     sec
+;     sbc #1              ;to make this sync up correctly`
     and #%00111000
 ;     lda FrameCounter
 ;     and #%11100000          ;was %11100000
@@ -5700,7 +5737,18 @@ SkipCreatingConnectingPassageLeft
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
-	lda #TANKAISWITCH+1
+; 	lda #TANKAISWITCH+1
+    lda FrameCounter
+    and #$7F
+    sec
+    sbc #1
+    lsr
+    lsr
+    sta Temp
+    lda #7
+    sec
+    sbc Temp	
+    ora #TANKAISWITCH
 	sta TankMovementCounter ;enemy tanks start in regular movement mode at beginning of every level....maybe?  
 	
 	
@@ -7904,6 +7952,7 @@ BankSwitchSubroutine2
 ; 	lsr             ;+10
 ; 	tax             ;+2
 ; 	nop $1FF8,X     ;+4
+BankSwitchAltRoutine2
     nop $1FF8
 
 	jmp (MiscPtr)   ;+5     57
