@@ -1792,9 +1792,12 @@ MoveAnEnemyTank
 TankNotInPlay
 	;--first - is the tank dead and onscreen?  if so, check it's wait and move it offscreen
 	lda TankStatus,X
-	and #TANKDIRECTION  ;--if pointing UP, then it is still onscreen
+	and #TANKUP|TANKDOWN  
 	cmp #TANKUP|TANKDOWN    ;tank up AND tank down means powerup displaying on screen
 	beq TankIsActuallyPowerup   ;--actually, any direction means still onscreen
+	;--not a powerup, so is an explosion - question is it in onscreen or not:
+	lda TankStatus,X
+	and #TANKDIRECTION
 	cmp #TANKUP             ;tank up only means explosion displaying on screen
 	bne  TankOffScreen
 
@@ -7627,6 +7630,25 @@ TankKilledImageb
         .byte #%01001010;--11
         .byte 0
         
+; PowerUpImage1 = * - 1
+;         .byte #%00111100;--2
+;         .byte #%00111100;--4
+;         .byte #%01011010;--6
+;         .byte #%11111111;--8
+;         .byte #%10000001;--10
+;         .byte #%00000000;--12
+; PowerUpImage1b
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%00111100;--3
+;         .byte #%01111110;--5
+;         .byte #%11111111;--7
+;         .byte #%10000001;--9
+;         .byte #%11000011;--11
+;         .byte 0
+
+        
+        
 PowerUpImage1 = * - 1
         .byte #%00111100;--2
         .byte #%00111100;--4
@@ -7634,17 +7656,16 @@ PowerUpImage1 = * - 1
         .byte #%11111111;--8
         .byte #%10000001;--10
         .byte #%00000000;--12
+        
 PowerUpImage1b
         .byte 0
         .byte #%00000000;--1
         .byte #%00111100;--3
         .byte #%01111110;--5
-        .byte #%11111111;--7
+        .byte #%01111110;--7
         .byte #%10000001;--9
-        .byte #%11000011;--11
+        .byte #%01000010;--11
         .byte 0
-        
-        
         
         
         
@@ -7732,13 +7753,30 @@ PlayerTankDown4b
         .byte #%11011000;--1
         .byte 0
 
+; PowerUpImage2 = * - 1       ;straight right
+;         .byte #%00000110;--2
+;         .byte #%00111110;--4
+;         .byte #%01110100;--6
+;         .byte #%01111000;--8
+;         .byte #%00110000;--10
+;         .byte #%00000000;--12      
+; PowerUpImage2b        
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%00011110;--3
+;         .byte #%01111110;--5
+;         .byte #%01111100;--7
+;         .byte #%01100000;--9
+;         .byte #%00011110;--11
+;         .byte 0
+        
 PowerUpImage2 = * - 1       ;straight right
         .byte #%00000110;--2
         .byte #%00111110;--4
         .byte #%01110100;--6
         .byte #%01111000;--8
         .byte #%00110000;--10
-        .byte #%00000000;--12      
+        .byte #%00000000;--12
 PowerUpImage2b        
         .byte 0
         .byte #%00000000;--1
@@ -7746,25 +7784,45 @@ PowerUpImage2b
         .byte #%01111110;--5
         .byte #%01111100;--7
         .byte #%01100000;--9
-        .byte #%00011110;--11
+        .byte #%00011100;--11
         .byte 0
+        
+; PowerUpImage3 = * - 1       ;angled right
+;         .byte #%00001110;--2
+;         .byte #%00111110;--4
+;         .byte #%01101000;--6
+;         .byte #%01111000;--8
+;         .byte #%00100100;--10
+;         .byte #%00000000;--12
+; PowerUpImage3b
+;      .byte 0
+;         .byte #%00000000;--1
+;         .byte #%00011110;--3
+;         .byte #%01111100;--5
+;         .byte #%01111100;--7
+;         .byte #%01001000;--9
+;         .byte #%00011011;--11
+;         .byte 0     
+
 PowerUpImage3 = * - 1       ;angled right
-        .byte #%00001110;--2
-        .byte #%00111110;--4
-        .byte #%01101000;--6
-        .byte #%01111000;--8
-        .byte #%00100100;--10
+        .byte #%00001111;--2
+        .byte #%00111111;--4
+        .byte #%01101100;--6
+        .byte #%01111100;--8
+        .byte #%00100010;--10
         .byte #%00000000;--12
+        
 PowerUpImage3b
      .byte 0
         .byte #%00000000;--1
-        .byte #%00011110;--3
-        .byte #%01111100;--5
-        .byte #%01111100;--7
-        .byte #%01001000;--9
-        .byte #%00011011;--11
-        .byte 0     
-
+        .byte #%00111111;--3
+        .byte #%01111110;--5
+        .byte #%01111110;--7
+        .byte #%01000100;--9
+        .byte #%00011001;--11
+     .byte 0     
+        
+        
 ; PowerUpImage4 = * - 1       ;straight left
 ;         .byte #%01100000;--2
 ;         .byte #%01111100;--4
