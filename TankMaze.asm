@@ -932,7 +932,7 @@ DoNotReadConsoleSwitchesWhileGeneratingMaze
     sta RandomNumber
    
 
-    ;--this is faster than the BRK routine.   25 cycles to switch vs 52
+    ;--this is faster than the BRK routine.   25 cycles vs 52 (using BRK)
     lda #<KernelRoutineGame
     sta MiscPtr
     lda #>KernelRoutineGame
@@ -4227,6 +4227,8 @@ KernelRoutineGame
 ; KernelSetupSubroutine
 
 
+
+
 	;rotate Tanks through Players and Missiles
 	
 	lda FrameCounter
@@ -4298,15 +4300,27 @@ TankGfxIndexSet
     bne SetTankGfxPtr   ;branch always
 UsePowerUpGraphic
     ldx #0
+    ;--set/clear TANKLEFT based on bit 4 of framecounter
+    lda FrameCounter
+    and #%00010000
+    beq ClearTANKLEFT
+    lda TankStatus,Y
+    ora #TANKLEFT
+    sta TankStatus,Y
+    bne SetPowerUpFrame
+ClearTANKLEFT
+    lda TankStatus,Y
+    and #~TANKLEFT
+    sta TankStatus,Y
+SetPowerUpFrame   
+    
     lda TankMovementCounter
-;     sec
-;     sbc #1              ;to make this sync up correctly`
     and #%00111000
 ;     lda FrameCounter
 ;     and #%11100000          ;was %11100000
     bne StaticPowerUpIcon
     lda FrameCounter
-    and #%00011100
+    and #%00001100
     lsr
     tax
 StaticPowerUpIcon    
@@ -4515,7 +4529,7 @@ WallFlashingColor
         lsr
         and #$0F
         ora #(WALLCOLOR&$F0)
-        bne SetWallColor
+        .byte $2C       ;skip next two bytes
 RegularWallColor
         lda #WALLCOLOR
 SetWallColor        
@@ -4534,7 +4548,7 @@ ScoreColorNoPowerUps
     
     
 PreWaitForVblankEnd    
-    nop
+ ;   nop
     
 
 WaitForVblankEnd
@@ -4676,6 +4690,9 @@ EndREFPLoop             ;       14/18/23
 
 	
 	
+    ;%%%
+    
+    
     sta WSYNC
 	
 	ldx #$C0
@@ -4746,7 +4763,7 @@ PlayerTankRightFrame
    
 PowerUpIconFrame
     .word PowerUpImage1+TANKHEIGHT, PowerUpImage3+TANKHEIGHT, PowerUpImage2+TANKHEIGHT, PowerUpImage3+TANKHEIGHT
-    .word PowerUpImage1+TANKHEIGHT, PowerUpImage5+TANKHEIGHT, PowerUpImage4+TANKHEIGHT, PowerUpImage5+TANKHEIGHT
+;     .word PowerUpImage1+TANKHEIGHT, PowerUpImage5+TANKHEIGHT, PowerUpImage4+TANKHEIGHT, PowerUpImage5+TANKHEIGHT
     
 TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
@@ -4780,9 +4797,9 @@ RespawnTankXPosition
 
 RespawnTankYPosition 
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
+; 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
-	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
+; 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
 RespawnCountdownGraphic
@@ -6713,10 +6730,13 @@ PlayerLeft
 ; TopRowEnemyTankRespawn
 SetEnemyRespawnPosition
 SetPlayerRespawnLocation
-    lda RespawnTankYPosition,Y
-	sta TankY,X
 	lda RespawnTankXPosition,Y
 	sta TankX,X
+	tya
+	lsr
+	tay
+    lda RespawnTankYPosition,Y
+	sta TankY,X
 
     rts
 
@@ -7745,38 +7765,38 @@ PowerUpImage3b
         .byte #%00011011;--11
         .byte 0     
 
-PowerUpImage4 = * - 1       ;straight left
-        .byte #%01100000;--2
-        .byte #%01111100;--4
-        .byte #%00101110;--6
-        .byte #%00011110;--8
-        .byte #%00001100;--10
-        .byte #%00000000;--12
-PowerUpImage4b
-        .byte 0
-        .byte #%00000000;--1
-        .byte #%01111000;--3
-        .byte #%01111110;--5
-        .byte #%00111110;--7
-        .byte #%00000110;--9
-        .byte #%01111000;--11
-        .byte 0        
-PowerUpImage5 = * - 1       ;angled left
-        .byte #%01110000;--2
-        .byte #%01111100;--4
-        .byte #%00010110;--6
-        .byte #%00011110;--8
-        .byte #%00100100;--10
-        .byte #%00000000;--12
-PowerUpImage5b
-        .byte 0
-        .byte #%00000000;--1
-        .byte #%01111000;--3
-        .byte #%00111110;--5
-        .byte #%00111110;--7
-        .byte #%00010010;--9
-        .byte #%11011000;--11
-        .byte 0        
+; PowerUpImage4 = * - 1       ;straight left
+;         .byte #%01100000;--2
+;         .byte #%01111100;--4
+;         .byte #%00101110;--6
+;         .byte #%00011110;--8
+;         .byte #%00001100;--10
+;         .byte #%00000000;--12
+; PowerUpImage4b
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%01111000;--3
+;         .byte #%01111110;--5
+;         .byte #%00111110;--7
+;         .byte #%00000110;--9
+;         .byte #%01111000;--11
+;         .byte 0        
+; PowerUpImage5 = * - 1       ;angled left
+;         .byte #%01110000;--2
+;         .byte #%01111100;--4
+;         .byte #%00010110;--6
+;         .byte #%00011110;--8
+;         .byte #%00100100;--10
+;         .byte #%00000000;--12
+; PowerUpImage5b
+;         .byte 0
+;         .byte #%00000000;--1
+;         .byte #%01111000;--3
+;         .byte #%00111110;--5
+;         .byte #%00111110;--7
+;         .byte #%00010010;--9
+;         .byte #%11011000;--11
+;         .byte 0        
         
 PlayerStartingStatus
     .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
@@ -7883,13 +7903,7 @@ DigitBlank
 TankDeadStatus
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
 
-RemoveBrickColumnShift
-    .byte 1,1,-2,2
-    .byte -2,1,1;,0
     
-RemoveBrickRowShift
-    .byte 0,0,-1,0
-    .byte -1,0,0,0	
 	
 	
 ToneBank2
@@ -7906,9 +7920,6 @@ SoundLengthBank2
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
-	
-NextPowerUpActivation
-    .byte %01000000, %10000000, %11000000, %11000000    
 
 	
 NumberOfBitsSetBank2
@@ -7917,12 +7928,21 @@ NumberOfBitsSetBank2
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
 
+RemoveBrickColumnShift
+    .byte 1,1,-2,2
+    .byte -2,1,1;,0
 	
 AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 0, 0, 1, 1
     .byte 1, 1, 1, 1
     .byte 1, 1, 1, 1
-    .byte 1, 1, 0, 0		
+    .byte 1, 1, 0, 0	
+    	
+    
+RemoveBrickRowShift = * - 2
+    .byte /*0,0,*/-1,0
+    .byte -1,0,0,0	
+    
 	
 PlayerTankColor
     .byte TANKCOLOR1, TANKCOLOR3
