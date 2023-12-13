@@ -734,6 +734,7 @@ RandomNumberSaved ds 1  ;used to save the random number for more than one frame
 MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
+GameStatus2 ds 1
 Score ds 3
 TanksRemaining ds 1     ;this holds a value from 0 to 20.  Wondering if we can use the top 3 bits for something else?
 
@@ -783,7 +784,7 @@ LastRowR ds 1
 
 SongIndex ds 1
 
-Temp ds 4
+Temp ds 3  
 MiscPtr 
 ScorePtr ds 12
 
@@ -2456,7 +2457,7 @@ NoArticulation
     lda DistortionTable,Y
     sta Temp+2
     lda FrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
     jmp PlayMusicSound
 GetNewNote
     ;--only do this for channel 0
@@ -2522,7 +2523,7 @@ NoChangeToSavedRandomNumber
     lda DistortionTable,Y
     sta Temp+2
     lda FrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
 GetNewPercussion
     jsr GetPercussionSound  ;returns with A holding percussion value *AND* flags set based on what that value is
     beq NoPercussion
@@ -2532,7 +2533,7 @@ GetNewPercussion
     lda PercussionDistortionTable,Y
     sta Temp+2
     lda PercussionFrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
 
 
 NotDownBeat
@@ -2547,7 +2548,7 @@ PlayMusicSound
     sta AUDV0,X
     lda Temp+2
     sta AUDC0,X
-    lda Temp+3
+    lda Temp+11
     sta AUDF0,X
 DoNotEndPercussion
 NoPercussion
@@ -3353,21 +3354,9 @@ CheckForWallSubroutine
 	tay
 	lda DivideBySevenBank0,Y
 	
-; 	sta Temp+3
-; 	lsr
-; 	lsr
-; 	lsr
-; 	adc Temp+3
-; 	ror
-; 	lsr
-; 	lsr
-; 	adc Temp+3
-; 	ror
-; 	lsr
-; 	lsr
 	sec
 	sbc #1      ;adjust so zero indexed            
-    sta Temp+3  ;block Y (row)
+    sta Temp+6  ;block Y (row)
 
     txa
     pha ;save tank index
@@ -3385,11 +3374,11 @@ CheckForWallSubroutine
     adc CheckForBrickColumnShift,Y       
     and #$1F
     sta Temp+2
-    lda Temp+3
+    lda Temp+6
     clc
     adc CheckForBrickRowShift,Y
-    sta Temp+3
-    ;--now brick to check is at coords (Temp+2, Temp+3)
+    sta Temp+6
+    ;--now brick to check is at coords (Temp+2, Temp+6)
     lda #<PF1Left
     sta MiscPtr
     ;--check if column > 15 (means off left or right side of maze)
@@ -3397,7 +3386,7 @@ CheckForWallSubroutine
     cmp #16
     bcs .YesBrick
     ;--check if we are checking the bottom row
-    lda Temp+3
+    lda Temp+6
     bne .NotRowZero
     ;--on row zero, so just check the two specific bricks in that row:
     lda Temp+2
@@ -3418,7 +3407,7 @@ CheckForWallSubroutine
     cmp #MAZEROWS
     bcs .YesBrick
     ;--ok, we are in the maze.  Check specific brick:
-    ldy Temp+3  ;row
+    ldy Temp+6  ;row
     dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
     ldx Temp+2  ;column
     lda PFRegisterLookup,X
@@ -4506,39 +4495,6 @@ SetupScorePtrsLoop
 ; 	lda #RIGHTEIGHT
 ; 	sta HMM1            ;what is this for?
 
-	SUBROUTINE
-	if DEBUGTANKAICOUNTER = 1
-        lda TankMovementCounter
-        cmp #TANKAISWITCH
-        bcs .tankaidebug
-        lda #BLUE|$4
-        bcc .tankaidebugend
-.tankaidebug
-    	lsr
-    	lsr
-    	lsr
-    	lsr
-    	ora #WALLCOLOR&$F0
-.tankaidebugend
-    ELSE
-        lda GameStatus
-        and #GAMEOVER
-        beq RegularWallColor
-        lda TankMovementCounter
-        asl ;--get WALLDONEFLASHING bit into carry
-        bcc WallFlashingColor
-        lda #0
-WallFlashingColor
-        lsr
-        and #$0F
-        ora #(WALLCOLOR&$F0)
-        .byte $2C       ;skip next two bytes
-RegularWallColor
-        lda #WALLCOLOR
-SetWallColor        
-    ENDIF
-
-    sta Temp+3
 
     
     lda FrameCounter
@@ -4642,39 +4598,41 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sty GRP0					  ;+9		67	
 	
 	
-	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
-	sta NUSIZ0
-	sta NUSIZ1                  ;+8     75
-	
 	;--tank colors
-SetTankColors	
-	lda FrameCounter
-	and #1
-    tax
-    lda P0M0Color,X
-    sta COLUP0
-    lda P1M1Color,X
-    sta COLUP1	                ;+21    20
 	
+    lda GameStatus          ;+3
+    and #GAMEOVER           ;+2
+    beq RegularWallColor    ;+2/3   7/8
+    lda TankMovementCounter ;+3     10
+    asl                     ;+2     12      get WALLDONEFLASHING bit into carry
+    bcc WallFlashingColor   ;+2/3   14/15
+    lda #0                  ;+2     16
+WallFlashingColor           ;       15/16
+    lsr                     ;+2     17/18
+    and #$0F                ;+2     19/20
+    ora #(WALLCOLOR&$F0)    ;+2     21/22
+    .byte $2C               ;+4     25/26   skip next two bytes
+RegularWallColor            ;       8       
+    lda #WALLCOLOR          ;+2     10
+SetWallColor                ;       10/25/26 
 
-	
+    sta Temp+7              ;+3     29      Temp+7 overwrites the ScorePtr+4 and MiscPtr+4
+    sta COLUPF              ;+3	    32
 	;--reflect P0 or P1 as necessary.   prep for flip loop below
-    txa
-	asl
-	tax
-	lda RotationTables,X        ;RotationTablesBank1 if moved back to bank 1
+;     txa
+; 	asl
+; 	tax
+	lda RotationTables,Y        ;RotationTablesBank1 if moved back to bank 1
 	sta MiscPtr
-	lda RotationTables+1,X
-	sta MiscPtr+1               ;+20    40
+	lda RotationTables+1,Y
+	sta MiscPtr+1               ;+14    46
 	
     
-    lda Temp+3
-	sta COLUPF                  ;+6     46
 	;--do this above...the rest we do during the wall below.  
 
 	;---reflect P0/P1
 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
-	ldy #3              ;+2     24
+	ldy #3              ;+2     48
 SetREFPLoop
 	lax (MiscPtr),Y		;+5      5      get X index into graphics registers
 	lda TankStatus,Y    ;+4      9
@@ -4688,8 +4646,8 @@ EndREFPLoop             ;       14/18/23
 	dey                 
 	bpl SetREFPLoop     ;+5     19/23/28
     ;loop minimum time is 76 cycles.  maximum is 101
-    ;                   ;+76    98  (or 22)
-    ;                   ;+101   135 (or 59)
+    ;                   ;+76    114 (or 48)
+    ;                   ;+101   149 (or 73)     !!!zero room for error!!!
 
 	
 	
@@ -4706,10 +4664,29 @@ EndREFPLoop             ;       14/18/23
 	sta PF1
 	sta PF2                         ;+9     22
 	
-	ldx #4
+	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
+	sta NUSIZ0
+	sta NUSIZ1                      ;+8     30
+
+SetTankColors	
+	lda FrameCounter
+	and #1
+    tax
+    asl
+    tay
+    lda P0M0Color,X
+    sta COLUP0
+    lda P1M1Color,X
+    sta COLUP1	                    ;+25     55
+	
+	
+	
+		
+	ldx #4                          ;+2     57
 ; PositioningLoopVBLANK	;--excluding players (and M1)
 	lda PlayerX+4;,X
-	jsr PositionASpriteSubroutineBank2   ;        9
+	jsr PositionASpriteSubroutineBank2     ;+9     66       need to reach subroutine 8 cycles before end of scanline (cycle 68)    
+	                                       ;        9       subr returns at 9th cycle of scanline
 ; 	dex
 ; 	cpx #3
 ; 	bne PositioningLoopVBLANK
@@ -4963,7 +4940,7 @@ KernelLastRowLoop			;		36
 	sta GRP0				;+15	57
 BackFromSwitch0b
 	
-	lda Temp+3;#WALLCOLOR
+	lda Temp+7;#WALLCOLOR
 	sta COLUPF				;+5		62
 	
 
@@ -6027,7 +6004,7 @@ CheckForExplosionCollisionCheckEnd
     
 TankHitLiveTank
     ;--if Y = 0 then tank run into by player
-    sty Temp+3  ;save this we will check below
+    sty Temp+6  ;save this we will check below
     ;--restore Y
     ldy Temp+2
     ;--now what?
@@ -6043,7 +6020,7 @@ TankHitLiveTank
     beq TankAlreadyDeadCannotDie
     ;--else tank is powerup.  what to do exactly?
     ;--if hit by non-player tank, ignore:
-    lda Temp+3  ;--this holds zero if player tank is what hit it
+    lda Temp+6  ;--this holds zero if player tank is what hit it
     bne NonPlayerTankHitPowerUp
 
     
@@ -6356,19 +6333,19 @@ PowerUpExplosionRemoveBricks
 	lda TankY,X
     clc
     adc #TANKHEIGHT/2
-    sta Temp+3      
+    sta Temp+6   
 	lsr
 	lsr
 	lsr
-	adc Temp+3
+	adc Temp+6
 	ror
 	lsr
 	lsr
-	adc Temp+3
+	adc Temp+6
 	ror
 	lsr
 	lsr
-	sta Temp+3      ;store row back into Temp+3
+	sta Temp+6     ;store row back into Temp+6
 
 
 	
@@ -6384,10 +6361,10 @@ PowerUpExplosionRemoveBricks
     adc RemoveBrickColumnShift,Y
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
-    lda Temp+3  ;row
+    lda Temp+6  ;row
     clc       
     adc RemoveBrickRowShift,Y
-    sta Temp+3
+    sta Temp+6
 	lda #<PF1Left
 	sta MiscPtr
 	lda #>PF1Left
@@ -6397,7 +6374,7 @@ PowerUpExplosionRemoveBricks
 	cmp #16
 	bcs .OffMazeGoToNext
     ;--check if we are on row zero
-	lda Temp+3
+	lda Temp+6
 	bne .NotRowZero
 	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
 	lda Temp+2
@@ -6423,7 +6400,7 @@ PowerUpExplosionRemoveBricks
 	bcs .OffMazeGoToNext
     ;--if we are here, we have a legit brick location and we will remove it
     ;--get row into Y
-    ldy Temp+3
+    ldy Temp+6
     dey                 ;is this correct?
     ;--get column into X
     ldx Temp+2
