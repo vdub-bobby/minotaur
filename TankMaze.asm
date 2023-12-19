@@ -305,8 +305,6 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 FIRSTCOLUMNX    =   16
 
 
-;--bit 7 of FrameCounter used to track whether powerups are on or off, which is determined by difficulty switch A and only can be switched at the title screen
-POWERUPSENABLED = %10000000
 
 ;--constants for game over routine
 ;--TankMovementCounter is reused for this routine
@@ -552,6 +550,19 @@ LEVELCOMPLETETIMER	=	$03
 
 
 ;--end GameStatus flags
+
+
+;--GameStatus2 flags
+
+
+RANDOMMAZES         =   %00000100
+HARDSTARTINGLEVEL   =   %00000010
+POWERUPSENABLED     =   %00000001
+
+
+
+;--end GameStatus2 flags
+
 
 BALLOFFSCREEN	=	0
 
@@ -851,16 +862,18 @@ VSYNCWaitLoop2
 
 	
 	;--decrement FrameCounter while leaving upper bit untouched:
-	lda FrameCounter
-	sec
-	sbc #1
-	and #$7F
-	sta Temp
-	lda FrameCounter
-	and #$80
-	ora Temp
-	sta FrameCounter
+; 	lda FrameCounter
+; 	sec
+; 	sbc #1
+; 	and #$7F
+; 	sta Temp
+; 	lda FrameCounter
+; 	and #$80
+; 	ora Temp
+; 	sta FrameCounter
 	
+    dec FrameCounter
+
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER|GENERATINGMAZE
 	beq GameOnVBLANK	
@@ -1231,7 +1244,7 @@ PutTanksOnTitleScreenLoop
     bpl PutTanksOnTitleScreenLoop
 TanksAlreadyOnScreen
     ;--right here let's check to see if left difficulty switch = A.  If so, display third tank (not powerup)
-    lda FrameCounter
+    lda GameStatus2
     and #POWERUPSENABLED
     beq DisplayTankInsteadOfPowerUp
     and #P0DIFF
@@ -1342,14 +1355,14 @@ ReadConsoleSwitchesSubroutine
 	lda SWCHB
 	and #P0DIFF
 	beq .PowerUpsOn
-	lda FrameCounter        ;bit 7 used to track powerups enabled or no
+	lda GameStatus2 
 	and #~POWERUPSENABLED
-	sta FrameCounter
+	sta GameStatus2
 	rts
 .PowerUpsOn	
-	lda FrameCounter
+	lda GameStatus2
 	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
-	sta FrameCounter
+	sta GameStatus2
 	
 RESETNotReleased
 DoneWithConsoleSwitches
@@ -1809,7 +1822,7 @@ TankNotInPlay
 	bne DoNotMoveTankOffscreenYet
 	lda TankStatus,X
 	and #$0F
-; 	sec         ;I think this is set already after CMP and failed BNE branch above above
+; 	sec         ;I think this is set already after CMP and not-taken BNE branch above above
 	sbc #2
 	ora #TANKUP
 	sta TankStatus,X
@@ -4306,10 +4319,10 @@ ClearTANKLEFT
     sta TankStatus,Y
 SetPowerUpFrame   
     
-    lda TankMovementCounter
-    and #%00111000
-;     lda FrameCounter
-;     and #%11100000          ;was %11100000
+;     lda TankMovementCounter
+;     and #%00111000
+    lda FrameCounter
+    and #%11100000          ;was %11100000
     bne StaticPowerUpIcon
     lda FrameCounter
     and #%00001100
@@ -4340,14 +4353,15 @@ TankNotFacingUp
 	lda TankDownFrame+1,X
 	bne SetTankGfxPtr   ;branch always
 TankNotFacingDown
-	lda TankStatus,Y
-	and #TANKRIGHT
-	beq TankNotFacingRight
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-	bne SetTankGfxPtr   ;branch always
-TankNotFacingRight
+    ;--so tank is facing right or left, either way graphic image is the same
+; 	lda TankStatus,Y
+; 	and #TANKRIGHT
+; 	beq TankNotFacingRight
+; 	lda TankRightFrame,X
+; 	pha
+; 	lda TankRightFrame+1,X
+; 	bne SetTankGfxPtr   ;branch always
+; TankNotFacingRight
 	lda TankRightFrame,X
 	pha
 	lda TankRightFrame+1,X
@@ -4497,9 +4511,9 @@ SetupScorePtrsLoop
 
 
     
-    lda FrameCounter
-    asl
-    bcc ScoreColorNoPowerUps
+    lda GameStatus2
+    and #POWERUPSENABLED
+    beq ScoreColorNoPowerUps
     ldx #SCORECOLOR_POWERUPSENABLED
     .byte $2C
 ScoreColorNoPowerUps
@@ -4622,6 +4636,10 @@ SetWallColor                ;       10/25/26
 ;     txa
 ; 	asl
 ; 	tax
+    lda FrameCounter
+    and #1
+    asl
+    tay
 	lda RotationTables,Y        ;RotationTablesBank1 if moved back to bank 1
 	sta MiscPtr
 	lda RotationTables+1,Y
@@ -5735,17 +5753,18 @@ SkipCreatingConnectingPassageLeft
 	jsr MoveEnemyTanksOffScreen	
 	
 ; 	lda #TANKAISWITCH+1
-    lda FrameCounter
-    and #$7F
-    sec
-    sbc #1
-    lsr
-    lsr
-    sta Temp
-    lda #7
-    sec
-    sbc Temp	
-    ora #TANKAISWITCH
+;     lda FrameCounter
+;     and #$7F
+;     sec
+;     sbc #1
+;     lsr
+;     lsr
+;     sta Temp
+;     lda #7
+;     sec
+;     sbc Temp	
+;     ora #TANKAISWITCH
+    lda #TANKAISWITCH+1
 	sta TankMovementCounter ;enemy tanks start in regular movement mode at beginning of every level....maybe?  
 	
 	
@@ -6250,7 +6269,7 @@ SetTankStatusForDeadTanks
     ;       and no powerup on screen
     ;       and left difficulty switch = B
 TankIsNewlyDead
-    lda FrameCounter
+    lda GameStatus2
     and #POWERUPSENABLED
     beq PowerUpsTurnedOff
     lda MazeGenerationPass
