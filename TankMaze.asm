@@ -554,10 +554,10 @@ LEVELCOMPLETETIMER	=	$03
 
 ;--GameStatus2 flags
 
-
+GAMEVARIATIONBITS   =   %00000111
 RANDOMMAZES         =   %00000100
 HARDSTARTINGLEVEL   =   %00000010
-POWERUPSENABLED     =   %00000001
+POWERUPSDISABLED     =   %00000001
 
 
 
@@ -1054,7 +1054,7 @@ ClearMazeLoop
 	;--also turn off sound
 ; 	sta AUDV0
 	sta TanksRemaining
-	lda #$01
+	lda #$00
 	sta MazeNumber
 GameOverRoutineStillGoing
 NoChangeToGameOverVolume
@@ -1213,6 +1213,18 @@ NotGeneratingMaze
 	jmp PutTanksOnTitleScreenNotYet
 NoLongerDrawingTitleScreen
     ;--let's put some stuff on the screen
+    ;--change maze number to whatever game variation is set
+    lda GameStatus2
+    and #HARDSTARTINGLEVEL
+    beq MazeNumberOne
+    lda #$10
+    .byte $2C
+MazeNumberOne
+    lda #$01    
+    sta MazeNumber
+    
+    
+    
     lda TankStatus
     lsr
     bcs TanksAlreadyOnScreen
@@ -1245,8 +1257,8 @@ PutTanksOnTitleScreenLoop
 TanksAlreadyOnScreen
     ;--right here let's check to see if left difficulty switch = A.  If so, display third tank (not powerup)
     lda GameStatus2
-    and #POWERUPSENABLED
-    beq DisplayTankInsteadOfPowerUp
+    and #POWERUPSDISABLED
+    bne DisplayTankInsteadOfPowerUp
     and #P0DIFF
     lda #TANKUP|TANKDOWN
     .byte $2C
@@ -1349,20 +1361,20 @@ ReadConsoleSwitchesSubroutine
 	and #~CONSOLEDEBOUNCEFLAG
 	sta Debounce
 	;--now check difficulty switch ONLY if on title screen
-	lda GameStatus
-	and #TITLESCREEN
-	beq DoneWithConsoleSwitches
-	lda SWCHB
-	and #P0DIFF
-	beq .PowerUpsOn
-	lda GameStatus2 
-	and #~POWERUPSENABLED
-	sta GameStatus2
-	rts
-.PowerUpsOn	
-	lda GameStatus2
-	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
-	sta GameStatus2
+; 	lda GameStatus
+; 	and #TITLESCREEN
+; 	beq DoneWithConsoleSwitches
+; 	lda SWCHB
+; 	and #P0DIFF
+; 	beq .PowerUpsOn@
+; 	lda GameStatus2 
+; 	and #~POWERUPSENABLED
+; 	sta GameStatus2
+; 	rts
+; .PowerUpsOn	
+; 	lda GameStatus2
+; 	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
+; 	sta GameStatus2
 	
 RESETNotReleased
 DoneWithConsoleSwitches
@@ -1376,10 +1388,16 @@ RESETPressed
 	bne RESETNotReleased
 StartNewGame	
 	;--if RESET pressed, set MazeNumber to $01 if not on the title screen.  Else leave it as-is.
-	lda MazeNumber
+	lda GameStatus2
+	and #HARDSTARTINGLEVEL
 	beq SetMazeNumberToOne
-	lda GameStatus
-	and #TITLESCREEN
+	lda #$10
+	sta MazeNumber
+; 	
+; 	lda MazeNumber
+; 	beq SetMazeNumberToOne
+; 	lda GameStatus
+; 	and #TITLESCREEN
 	bne ResetConsoleSwitchDebounce
 SetMazeNumberToOne	
     lda #$01
@@ -1394,21 +1412,37 @@ SELECTPressed
     lda GameStatus
     and #TITLESCREEN
     beq DoneWithConsoleSwitches
-    lda MazeNumber
-    cmp #$02
-    bcs StartingMazeNotOne
-    lda #$05
-    bne SetStartingMazeNumber   ;branch always
-StartingMazeNotOne    
-    cmp #$05
-    bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
-    ;--not one and not ten means it is five
-    lda #$10
-    bne SetStartingMazeNumber
-SetStartingMazeToOne
-    lda #$01    
-SetStartingMazeNumber
-    sta MazeNumber
+    
+    ;--new: pressing select cycles through 8 game variations
+    lda GameStatus2
+    clc
+    adc #1
+    and #GAMEVARIATIONBITS
+    sta Temp
+    lda GameStatus2
+    and #~GAMEVARIATIONBITS
+    ora Temp
+    sta GameStatus2
+    
+;     and #HARDSTARTINGLEVEL
+;     bne StartingMazesNumber
+;     
+;     
+;     lda MazeNumber
+;     cmp #$02
+;     bcs StartingMazeNotOne
+;     lda #$05
+;     bne SetStartingMazeNumber   ;branch always
+; StartingMazeNotOne    
+;     cmp #$05
+;     bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
+;     ;--not one and not ten means it is five
+;     lda #$10
+;     bne SetStartingMazeNumber
+; SetStartingMazeToOne
+;     lda #$01    
+; SetStartingMazeNumber
+;     sta MazeNumber
 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
 	sta Debounce
@@ -4281,6 +4315,18 @@ PlayerTankMovingSetRegularGraphicsPointers
     bne TankGfxIndexSet ;branch always
 
 NotPlayerTankSkipNotMovingCheck
+	;--if title screen and player 2, then display maze graphic
+	lda GameStatus
+	and #TITLESCREEN
+	beq NotOnTitleScreenDisplayRegularEnemyTanks
+	cpy #2
+	bne DisplayRegularTanks
+	lda #<(StaticMazeImage+TANKHEIGHT)
+	pha
+	lda #>(StaticMazeImage+TANKHEIGHT)
+	bne SetTankGfxPtr
+DisplayRegularTanks
+NotOnTitleScreenDisplayRegularEnemyTanks	
 	;--get index into tank graphics image
 	lda FrameCounter
     and #%00001100
@@ -4512,8 +4558,8 @@ SetupScorePtrsLoop
 
     
     lda GameStatus2
-    and #POWERUPSENABLED
-    beq ScoreColorNoPowerUps
+    and #POWERUPSDISABLED
+    bne ScoreColorNoPowerUps
     ldx #SCORECOLOR_POWERUPSENABLED
     .byte $2C
 ScoreColorNoPowerUps
@@ -4800,9 +4846,6 @@ RespawnTankYPosition
 ; 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
-RespawnCountdownGraphic
-    .byte $00, $80, $C0, $E0
-    .byte $F0, $F8, $FC, $FE
 	
 ;----------------End Some Data Stuck Here	
 	
@@ -6270,8 +6313,8 @@ SetTankStatusForDeadTanks
     ;       and left difficulty switch = B
 TankIsNewlyDead
     lda GameStatus2
-    and #POWERUPSENABLED
-    beq PowerUpsTurnedOff
+    and #POWERUPSDISABLED
+    bne PowerUpsTurnedOff
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
     bne NoPowerUp
@@ -7014,6 +7057,9 @@ PositionASpriteSubroutineBank2
 	
 	
 	
+RespawnCountdownGraphic
+    .byte $00, $80, $C0, $E0
+    .byte $F0, $F8, $FC, $FE
 
 
 
@@ -7817,7 +7863,40 @@ PowerUpImage3b
         .byte #%01000100;--9
         .byte #%00011001;--11
      .byte 0     
+ 
+StaticMazeImage =    * - 1
+        .byte #%01111101;--2
+        .byte #%11010111;--4
+        .byte #%00010001;--6
+        .byte #%11000100;--8
+        .byte #%01011111;--10
+        .byte #%00000000;--12
+StaticMazeImageb
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%01111101;--3
+        .byte #%11010111;--5
+        .byte #%00010001;--7
+        .byte #%11000100;--9
+        .byte #%01011111;--11
+        .byte 0        
         
+RandomMazeImage =   * - 1
+        .byte #%01000101;--2
+        .byte #%11000111;--4
+        .byte #%00001001;--6
+        .byte #%10100100;--8
+        .byte #%01000011;--10
+        .byte #%00000000;--12
+RandomMazeImageb
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%01010101;--3
+        .byte #%11010011;--5
+        .byte #%00000101;--7
+        .byte #%10011000;--9
+        .byte #%01011111;--11
+        .byte 0            
         
 ; PowerUpImage4 = * - 1       ;straight left
 ;         .byte #%01100000;--2
