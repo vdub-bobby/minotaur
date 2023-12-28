@@ -91,7 +91,7 @@
 	DONE: Last tank shot in a level should not turn into a powerup (should always explode).
 	IN PROGRESS: 
 	    IN PROGRESS Harmonized music at title screen.  - the functionality is built, need to finish composing music
-	    NOT SURE IF NECESSARY And longer?  Probably have a free byte somewhere we can use at the title screen (MazeGenerationPass?  lol)
+	    NOT SURE IF NECESSARY And longer?  Probably have a free byte somewhere we can use at the title screen 
 	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
     Attract mode?
 	Other...?
@@ -557,7 +557,7 @@ LEVELCOMPLETETIMER	=	$03
 GAMEVARIATIONBITS   =   %00000111
 RANDOMMAZES         =   %00000100
 HARDSTARTINGLEVEL   =   %00000010
-POWERUPSDISABLED     =   %00000001
+POWERUPSDISABLED    =   %00000001
 
 
 
@@ -1318,12 +1318,6 @@ WaitForOverscanEnd
 ;----------------------------End Main Routines-------------------------------
 ;----------------------------------------------------------------------------
 
-TankTitleScreenX
-    .byte 20, 132, 132, 132
-TankTitleScreenY
-    .byte 20, 40, 30, 20
-TankTitleScreenStatus
-    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
    
 
 
@@ -1407,11 +1401,66 @@ SELECTPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
 	bne RESETNotReleased
-    ;--if on title screen, increase starting level to 5 and then 10 and then back to 1
-    ;--if not on the title screen, ignore
+    ;--new: always go to title screen when SELECT is pressed (if not there already)
     lda GameStatus
     and #TITLESCREEN
-    beq DoneWithConsoleSwitches
+;     beq 	%%%%
+    beq NotOnTitleScreenTakeUsThere
+    lda MazeGenerationPass
+    bmi AlreadyOnTitleScreenWeAreFine
+NotOnTitleScreenTakeUsThere
+    ;--reset GameStatus flags
+    lda GameStatus
+    ora #TITLESCREEN|DRAWBASE|GAMEOFF
+    and #~(GENERATINGMAZE|LEVELCOMPLETE)
+    sta GameStatus
+    ;--draw title screen:
+    ldx #TitleGraphicsEnd-TitleGraphics-1
+DrawTitleScreenWhenSELECTPressed
+	txa
+	lsr
+	lsr
+	tay
+    lda TitleGraphicsBank0,X
+    sta PF1Right,Y
+    dex
+    lda TitleGraphicsBank0,X
+    sta PF2Right,Y
+    dex
+    lda TitleGraphicsBank0,X
+    sta PF2Left,Y
+    dex
+    lda TitleGraphicsBank0,X
+    sta PF1Left,Y
+    dex
+    bpl DrawTitleScreenWhenSELECTPressed
+	lda #%11111100
+	sta LastRowL
+	sta LastRowR	    
+    ;--reposition tanks and bullets
+    lda #BALLOFFSCREEN
+    sta BulletY
+    sta BulletY+1
+    sta BulletY+2
+    sta BulletY+3
+    jsr MoveAllTanksOffScreenSubroutine
+    ;--put song at spot where tanks show on screen:
+    lda SongIndex
+    cmp #$FF
+    beq SetSongIndexTo20
+    cmp #$20
+    bcs NoChangeNecessaryToSongIndex
+SetSongIndexTo20    
+    lda #$20
+    sta SongIndex
+NoChangeNecessaryToSongIndex    
+    
+AlreadyOnTitleScreenWeAreFine	
+    ;--if on title screen, increase starting level to 5 and then 10 and then back to 1
+    ;--if not on the title screen, ignore
+;     lda GameStatus
+;     and #TITLESCREEN
+;     beq DoneWithConsoleSwitches
     
     ;--new: pressing select cycles through 8 game variations
     lda GameStatus2
@@ -1424,26 +1473,7 @@ SELECTPressed
     ora Temp
     sta GameStatus2
     
-;     and #HARDSTARTINGLEVEL
-;     bne StartingMazesNumber
-;     
-;     
-;     lda MazeNumber
-;     cmp #$02
-;     bcs StartingMazeNotOne
-;     lda #$05
-;     bne SetStartingMazeNumber   ;branch always
-; StartingMazeNotOne    
-;     cmp #$05
-;     bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
-;     ;--not one and not ten means it is five
-;     lda #$10
-;     bne SetStartingMazeNumber
-; SetStartingMazeToOne
-;     lda #$01    
-; SetStartingMazeNumber
-;     sta MazeNumber
-	lda Debounce
+ 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
 	sta Debounce
     rts    
@@ -2310,12 +2340,6 @@ NotAtIntersection
 
 ;--SPEEDBOOSTSOUNDLENGTH = 20
 
-PowerUpFrequencyTable
-    .byte 15, 15, 15, 15
-    .byte 15, 16, 17, 18
-    .byte 19, 20, 21, 22
-    .byte 23, 24, 25, 26
-    .byte 27, 28, 29, 30
 
 
 PlaySoundSubroutine
@@ -3368,15 +3392,6 @@ CheckForEnemyTankSubroutine
 
 ;****************************************************************************
 
-CheckForBrickColumnShift    ;we'll go around clockwise starting with the top and ending with the left
-    .byte -1, -1, 1, 0
-    
-CheckForBrickRowShift
-    .byte 1, -1, -1, 1    
- 
-DirectionBlock
-    .byte TANKLEFT, TANKDOWN, TANKRIGHT, TANKUP    
-
 
     SUBROUTINE
 CheckForWallSubroutine
@@ -3544,84 +3559,46 @@ PowerUpBonusRoutine
 .PlayerNotMovingNoSpeedBoost
     rts
 
+    
+;****************************************************************************
+
+TankFractionalAddition	
+	lda TankStatus,X
+	asl
+	asl
+	asl
+	asl
+	ora #$1F
+    clc
+    adc TankFractional,X
+	sta TankFractional,X
+    rts
+    
+    
+    
 ;----------------------------------------------------------------------------
 ;-------------------------Data Below-----------------------------------------
 ;----------------------------------------------------------------------------
 	
 
-	
-
-
-	
-	
-;DigitA
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitB
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01111111;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitC
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00100000;--
-;       .byte #%00111100;--
-;DigitD
-;       .byte #%01111111;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000011;--
-;       .byte #%01000010;--
-;       .byte #%01000010;--
-;       .byte #%01111110;--
-;DigitE
-;       .byte #%01111111;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-;DigitF
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01100000;--
-;       .byte #%01111100;--
-;       .byte #%01100000;--
-;       .byte #%00100000;--
-;       .byte #%00111110;--
-	
-
-
-	
-
-
-	
-
-
-	
-
-	
+		
 	PAGEALIGN 1
 	
 	
-    
+	
+;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
+TankTargetAdjustmentX 
+    .byte 0, 0, 0, 0
+    .byte -PINKYADJUSTMENTX, 0, 0, 0
+    .byte PINKYADJUSTMENTX
+TankTargetAdjustmentY 
+    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
+    .byte 0, 0, 0, 0
+    .byte 0
 
 
-PFRegisterLookup
-	.byte 0, 0, 0, 0
+PFRegisterLookup = * - 4
+; 	.byte 0, 0, 0, 0
 	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
 	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
 	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
@@ -3642,34 +3619,17 @@ SoundLength
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80
 
 	
-;****************************************************************************
-
-TankFractionalAddition	
-	lda TankStatus,X
-	asl
-	asl
-	asl
-	asl
-	ora #$1F
-    clc
-    adc TankFractional,X
-	sta TankFractional,X
-    rts
 
 ;****************************************************************************
 	
+TankTitleScreenX
+    .byte 20, 132, 132, 132
+TankTitleScreenY
+    .byte 20, 40, 30, 20
+TankTitleScreenStatus
+    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
 
 
-	
-;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
-TankTargetAdjustmentX 
-    .byte 0, 0, 0, 0
-    .byte -PINKYADJUSTMENTX, 0, 0, 0
-    .byte PINKYADJUSTMENTX
-TankTargetAdjustmentY 
-    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
-    .byte 0, 0, 0, 0
-    .byte 0
 	
 BulletDirectionClear
 BulletUp
@@ -3681,7 +3641,15 @@ BulletLeft
 BulletRight
 	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
-	
+CheckForBrickColumnShift    ;we'll go around clockwise starting with the top and ending with the left
+    .byte -1, -1, 1, 0
+    
+CheckForBrickRowShift
+    .byte 1, -1, -1, 1    
+ 
+DirectionBlock
+    .byte TANKLEFT, TANKDOWN, TANKRIGHT, TANKUP    
+
 	
 PFMaskLookup
 	.byte $C0, $30, $0C, $03
@@ -3689,7 +3657,12 @@ PFMaskLookup
 	.byte $C0, $30, $0C, $03
 	.byte $03, $0C, $30, $C0
 
-	
+PowerUpFrequencyTable
+    .byte 15, 15, 15, 15
+    .byte 15, 16, 17, 18
+    .byte 19, 20, 21, 22
+    .byte 23, 24, 25, 26
+    .byte 27, 28, 29, 30
 	
 /*
     Notes on ramping difficulty.
@@ -3769,10 +3742,10 @@ ReverseDirection = *-1	;--the FF are wasted bytes
 	;tank 1 (pinky) target = base (center bottom)
 	;tank 2 (blinky) target = upper left corner
 	;tank 3 (clyde) target = upper right corner
-SwitchMovementX = *-1
+SwitchMovementX = * - 1
 	.byte 80, 0, 255
-SwitchMovementY = *-1
-	.byte 0, 255, 255
+SwitchMovementY = * - 3
+	.byte /*0, 255, */255
 	
 	
 NumberOfBitsSet
@@ -4049,25 +4022,6 @@ LevelStartSong
     .byte 1<<4
     
     
-; LevelStartFanfarePattern
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23|ARTICULATE
-;     .byte VOLUME6|SQUARE_23|ARTICULATE
-;     .byte VOLUME6|SQUARE_23|ARTICULATE
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23|ARTICULATE
-;     .byte VOLUME6|SQUARE_26
-;     .byte VOLUME6|SQUARE_26|ARTICULATE
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23
-;     .byte VOLUME6|SQUARE_23|ARTICULATE
-
-    
     
      
 FillPatternTable
@@ -4115,9 +4069,6 @@ PercussionDistortionTable = * - 1
 PercussionFrequencyTable = * - 1
     .byte SNAREPITCH, SNARE2PITCH, KICKPITCH
     
-ArticulationTable   ;--routine as currently written will never read the first and fourth values
-	.byte 0,4, 2, 0
-	.byte 0,0,0,0
     
 	
 	
@@ -4142,7 +4093,9 @@ FrequencyTable
 TankDeadStatusBank0
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
     
-    
+ArticulationTable   ;--routine as currently written will never read the first and fourth values
+	.byte 0,4, 2;, 0
+	;.byte 0,0,0,0      ;--uses 5 bytes of next table
 DivideBySevenBank0    
 	ds BLOCKHEIGHT, 0
 	ds BLOCKHEIGHT, 1
@@ -4158,7 +4111,20 @@ DivideBySevenBank0
 	ds BLOCKHEIGHT, 11
 	ds BLOCKHEIGHT, 12
     
-    
+	
+TitleGraphicsBank0
+    ;-----PF1--------PF2--------PF2--------PF1------
+    .byte %00001000, %11111100, %11111100, %00001000
+    .byte %00001000, %10001100, %10001100, %00001000
+    .byte %00001111, %11101111, %11101111, %00001111
+    .byte %00000111, %11111111, %11111111, %00000111
+    .byte %00000000, %00000000, %00000000, %00000000
+    .byte %10101010, %01110101, %01001010, %01010111
+    .byte %10101010, %01010101, %01001110, %00110101
+    .byte %10101010, %01010101, %01001010, %01010101
+    .byte %11111010, %01110111, %11101110, %01110101
+    .byte %11011010, %01110111, %11101110, %01110101
+				
 ;------------------------------------------------------------------------------------------
 	
     echo "----", ($1FE0-*), " bytes left (ROM) at end of Bank 1"
@@ -6391,7 +6357,7 @@ PowerUpExplosionRemoveBricks
     lsr
     lsr
     lsr
-    sta Temp+2
+    sta Temp+2      ;column
     
 	;--now get row
 	lda TankY,X
@@ -6417,7 +6383,7 @@ PowerUpExplosionRemoveBricks
 	;now remove bricks in a loop
 	ldy #7
 .RemoveBricksLoop
-    sty Temp+6      ;MiscPtr = Temp+4, MiscPtr+1 = Temp+5
+    sty Temp+7      ;MiscPtr = Temp+4, MiscPtr+1 = Temp+5
 ;     pha ;save loop index
     ;--first, move to next row and column
     lda Temp+2  ;column
@@ -6460,7 +6426,7 @@ PowerUpExplosionRemoveBricks
     beq .GoToNextBrick  ;branch always	
 	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
 .NotRowZero
-	cmp #MAZEROWS-1
+	cmp #MAZEROWS;-1
 	bcs .OffMazeGoToNext
     ;--if we are here, we have a legit brick location and we will remove it
     ;--get row into Y
@@ -6483,7 +6449,7 @@ PowerUpExplosionRemoveBricks
 .GoToNextBrick 
 ;     pla
 ;     tay ;restore loop index
-    ldy Temp+6
+    ldy Temp+7
     dey
     bpl .RemoveBricksLoop
 

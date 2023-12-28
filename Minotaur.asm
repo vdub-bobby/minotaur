@@ -217,10 +217,10 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ;--this macro aligns at page boundary (only if needed) and echoes the bytes used
     MAC PAGEALIGN
         if <* != 0
-        	echo "---Page aligned -", ((* & $FF00) + $100) - *, "bytes left at PAGEALIGN", [{1}]d, "at location", *
+        	echo "---", ((* & $FF00) + $100) - *, "bytes left at PAGEALIGN", [{1}]d, "at location", *
     	    align 256
     	else
-    	    echo "---Page aligned - 0$ bytes left at PAGEALIGN", [{1}]d, "at location", *
+    	    echo "--- $0 bytes left at PAGEALIGN", [{1}]d, "at location", *
         endif
     ENDM
 	
@@ -228,14 +228,14 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
     MAC ALIGNGFXDATA
 .marker set *
         ds DATASPACEBEFOREGFX - (* & $FF)
-        ECHO "---Aligned graphics data.", (*-.marker), "bytes left at ALIGNGFXDATA", [{1}]d, "at location", .marker
+        ECHO "---", (*-.marker), "bytes left at ALIGNGFXDATA", [{1}]d, "at location", .marker
     ENDM
         
 ;-------------------------Constants Below---------------------------------
 
 ;--scanline count constants
-VBLANK_TIMER = 42       ;--I think this is fine
-OVERSCAN_TIMER = 29     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 38       ;--I think this (38) is fine
+OVERSCAN_TIMER = 32     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
 SOUNDTIMEBUFFER     =   (6*76)/64
 ;--scanline count constants end
@@ -305,8 +305,6 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 FIRSTCOLUMNX    =   16
 
 
-;--bit 7 of FrameCounter used to track whether powerups are on or off, which is determined by difficulty switch A and only can be switched at the title screen
-POWERUPSENABLED = %10000000
 
 ;--constants for game over routine
 ;--TankMovementCounter is reused for this routine
@@ -484,15 +482,31 @@ VOLUME10    =   10
 VOLUME12    =   12
 VOLUME14    =   14
 
-SQUARE_19   =   $00
-SQUARE_20   =   $10
-SQUARE_23   =   $20
-SQUARE_26   =   $30
-SQUARE_31   =   $40
-LEAD_15     =   $50
-LEAD_17     =   $60
-LEAD_11     =   $70
-LEAD_13     =   $80
+
+G5      =   $00
+Fs5     =   $10
+E5      =   $20
+D5      =   $30
+B4      =   $40
+E4      =   $50
+D4      =   $60
+A4      =   $70
+Fs4     =   $80
+A3      =   $90
+G3      =   $A0
+C5      =   $B0
+A5      =   $C0
+
+
+; SQUARE_19   =   $00
+; SQUARE_20   =   $10
+; SQUARE_23   =   $20
+; SQUARE_26   =   $30
+; SQUARE_31   =   $40
+; LEAD_15     =   $50
+; LEAD_17     =   $60
+; LEAD_11     =   $70
+; LEAD_13     =   $80
 
 PATTERNEND  =   255
 
@@ -536,6 +550,19 @@ LEVELCOMPLETETIMER	=	$03
 
 
 ;--end GameStatus flags
+
+
+;--GameStatus2 flags
+
+GAMEVARIATIONBITS   =   %00000111
+RANDOMMAZES         =   %00000100
+HARDSTARTINGLEVEL   =   %00000010
+POWERUPSDISABLED    =   %00000001
+
+
+
+;--end GameStatus2 flags
+
 
 BALLOFFSCREEN	=	0
 
@@ -627,7 +654,7 @@ THREECOPIESCLOSE	=	$03
 TWOCOPIESWIDE		=	$04
 ONECOPYDOUBLE		=	$05
 THREECOPIESMED		=	$06
-ONECOPYQUAD		=	$07
+ONECOPYQUAD		    =	$07
 	;	missile:
 SINGLEWIDTHMISSILE	=	$00
 DOUBLEWIDTHMISSILE	=	$10
@@ -718,6 +745,7 @@ RandomNumberSaved ds 1  ;used to save the random number for more than one frame
 MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
+GameStatus2 ds 1
 Score ds 3
 TanksRemaining ds 1     ;this holds a value from 0 to 20.  Wondering if we can use the top 3 bits for something else?
 
@@ -767,7 +795,7 @@ LastRowR ds 1
 
 SongIndex ds 1
 
-Temp ds 4
+Temp ds 3  
 MiscPtr 
 ScorePtr ds 12
 
@@ -817,6 +845,7 @@ Start
 ;----------------------------------------------------------------------------
 ;-------------------VBLANK Routine-------------------------------------------
 ;----------------------------------------------------------------------------
+    SUBROUTINE
 VBLANKRoutine
     lda #%00001111
 VSYNCWaitLoop2
@@ -833,16 +862,18 @@ VSYNCWaitLoop2
 
 	
 	;--decrement FrameCounter while leaving upper bit untouched:
-	lda FrameCounter
-	sec
-	sbc #1
-	and #$7F
-	sta Temp
-	lda FrameCounter
-	and #$80
-	ora Temp
-	sta FrameCounter
+; 	lda FrameCounter
+; 	sec
+; 	sbc #1
+; 	and #$7F
+; 	sta Temp
+; 	lda FrameCounter
+; 	and #$80
+; 	ora Temp
+; 	sta FrameCounter
 	
+    dec FrameCounter
+
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER|GENERATINGMAZE
 	beq GameOnVBLANK	
@@ -876,9 +907,22 @@ DoneStartingNewGameWithTrigger
 
 	jmp GameNotOnVBLANK
 GameOnVBLANK
+CallingMoveEnemyTank
 	jsr MoveEnemyTanksSubroutine
-	brk
-	.word MoveBulletSubroutine
+CallingMoveBulletSubroutine	
+
+    ;--this is faster than the BRK routine.   25 cycles to switch vs 52
+    lda #<MoveBulletSubroutine
+    sta MiscPtr
+    lda #>MoveBulletSubroutine
+    sta MiscPtr+1
+    jsr BankSwitchAltRoutine1
+
+; 	brk
+; 	.word MoveBulletSubroutine
+FinishedWithMoveBulletSubroutine	
+    ;nop
+    
 GameAlreadyStarted
 GameNotOnVBLANK
 InBetweenLevels
@@ -892,12 +936,25 @@ InBetweenLevels
 	jsr ReadConsoleSwitchesSubroutine
 DoNotReadConsoleSwitchesWhileGeneratingMaze
 
-	jsr UpdateRandomNumber  ;--once per frame
+; 	jsr UpdateRandomNumber  ;--once per frame
+    ;--UpdateRandomNumber
+    lda RandomNumber
+    lsr
+    bcc .SkipEOR
+    eor #$B2
+.SkipEOR
+    sta RandomNumber
+   
 
+    ;--this is faster than the BRK routine.   25 cycles vs 52 (using BRK)
+    lda #<KernelRoutineGame
+    sta MiscPtr
+    lda #>KernelRoutineGame
+    sta MiscPtr+1
+    jsr BankSwitchAltRoutine1
 
-
-	brk
-	.word KernelRoutineGame
+; 	brk
+; 	.word KernelRoutineGame
 	
 	
 ;----------------------------------------------------------------------------
@@ -997,7 +1054,7 @@ ClearMazeLoop
 	;--also turn off sound
 ; 	sta AUDV0
 	sta TanksRemaining
-	lda #$01
+	lda #$00
 	sta MazeNumber
 GameOverRoutineStillGoing
 NoChangeToGameOverVolume
@@ -1015,9 +1072,7 @@ GameNotOver
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
 	jsr PlayerTankMovementRoutine
-; 	brk
-; 	.word MoveBulletSubroutine
-	
+
 	jsr PowerUpBonusRoutine
 
 	
@@ -1158,6 +1213,18 @@ NotGeneratingMaze
 	jmp PutTanksOnTitleScreenNotYet
 NoLongerDrawingTitleScreen
     ;--let's put some stuff on the screen
+    ;--change maze number to whatever game variation is set
+    lda GameStatus2
+    and #HARDSTARTINGLEVEL
+    beq MazeNumberOne
+    lda #$10
+    .byte $2C
+MazeNumberOne
+    lda #$01    
+    sta MazeNumber
+    
+    
+    
     lda TankStatus
     lsr
     bcs TanksAlreadyOnScreen
@@ -1166,7 +1233,16 @@ NoLongerDrawingTitleScreen
     cmp #$20
     bne PutTanksOnTitleScreenNotYet
     ;--reset TankMovementCounter so animation of powerup icon is correct
-    lda #$FF
+    lda FrameCounter
+    and #$7F
+    sec
+    sbc #1
+    lsr
+    lsr
+    sta Temp
+    lda #7
+    sec
+    sbc Temp    
     sta TankMovementCounter
     ldx #3
 PutTanksOnTitleScreenLoop
@@ -1180,9 +1256,9 @@ PutTanksOnTitleScreenLoop
     bpl PutTanksOnTitleScreenLoop
 TanksAlreadyOnScreen
     ;--right here let's check to see if left difficulty switch = A.  If so, display third tank (not powerup)
-    lda FrameCounter
-    and #POWERUPSENABLED
-    beq DisplayTankInsteadOfPowerUp
+    lda GameStatus2
+    and #POWERUPSDISABLED
+    bne DisplayTankInsteadOfPowerUp
     and #P0DIFF
     lda #TANKUP|TANKDOWN
     .byte $2C
@@ -1258,16 +1334,15 @@ TankTitleScreenStatus
 ;----------------------Begin Functions---------------------------------------
 ;----------------------------------------------------------------------------
 
-
-
-UpdateRandomNumber
-    lda RandomNumber
-    lsr
-    bcc SkipEOR
-    eor #$B2
-SkipEOR
-    sta RandomNumber
-    rts
+    ;--inlining this (in two places!)
+; UpdateRandomNumber
+;     lda RandomNumber
+;     lsr
+;     bcc SkipEOR
+;     eor #$B2
+; SkipEOR
+;     sta RandomNumber
+;     rts
 	
 	
 	
@@ -1286,20 +1361,20 @@ ReadConsoleSwitchesSubroutine
 	and #~CONSOLEDEBOUNCEFLAG
 	sta Debounce
 	;--now check difficulty switch ONLY if on title screen
-	lda GameStatus
-	and #TITLESCREEN
-	beq DoneWithConsoleSwitches
-	lda SWCHB
-	and #P0DIFF
-	beq .PowerUpsOn
-	lda FrameCounter        ;bit 7 used to track powerups enabled or no
-	and #~POWERUPSENABLED
-	sta FrameCounter
-	rts
-.PowerUpsOn	
-	lda FrameCounter
-	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
-	sta FrameCounter
+; 	lda GameStatus
+; 	and #TITLESCREEN
+; 	beq DoneWithConsoleSwitches
+; 	lda SWCHB
+; 	and #P0DIFF
+; 	beq .PowerUpsOn@
+; 	lda GameStatus2 
+; 	and #~POWERUPSENABLED
+; 	sta GameStatus2
+; 	rts
+; .PowerUpsOn	
+; 	lda GameStatus2
+; 	ora #POWERUPSENABLED    ;bit 7 used to track powerups enabled or no
+; 	sta GameStatus2
 	
 RESETNotReleased
 DoneWithConsoleSwitches
@@ -1313,10 +1388,16 @@ RESETPressed
 	bne RESETNotReleased
 StartNewGame	
 	;--if RESET pressed, set MazeNumber to $01 if not on the title screen.  Else leave it as-is.
-	lda MazeNumber
+	lda GameStatus2
+	and #HARDSTARTINGLEVEL
 	beq SetMazeNumberToOne
-	lda GameStatus
-	and #TITLESCREEN
+	lda #$10
+	sta MazeNumber
+; 	
+; 	lda MazeNumber
+; 	beq SetMazeNumberToOne
+; 	lda GameStatus
+; 	and #TITLESCREEN
 	bne ResetConsoleSwitchDebounce
 SetMazeNumberToOne	
     lda #$01
@@ -1331,21 +1412,37 @@ SELECTPressed
     lda GameStatus
     and #TITLESCREEN
     beq DoneWithConsoleSwitches
-    lda MazeNumber
-    cmp #$02
-    bcs StartingMazeNotOne
-    lda #$05
-    bne SetStartingMazeNumber   ;branch always
-StartingMazeNotOne    
-    cmp #$05
-    bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
-    ;--not one and not ten means it is five
-    lda #$10
-    bne SetStartingMazeNumber
-SetStartingMazeToOne
-    lda #$01    
-SetStartingMazeNumber
-    sta MazeNumber
+    
+    ;--new: pressing select cycles through 8 game variations
+    lda GameStatus2
+    clc
+    adc #1
+    and #GAMEVARIATIONBITS
+    sta Temp
+    lda GameStatus2
+    and #~GAMEVARIATIONBITS
+    ora Temp
+    sta GameStatus2
+    
+;     and #HARDSTARTINGLEVEL
+;     bne StartingMazesNumber
+;     
+;     
+;     lda MazeNumber
+;     cmp #$02
+;     bcs StartingMazeNotOne
+;     lda #$05
+;     bne SetStartingMazeNumber   ;branch always
+; StartingMazeNotOne    
+;     cmp #$05
+;     bne SetStartingMazeToOne    ;if not 1 and not 5 it must be 10
+;     ;--not one and not ten means it is five
+;     lda #$10
+;     bne SetStartingMazeNumber
+; SetStartingMazeToOne
+;     lda #$01    
+; SetStartingMazeNumber
+;     sta MazeNumber
 	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
 	sta Debounce
@@ -1394,9 +1491,14 @@ MoveTanksOffscreenLoop
 	stx MazeGenerationPass
 AlreadyStartingNewLevel	
 	;--finally, cycle the random number
-	jmp UpdateRandomNumber				;--return from subroutine there
-	
-
+; 	jmp UpdateRandomNumber				;--return from subroutine there
+    lda RandomNumber
+    lsr
+    bcc .SkipEOR
+    eor #$B2
+.SkipEOR
+    sta RandomNumber
+    rts
 
 	
 ;*******************************************************************
@@ -1738,9 +1840,12 @@ MoveAnEnemyTank
 TankNotInPlay
 	;--first - is the tank dead and onscreen?  if so, check it's wait and move it offscreen
 	lda TankStatus,X
-	and #TANKDIRECTION  ;--if pointing UP, then it is still onscreen
+	and #TANKUP|TANKDOWN  
 	cmp #TANKUP|TANKDOWN    ;tank up AND tank down means powerup displaying on screen
 	beq TankIsActuallyPowerup   ;--actually, any direction means still onscreen
+	;--not a powerup, so is an explosion - question is it in onscreen or not:
+	lda TankStatus,X
+	and #TANKDIRECTION
 	cmp #TANKUP             ;tank up only means explosion displaying on screen
 	bne  TankOffScreen
 
@@ -1751,7 +1856,7 @@ TankNotInPlay
 	bne DoNotMoveTankOffscreenYet
 	lda TankStatus,X
 	and #$0F
-; 	sec         ;I think this is set already after CMP and failed BNE branch above above
+; 	sec         ;I think this is set already after CMP and not-taken BNE branch above above
 	sbc #2
 	ora #TANKUP
 	sta TankStatus,X
@@ -2238,8 +2343,6 @@ PlaySoundGameNotOver
     ;--check for music channel
     txa
     beq Channel0PlayMusicOnly
-    ;--add some goofiness for the powerup routine
-    ;--
 Channel1PlaySoundFX
 	lda Channel1Decay
 	and #$7F
@@ -2401,7 +2504,7 @@ NoArticulation
     lda DistortionTable,Y
     sta Temp+2
     lda FrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
     jmp PlayMusicSound
 GetNewNote
     ;--only do this for channel 0
@@ -2467,7 +2570,7 @@ NoChangeToSavedRandomNumber
     lda DistortionTable,Y
     sta Temp+2
     lda FrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
 GetNewPercussion
     jsr GetPercussionSound  ;returns with A holding percussion value *AND* flags set based on what that value is
     beq NoPercussion
@@ -2477,7 +2580,7 @@ GetNewPercussion
     lda PercussionDistortionTable,Y
     sta Temp+2
     lda PercussionFrequencyTable,Y
-    sta Temp+3
+    sta Temp+11
 
 
 NotDownBeat
@@ -2492,7 +2595,7 @@ PlayMusicSound
     sta AUDV0,X
     lda Temp+2
     sta AUDC0,X
-    lda Temp+3
+    lda Temp+11
     sta AUDF0,X
 DoNotEndPercussion
 NoPercussion
@@ -2662,7 +2765,7 @@ EliminateDiagonalSubroutine
 	;--now get directions down to a single direction (i.e., no diagonals)
 	;--first, determine if trying to move diagonally:
 	;	need to count cleared bits in the top nibble
-	ldy #0					;will count bits set with Y
+; 	ldy #0					;will count bits set with Y     UNNECESSARY
 	pha						;save allowed directions on stack
 	txa
 	pha						;save X index on stack
@@ -2849,7 +2952,7 @@ NoTankSoundForEnemyTanks
 	pla						;get saved directions back in A	
 	asl
 	bcs NoRight
-	bvs TurnRightward		;overflow holds movement flag (clear=no movement)
+	bvs TurnRightward		;overflow holds movement flag (set=no movement (just turn tank))
 	jsr TankFractionalAddition
 	lda TankX,X
 	adc #0
@@ -2863,7 +2966,7 @@ TurnRightward
 NoRight
 	asl
 	bcs NoLeft
-	bvs TurnLeftward		;overflow holds movement flag (clear=no movement)
+	bvs TurnLeftward		;overflow holds movement flag (set=no movement)
 	jsr TankFractionalAddition
 	bcc TurnLeftward	;but don't move -- since TankFractional always adds, we can't then SBC #0 and use the carry flag here
 	dec TankX,X
@@ -3295,25 +3398,19 @@ CheckForWallSubroutine
 	sta Temp+2  ;block X (column)
 	;--divide by 7
 	lda TankY,X ;technically should subtract 1 first but the divide by 7 will drop the remainder so we're cool
-	sta Temp+3
-	lsr
-	lsr
-	lsr
-	adc Temp+3
-	ror
-	lsr
-	lsr
-	adc Temp+3
-	ror
-	lsr
-	lsr
+	tay
+	lda DivideBySevenBank0,Y
+	
 	sec
 	sbc #1      ;adjust so zero indexed            
-    sta Temp+3  ;block Y (row)
+    sta Temp+6  ;block Y (row)
 
     txa
     pha ;save tank index
        
+    lda #>PF1Left
+    sta MiscPtr+1
+
     
     ldy #3
 .LookForBrickLoop
@@ -3324,21 +3421,19 @@ CheckForWallSubroutine
     adc CheckForBrickColumnShift,Y       
     and #$1F
     sta Temp+2
-    lda Temp+3
+    lda Temp+6
     clc
     adc CheckForBrickRowShift,Y
-    sta Temp+3
-    ;--now brick to check is at coords (Temp+2, Temp+3)
+    sta Temp+6
+    ;--now brick to check is at coords (Temp+2, Temp+6)
     lda #<PF1Left
     sta MiscPtr
-    lda #>PF1Left
-    sta MiscPtr+1
     ;--check if column > 15 (means off left or right side of maze)
     lda Temp+2
     cmp #16
     bcs .YesBrick
     ;--check if we are checking the bottom row
-    lda Temp+3
+    lda Temp+6
     bne .NotRowZero
     ;--on row zero, so just check the two specific bricks in that row:
     lda Temp+2
@@ -3359,7 +3454,7 @@ CheckForWallSubroutine
     cmp #MAZEROWS
     bcs .YesBrick
     ;--ok, we are in the maze.  Check specific brick:
-    ldy Temp+3  ;row
+    ldy Temp+6  ;row
     dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
     ldx Temp+2  ;column
     lda PFRegisterLookup,X
@@ -3620,7 +3715,7 @@ PFMaskLookup
 
 		
 EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bullet firing
-;a tank's initial speed changes on level #s evenly divisible by 4  (i.e., 4, 8, 12, etc)
+;a tank's initial speed changes on level plus 1 #s evenly divisible by 4  (i.e., 5, 9, 13, etc)
 ;so let's not change bullet debounce on those levels, but DO change it on the other levels.
 ;
 ;   30 is equivalent to firing  0.45 bullets / sec.  Or 1 bullet every 2.22 seconds
@@ -3630,13 +3725,19 @@ EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bul
 ;   27 to 24 is a 12% increase, and so on.  Obviously, near the end the increase is much greater.
 ;   E.g., going from 2 to 1 is a 50% increase.
     .byte 30, 30, 30, 30, 30    ;levels 1-5
-    .byte 27, 24, 22, 22        ;levels 6-9
-    .byte 20, 18, 16, 16        ;levels 10-13
-    .byte 14, 13, 12, 12        ;levels 14-17
-    .byte 11, 10, 9, 9          ;levels 18-21
-    .byte 8, 7, 6, 6            ;levels 22-25
-    .byte 5, 4, 3, 3            ;levels 26-29
-    .byte 2, 1, 0               ;levels 30-32 and higher
+    .byte 28, 26, 24, 26        ;levels 6-9
+    .byte 24, 22, 21, 22        ;levels 10-13
+    .byte 21, 20, 19, 20        ;levels 14-17
+    .byte 19, 18, 17, 18        ;levels 18-21
+    .byte 17, 16, 15, 16        ;levels 22-25
+    .byte 15, 14, 13, 14        ;levels 26-29
+    .byte 13, 12, 11, 12        ;levels 30-33
+    .byte 11, 10, 9, 10         ;levels 34-37
+    .byte 9, 8, 7, 8            ;levels 38-41
+    .byte 7, 6, 5, 6            ;levels 42-45
+    .byte 5, 4, 3, 4            ;levels 46-49
+    .byte 3, 2, 1, 2            ;levels 50-53
+    .byte 1, 0                  ;levels 54-55 and higher
 EnemyBulletDebounceEnd
     
     ;--boost at 10 tanks killed
@@ -3693,32 +3794,44 @@ MovementMask
 TitleScreenSongPointers
     .word TitleScreenSong, TitleScreenSongChannel1    
 
-TitleScreenSong     ;could make this twice as long
+TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pattern
     .word SilencePattern
     .word SilencePattern
-    .word Fanfare1Pattern
+    
+    .word SilencePattern
+    .word Fanfare2PatternC1
+    .word Fanfare4Pattern
+    .word SilencePattern
+    
+    .word Fanfare4Pattern
     .word Fanfare2Pattern
-
-    .word Fanfare1Pattern
+    .word Fanfare4Pattern
     .word Fanfare3Pattern
-    .word Fanfare1Pattern
-    .word SilencePattern
-            
-    .word $FFFF
-    .byte 0<<4
+    
+    .word Fanfare4Pattern
+    .word Fanfare5Pattern
+    
+    ;--don't need end-of-song bytes for channel 1
 
     
-TitleScreenSongChannel1     ;--must be same length as matching channel 0  pattern
+TitleScreenSong    
     .word SilencePattern
     .word SilencePattern
+    
+    .word Fanfare1PatternC1    
     .word Fanfare1PatternC1    
     .word Fanfare2PatternC1    
-
-    .word Fanfare1PatternC1    
-    .word Fanfare3PatternC1    
-    .word Fanfare1PatternC1    
     .word SilencePattern    
-    ;--don't need end-of-song bytes for channel 1
+
+    .word Fanfare3PatternC1    
+    .word Fanfare4PatternC1   
+    .word Fanfare3PatternC1   
+    .word Fanfare5PatternC1   
+    
+    .word Fanfare2PatternC1
+    .word Fanfare4Pattern
+    .word $FFFF
+    .byte 0<<4
 
 
 SilencePattern
@@ -3729,138 +3842,206 @@ SilencePattern
  
   
 LevelStartFanfarePattern
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
-    .byte VOLUME6|LEAD_17
-    .byte VOLUME6|LEAD_17|ARTICULATE
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15
-    .byte VOLUME6|LEAD_15|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
     
  
     
     
 Fanfare1PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME4|G3
+    .byte VOLUME4|G3|ARTICULATE
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3
+    .byte VOLUME4|A3|ARTICULATE
     
 Fanfare2PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23
-    .byte VOLUME4|SQUARE_23|ARTICULATE
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26
-    .byte VOLUME4|SQUARE_26|ARTICULATE
-
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
     
 Fanfare3PatternC1
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|SQUARE_31
-    .byte VOLUME4|SQUARE_31|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13
-    .byte VOLUME4|LEAD_13|ARTICULATE
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11
-    .byte VOLUME4|LEAD_11|ARTICULATE
-        
-    
-    
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
+Fanfare4PatternC1
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+Fanfare5PatternC1
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4|ARTICULATE
+
          
 Fanfare1Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
 Fanfare2Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19
-    .byte VOLUME6|SQUARE_19|ARTICULATE
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20
-    .byte VOLUME6|SQUARE_20|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5|ARTICULATE
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5|ARTICULATE
 
 Fanfare3Pattern
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_23
-    .byte VOLUME6|SQUARE_23|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31
-    .byte VOLUME6|SQUARE_31|ARTICULATE
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26
-    .byte VOLUME6|SQUARE_26|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+       
+Fanfare4Pattern
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+
+Fanfare5Pattern
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME6|G5
+    .byte VOLUME6|G5|ARTICULATE
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5
+    .byte VOLUME6|A5|ARTICULATE
     
     
+        
 LevelStartSong
     .word LevelStartFanfarePattern
     .word SilencePattern
@@ -3938,19 +4119,45 @@ ArticulationTable   ;--routine as currently written will never read the first an
 	.byte 0,4, 2, 0
 	.byte 0,0,0,0
     
+	
+	
+	;--notes: 
+	;   G5, F#5, E5, D5
+	;   B4, E4, D4, A4
+	;   F#4, A3, G3, C5
+	;   A5
 DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
     .byte SQUARESOUND, LEADSOUND, LEADSOUND, LEADSOUND
-    .byte LEADSOUND
+    .byte LEADSOUND, LEADSOUND, LEADSOUND, SQUARESOUND
+    .byte SQUARESOUND
 
 FrequencyTable
     .byte 19, 20, 23, 26
     .byte 31, 15, 17, 11
-    .byte 13
+    .byte 13, 23, 26, 29
+    .byte 17
 
     
 TankDeadStatusBank0
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
+    
+    
+DivideBySevenBank0    
+	ds BLOCKHEIGHT, 0
+	ds BLOCKHEIGHT, 1
+	ds BLOCKHEIGHT, 2
+	ds BLOCKHEIGHT, 3
+	ds BLOCKHEIGHT, 4
+	ds BLOCKHEIGHT, 5
+	ds BLOCKHEIGHT, 6
+	ds BLOCKHEIGHT, 7
+	ds BLOCKHEIGHT, 8
+	ds BLOCKHEIGHT, 9
+	ds BLOCKHEIGHT, 10
+	ds BLOCKHEIGHT, 11
+	ds BLOCKHEIGHT, 12
+    
     
 ;------------------------------------------------------------------------------------------
 	
@@ -4001,9 +4208,9 @@ BankSwitchSubroutine1
 ; 	lsr
 ; 	tax             ;+12    48
 ; 	nop $1FF8,X     ;+5     53  uses top 3 bits of address to determine which bank to switch to
+BankSwitchAltRoutine1
     nop $1FF9
-
-	jmp (MiscPtr)   ;+5     58
+	jmp (MiscPtr)   ;+9     45
 	
 ReturnFromBSSubroutine1
 ; 	tsx             ;+2
@@ -4058,6 +4265,8 @@ KernelRoutineGame
 ; KernelSetupSubroutine
 
 
+
+
 	;rotate Tanks through Players and Missiles
 	
 	lda FrameCounter
@@ -4105,6 +4314,27 @@ PlayerTankMovingSetRegularGraphicsPointers
     bne TankGfxIndexSet ;branch always
 
 NotPlayerTankSkipNotMovingCheck
+	;--if title screen and player 2, then display maze graphic
+	lda GameStatus
+	and #TITLESCREEN
+	beq NotOnTitleScreenDisplayRegularEnemyTanks
+	cpy #2
+	bne DisplayRegularTanks
+	;--standard mazes or random mazes?
+	lda GameStatus2
+	and #RANDOMMAZES
+	beq StandardMazeIcon
+	lda #<(RandomMazeImage+TANKHEIGHT)
+	pha
+	lda #>(RandomMazeImage+TANKHEIGHT)
+	bne SetTankGfxPtr
+StandardMazeIcon	
+	lda #<(StaticMazeImage+TANKHEIGHT)
+	pha
+	lda #>(StaticMazeImage+TANKHEIGHT)
+	bne SetTankGfxPtr                   ;branch always
+DisplayRegularTanks
+NotOnTitleScreenDisplayRegularEnemyTanks	
 	;--get index into tank graphics image
 	lda FrameCounter
     and #%00001100
@@ -4129,13 +4359,27 @@ TankGfxIndexSet
     bne SetTankGfxPtr   ;branch always
 UsePowerUpGraphic
     ldx #0
-    lda TankMovementCounter
-    and #%00111000
-;     lda FrameCounter
-;     and #%11100000          ;was %11100000
+    ;--set/clear TANKLEFT based on bit 4 of framecounter
+    lda FrameCounter
+    and #%00010000
+    beq ClearTANKLEFT
+    lda TankStatus,Y
+    ora #TANKLEFT
+    sta TankStatus,Y
+    bne SetPowerUpFrame
+ClearTANKLEFT
+    lda TankStatus,Y
+    and #~TANKLEFT
+    sta TankStatus,Y
+SetPowerUpFrame   
+    
+;     lda TankMovementCounter
+;     and #%00111000
+    lda FrameCounter
+    and #%11100000          ;was %11100000
     bne StaticPowerUpIcon
     lda FrameCounter
-    and #%00011100
+    and #%00001100
     lsr
     tax
 StaticPowerUpIcon    
@@ -4163,14 +4407,15 @@ TankNotFacingUp
 	lda TankDownFrame+1,X
 	bne SetTankGfxPtr   ;branch always
 TankNotFacingDown
-	lda TankStatus,Y
-	and #TANKRIGHT
-	beq TankNotFacingRight
-	lda TankRightFrame,X
-	pha
-	lda TankRightFrame+1,X
-	bne SetTankGfxPtr   ;branch always
-TankNotFacingRight
+    ;--so tank is facing right or left, either way graphic image is the same
+; 	lda TankStatus,Y
+; 	and #TANKRIGHT
+; 	beq TankNotFacingRight
+; 	lda TankRightFrame,X
+; 	pha
+; 	lda TankRightFrame+1,X
+; 	bne SetTankGfxPtr   ;branch always
+; TankNotFacingRight
 	lda TankRightFrame,X
 	pha
 	lda TankRightFrame+1,X
@@ -4318,50 +4563,19 @@ SetupScorePtrsLoop
 ; 	lda #RIGHTEIGHT
 ; 	sta HMM1            ;what is this for?
 
-	SUBROUTINE
-	if DEBUGTANKAICOUNTER = 1
-        lda TankMovementCounter
-        cmp #TANKAISWITCH
-        bcs .tankaidebug
-        lda #BLUE|$4
-        bcc .tankaidebugend
-.tankaidebug
-    	lsr
-    	lsr
-    	lsr
-    	lsr
-    	ora #WALLCOLOR&$F0
-.tankaidebugend
-    ELSE
-        lda GameStatus
-        and #GAMEOVER
-        beq RegularWallColor
-        lda TankMovementCounter
-        asl ;--get WALLDONEFLASHING bit into carry
-        bcc WallFlashingColor
-        lda #0
-WallFlashingColor
-        lsr
-        and #$0F
-        ora #(WALLCOLOR&$F0)
-        bne SetWallColor
-RegularWallColor
-        lda #WALLCOLOR
-SetWallColor        
-    ENDIF
-
-    sta Temp+3
 
     
-    lda FrameCounter
-    asl
-    bcc ScoreColorNoPowerUps
+    lda GameStatus2
+    and #POWERUPSDISABLED
+    bne ScoreColorNoPowerUps
     ldx #SCORECOLOR_POWERUPSENABLED
     .byte $2C
 ScoreColorNoPowerUps
     ldx #SCORECOLOR_POWERUPSDISABLED
     
     
+PreWaitForVblankEnd    
+ ;   nop
     
 
 WaitForVblankEnd
@@ -4452,39 +4666,45 @@ ScoreKernelLoop				 ;		  59		this loop can't cross a page boundary!
 	sty GRP0					  ;+9		67	
 	
 	
-	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
-	sta NUSIZ0
-	sta NUSIZ1                  ;+8     75
-	
 	;--tank colors
-SetTankColors	
-	lda FrameCounter
-	and #1
-    tax
-    lda P0M0Color,X
-    sta COLUP0
-    lda P1M1Color,X
-    sta COLUP1	                ;+21    20
 	
+    lda GameStatus          ;+3
+    and #GAMEOVER           ;+2
+    beq RegularWallColor    ;+2/3   7/8
+    lda TankMovementCounter ;+3     10
+    asl                     ;+2     12      get WALLDONEFLASHING bit into carry
+    bcc WallFlashingColor   ;+2/3   14/15
+    lda #0                  ;+2     16
+WallFlashingColor           ;       15/16
+    lsr                     ;+2     17/18
+    and #$0F                ;+2     19/20
+    ora #(WALLCOLOR&$F0)    ;+2     21/22
+    .byte $2C               ;+4     25/26   skip next two bytes
+RegularWallColor            ;       8       
+    lda #WALLCOLOR          ;+2     10
+SetWallColor                ;       10/25/26 
 
-	
+    sta Temp+7              ;+3     29      Temp+7 overwrites the ScorePtr+4 and MiscPtr+4
+    sta COLUPF              ;+3	    32
 	;--reflect P0 or P1 as necessary.   prep for flip loop below
-    txa
-	asl
-	tax
-	lda RotationTables,X        ;RotationTablesBank1 if moved back to bank 1
+;     txa
+; 	asl
+; 	tax
+    lda FrameCounter
+    and #1
+    asl
+    tay
+	lda RotationTables,Y        ;RotationTablesBank1 if moved back to bank 1
 	sta MiscPtr
-	lda RotationTables+1,X
-	sta MiscPtr+1               ;+20    40
+	lda RotationTables+1,Y
+	sta MiscPtr+1               ;+14    46
 	
     
-    lda Temp+3
-	sta COLUPF                  ;+6     46
 	;--do this above...the rest we do during the wall below.  
 
 	;---reflect P0/P1
 	;--this loop is garbage, need to rewrite so it is faster.... though not sure how, actually.
-	ldy #3              ;+2     24
+	ldy #3              ;+2     48
 SetREFPLoop
 	lax (MiscPtr),Y		;+5      5      get X index into graphics registers
 	lda TankStatus,Y    ;+4      9
@@ -4498,11 +4718,14 @@ EndREFPLoop             ;       14/18/23
 	dey                 
 	bpl SetREFPLoop     ;+5     19/23/28
     ;loop minimum time is 76 cycles.  maximum is 101
-    ;                   ;+76    98  (or 22)
-    ;                   ;+101   135 (or 59)
+    ;                   ;+76    114 (or 48)
+    ;                   ;+101   149 (or 73)     !!!zero room for error!!!
 
 	
 	
+    ;%%%
+    
+    
     sta WSYNC
 	
 	ldx #$C0
@@ -4513,10 +4736,29 @@ EndREFPLoop             ;       14/18/23
 	sta PF1
 	sta PF2                         ;+9     22
 	
-	ldx #4
+	lda #ONECOPYNORMAL|OCTWIDTHMISSILE
+	sta NUSIZ0
+	sta NUSIZ1                      ;+8     30
+
+SetTankColors	
+	lda FrameCounter
+	and #1
+    tax
+    asl
+    tay
+    lda P0M0Color,X
+    sta COLUP0
+    lda P1M1Color,X
+    sta COLUP1	                    ;+25     55
+	
+	
+	
+		
+	ldx #4                          ;+2     57
 ; PositioningLoopVBLANK	;--excluding players (and M1)
 	lda PlayerX+4;,X
-	jsr PositionASpriteSubroutineBank2   ;        9
+	jsr PositionASpriteSubroutineBank2     ;+9     66       need to reach subroutine 8 cycles before end of scanline (cycle 68)    
+	                                       ;        9       subr returns at 9th cycle of scanline
 ; 	dex
 ; 	cpx #3
 ; 	bne PositioningLoopVBLANK
@@ -4573,7 +4815,6 @@ PlayerTankRightFrame
    
 PowerUpIconFrame
     .word PowerUpImage1+TANKHEIGHT, PowerUpImage3+TANKHEIGHT, PowerUpImage2+TANKHEIGHT, PowerUpImage3+TANKHEIGHT
-    .word PowerUpImage1+TANKHEIGHT, PowerUpImage5+TANKHEIGHT, PowerUpImage4+TANKHEIGHT, PowerUpImage5+TANKHEIGHT
     
 TanksRemainingPF1Mask
 	.byte $FF,$7F,$3F,$1F,$0F,$07,$03,$01,$00,$00,$00
@@ -4582,21 +4823,6 @@ TanksRemainingPF2Mask
 	.byte $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3E,$3C
     
 
-;--these tables are offset into RespawnTankXPosition and RespawnTankYPosition	
-;--tank 1 respawns farthest from player
-;--tank 2 respawns middle
-;--tank 3 respawns closest to player
-
-;for left/right: 0 = left, 6 = right
-TankRespawnPlayerRight = * - 1
-    .byte 0, 6, 6
-TankRespawnPlayerLeft = * - 2       ;uses 6 from previous table
-    .byte /*8, */0, 0
-; for top/bottom: 0 = top, 12 = bottom    
-TankRespawnPlayerTop = * - 1
-    .byte 12, 12, 0
-TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
-    .byte /*0, */0, 12
 
 	
 RespawnTankXPosition
@@ -4607,14 +4833,9 @@ RespawnTankXPosition
 
 RespawnTankYPosition 
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
-	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
 	
-RespawnCountdownGraphic
-    .byte $00, $80, $C0, $E0
-    .byte $F0, $F8, $FC, $FE
 	
 ;----------------End Some Data Stuck Here	
 	
@@ -4770,7 +4991,7 @@ KernelLastRowLoop			;		36
 	sta GRP0				;+15	57
 BackFromSwitch0b
 	
-	lda Temp+3;#WALLCOLOR
+	lda Temp+7;#WALLCOLOR
 	sta COLUPF				;+5		62
 	
 
@@ -5014,7 +5235,7 @@ BottomKernelLoopInner			;		35
 	asl							;+2
 	asl							;+2
 	ora #3						;+2
-	sta NUSIZ0					;+3		56      ;this is too early sometimes and causes errant collisions
+	sta NUSIZ0					;+3		56      
 
 	lda (Player1Ptr),Y			;+5		
 	sta HMM1					;+3			
@@ -5038,7 +5259,7 @@ BottomKernelLoopInnerMiddle     ;       17
 	;	which is necessary to mask the missiles before we are ready to display them
 	lda TanksRemainingPF2Mask,X
 	sta PF2
-	SLEEP 6						;+13	30		MUST be 10 here so that we don't run over the scanline (>12) or change NUSIZ0 too early (<10)--- OR?????
+	SLEEP 6						;+13	30		
 	dey
 	bpl BottomKernelLoopInner	;+5		35      
 
@@ -5239,8 +5460,9 @@ FillMazeLoop
 	ora Score+2
 	bne NotGameStartUpdateMazeNumber
 	lda MazeNumber
-	clc
-	bcc SetMazeSeed
+; 	clc
+; 	bcc SetMazeSeed
+    bne SetMazeSeed     ;branch always
 NotGameStartUpdateMazeNumber	
 	sed
 	lda MazeNumber
@@ -5251,9 +5473,20 @@ UpdateMazeNumber
 	beq UpdateMazeNumber
 	cld
 SetMazeSeed	
+	lda GameStatus2
+	and #RANDOMMAZES
+	bne RandomMazeSeed
+	lda MazeNumber
+	clc
     adc #99  ;--don't like the initial maze, too hard with long vertical corridor from the top to the base
 	;and set seed for maze
 	sta RandomNumber	
+RandomMazeSeed	
+
+
+
+	
+	
 	
 	;--and that's it for the first pass
 	jmp DoneWithFirstPass
@@ -5564,7 +5797,19 @@ SkipCreatingConnectingPassageLeft
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
-	lda #TANKAISWITCH+1
+; 	lda #TANKAISWITCH+1
+;     lda FrameCounter
+;     and #$7F
+;     sec
+;     sbc #1
+;     lsr
+;     lsr
+;     sta Temp
+;     lda #7
+;     sec
+;     sbc Temp	
+;     ora #TANKAISWITCH
+    lda #TANKAISWITCH+1
 	sta TankMovementCounter ;enemy tanks start in regular movement mode at beginning of every level....maybe?  
 	
 	
@@ -5823,7 +6068,7 @@ CheckForExplosionCollisionCheckEnd
     
 TankHitLiveTank
     ;--if Y = 0 then tank run into by player
-    sty Temp+3  ;save this we will check below
+    sty Temp+6  ;save this we will check below
     ;--restore Y
     ldy Temp+2
     ;--now what?
@@ -5839,7 +6084,7 @@ TankHitLiveTank
     beq TankAlreadyDeadCannotDie
     ;--else tank is powerup.  what to do exactly?
     ;--if hit by non-player tank, ignore:
-    lda Temp+3  ;--this holds zero if player tank is what hit it
+    lda Temp+6  ;--this holds zero if player tank is what hit it
     bne NonPlayerTankHitPowerUp
 
     
@@ -6069,9 +6314,9 @@ SetTankStatusForDeadTanks
     ;       and no powerup on screen
     ;       and left difficulty switch = B
 TankIsNewlyDead
-    lda FrameCounter
-    and #POWERUPSENABLED
-    beq PowerUpsTurnedOff
+    lda GameStatus2
+    and #POWERUPSDISABLED
+    bne PowerUpsTurnedOff
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
     bne NoPowerUp
@@ -6152,19 +6397,19 @@ PowerUpExplosionRemoveBricks
 	lda TankY,X
     clc
     adc #TANKHEIGHT/2
-    sta Temp+3      
+    sta Temp+6   
 	lsr
 	lsr
 	lsr
-	adc Temp+3
+	adc Temp+6
 	ror
 	lsr
 	lsr
-	adc Temp+3
+	adc Temp+6
 	ror
 	lsr
 	lsr
-	sta Temp+3      ;store row back into Temp+3
+	sta Temp+6     ;store row back into Temp+6
 
 
 	
@@ -6180,10 +6425,10 @@ PowerUpExplosionRemoveBricks
     adc RemoveBrickColumnShift,Y
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
-    lda Temp+3  ;row
+    lda Temp+6  ;row
     clc       
     adc RemoveBrickRowShift,Y
-    sta Temp+3
+    sta Temp+6
 	lda #<PF1Left
 	sta MiscPtr
 	lda #>PF1Left
@@ -6193,7 +6438,7 @@ PowerUpExplosionRemoveBricks
 	cmp #16
 	bcs .OffMazeGoToNext
     ;--check if we are on row zero
-	lda Temp+3
+	lda Temp+6
 	bne .NotRowZero
 	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
 	lda Temp+2
@@ -6219,7 +6464,7 @@ PowerUpExplosionRemoveBricks
 	bcs .OffMazeGoToNext
     ;--if we are here, we have a legit brick location and we will remove it
     ;--get row into Y
-    ldy Temp+3
+    ldy Temp+6
     dey                 ;is this correct?
     ;--get column into X
     ldx Temp+2
@@ -6352,18 +6597,23 @@ NoScoreForWallDestructionByEnemies
 	sec
 	sbc #2
 	;--use constant 27-cycle divide by 7 to get row instead of repeated-subtraction method
-	sta Temp
-	lsr
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr
-	adc Temp
-	ror
-	lsr
-	lsr                 ;+27
+	
+	tay
+	lda BlockRowTable,Y     ;can use this as a divide table only in bank 1
+	
+	
+; 	sta Temp
+; 	lsr
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr
+; 	adc Temp
+; 	ror
+; 	lsr
+; 	lsr                 ;+27
 	
 	tay
 ; FoundWhichRowBulletIsIn
@@ -6524,10 +6774,13 @@ PlayerLeft
 ; TopRowEnemyTankRespawn
 SetEnemyRespawnPosition
 SetPlayerRespawnLocation
-    lda RespawnTankYPosition,Y
-	sta TankY,X
 	lda RespawnTankXPosition,Y
 	sta TankX,X
+	tya
+	lsr
+	tay
+    lda RespawnTankYPosition,Y
+	sta TankY,X
 
     rts
 
@@ -6919,6 +7172,12 @@ MissileTwo
 	.byte RIGHTTHREE|(SINGLEWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 	.byte NOMOVEMENT|(QUADWIDTHMISSILE>>2)|(THREECOPIESCLOSE>>2)
 
+	
+PlayerTankColor
+    .byte TANKCOLOR1, TANKCOLOR3
+    
+	
+	
     ALIGNGFXDATA 1
 	
 TankGfxVertical
@@ -6941,7 +7200,6 @@ TankUpAnimated1b
         .byte #%11011000;--
         .byte 0
 TankUpAnimated2 = * - 1
-; 		.byte 0
 		.byte #%11011000;--
 		.byte #%00111111;--
 		.byte #%11111100;--
@@ -6975,7 +7233,6 @@ TankUpAnimated3b
         .byte #%00011011;--
 		.byte 0
 TankUpAnimated4 = * - 1
-; 		.byte 0
 		.byte #%00011011;--
 		.byte #%11111100;--
 		.byte #%00111111;--
@@ -6992,7 +7249,6 @@ TankUpAnimated4b
         .byte #%11011011;--
 		.byte 0
 TankDownAnimated1 = * - 1
-;         .byte 0
         .byte #%11011000;--
         .byte #%00011011;--
         .byte #%11011000;--
@@ -7009,7 +7265,6 @@ TankDownAnimated1b
 		.byte #%11011011;--
 		.byte 0
 TankDownAnimated2 = * - 1
-;         .byte 0
         .byte #%00011000;--
         .byte #%11011011;--
         .byte #%00011000;--
@@ -7026,7 +7281,6 @@ TankDownAnimated2b
 		.byte #%11011000;--
 		.byte 0
 TankDownAnimated3 = * - 1
-;         .byte 0
         .byte #%00011011;--
         .byte #%11011000;--
         .byte #%00011011;--
@@ -7043,7 +7297,6 @@ TankDownAnimated3b
 		.byte #%00011000;--
 		.byte 0
 TankDownAnimated4 = * - 1
-;         .byte 0
         .byte #%11011011;--
         .byte #%00011000;--
         .byte #%11011011;--
@@ -7125,24 +7378,12 @@ PlayerTankUp4b
         .byte #%11011011;--1
         .byte 0		
         
-        	
-EntryPointRowOffsetTable
-    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
-    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
-StartingTankStatus
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
 
 		PAGEALIGN 4
 	
 DigitData
-Zero
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%01101100;--
 One
         .byte #%00011000;--
         .byte #%00011000;--
@@ -7151,46 +7392,6 @@ One
         .byte #%00011000;--
         .byte #%00111000;--
         .byte #%00011000;--
-Two
-        .byte #%11111110;--
-        .byte #%11000000;--
-        .byte #%01111000;--
-        .byte #%00011110;--
-        .byte #%00000110;--
-        .byte #%11000110;--
-        .byte #%01111100;--
-Three
-        .byte #%01111100;--
-        .byte #%11000110;--
-        .byte #%00000110;--
-        .byte #%00001100;--
-        .byte #%00000110;--
-        .byte #%11000110;--
-        .byte #%01111100;--
-Four
-        .byte #%00001100;--
-        .byte #%00001100;--
-        .byte #%11101110;--
-        .byte #%11001100;--
-        .byte #%01101100;--
-        .byte #%00101100;--
-        .byte #%00001100;--
-Five
-        .byte #%01111100;--
-        .byte #%11000110;--
-        .byte #%00000110;--
-        .byte #%00000110;--
-        .byte #%11111100;--
-        .byte #%11000000;--
-        .byte #%11111110;--
-Six
-        .byte #%01101100;--
-        .byte #%11000110;--
-        .byte #%11000110;--
-        .byte #%11101100;--
-        .byte #%11000000;--
-        .byte #%11000000;--
-        .byte #%01101100;--
 Seven
         .byte #%00110000;--
         .byte #%00110000;--
@@ -7199,23 +7400,77 @@ Seven
         .byte #%00000110;--
         .byte #%00000110;--
         .byte #%11111110;--
-Eight
+Two = * - 1
+;         .byte #%11111110;--
+        .byte #%11000000;--
+        .byte #%01111000;--
+        .byte #%00011110;--
+        .byte #%00000110;--
+        .byte #%11000110;--
+        .byte #%01111100;--
+Three = * - 1
+;         .byte #%01111100;--
+        .byte #%11000110;--
+        .byte #%00000110;--
+        .byte #%00001100;--
+        .byte #%00000110;--
+        .byte #%11000110;--
+        .byte #%01111100;--
+Five = * - 1
+;         .byte #%01111100;--
+        .byte #%11000110;--
+        .byte #%00000110;--
+        .byte #%00000110;--
+        .byte #%11111100;--
+        .byte #%11000000;--
+        .byte #%11111110;--
+Four
+        .byte #%00001100;--
+        .byte #%00001100;--
+        .byte #%11101110;--
+        .byte #%11001100;--
         .byte #%01101100;--
+        .byte #%00101100;--
+        .byte #%00001100;--
+Six
+        .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11101100;--
+        .byte #%11000000;--
+        .byte #%11000000;--
+        .byte #%01101100;--
+Eight = * - 1
+;         .byte #%01101100;--
         .byte #%11000110;--
         .byte #%11000110;--
         .byte #%01101100;--
         .byte #%11000110;--
         .byte #%11000110;--
         .byte #%01101100;--
-Nine
-        .byte #%01101100;--
+Nine = * - 1
+;         .byte #%01101100;--
         .byte #%00000110;--
         .byte #%00000110;--
         .byte #%01101110;--
         .byte #%11000110;--
         .byte #%11000110;--
         .byte #%01101100;--
+Zero = * - 1
+;         .byte #%01101100;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%11000110;--
+        .byte #%01101100;--
 
+        
+EntryPointRowOffsetTable
+    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
+    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
+        
+        
 	
 P1CollisionTable
 	.byte 1, 2
@@ -7224,7 +7479,7 @@ M0CollisionTable
 M1CollisionTable
 	.byte 2, 3	
 P0CollisionTable
-	.byte 3;, 0     --uses zero in next table
+	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
 
     ALIGNGFXDATA 2
 		
@@ -7247,7 +7502,6 @@ TankRightAnimated1b
 		.byte #%11001100;--
 		.byte 0
 TankRightAnimated2 = * - 1
-;         .byte 0
         .byte #%11001100;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -7264,7 +7518,6 @@ TankRightAnimated2b
 		.byte #%10011001;--
 		.byte 0
 TankRightAnimated3 = * - 1
-;         .byte 0
         .byte #%10011001;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -7281,7 +7534,6 @@ TankRightAnimated3b
 		.byte #%00110011;--
 		.byte 0
 TankRightAnimated4 = * - 1
-;        	.byte 0
         .byte #%00110011;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -7299,7 +7551,6 @@ TankRightAnimated4b
 		.byte 0
 
 PlayerTankRight1 = * - 1
-;         .byte 0
         .byte #%11011101;--       
         .byte #%00110000;--        
         .byte #%01111111;--
@@ -7316,7 +7567,6 @@ PlayerTankRight1b
         .byte #%01110111;--
         .byte 0
 PlayerTankRight2    = *-1
-;         .byte 0
         .byte #%10111011;--
         .byte #%00110000;--
         .byte #%01111111;--
@@ -7333,7 +7583,6 @@ PlayerTankRight2b
         .byte #%11101110;--
         .byte 0
 PlayerTankRight3    = *-1
-      ;  .byte 0
         .byte #%01110111;--2
         .byte #%00110000;--4
         .byte #%01111111;--6
@@ -7418,6 +7667,8 @@ TankKilledImageb
         .byte #%01001010;--11
         .byte 0
         
+        
+        
 PowerUpImage1 = * - 1
         .byte #%00111100;--2
         .byte #%00111100;--4
@@ -7425,17 +7676,16 @@ PowerUpImage1 = * - 1
         .byte #%11111111;--8
         .byte #%10000001;--10
         .byte #%00000000;--12
-PowerUpImage1b
+        
+PowerUpImage1b 
         .byte 0
         .byte #%00000000;--1
         .byte #%00111100;--3
         .byte #%01111110;--5
-        .byte #%11111111;--7
+        .byte #%01111110;--7
         .byte #%10000001;--9
-        .byte #%11000011;--11
+        .byte #%01000010;--11
         .byte 0
-        
-        
         
         
         
@@ -7453,7 +7703,6 @@ TanksRemainingGfx
 	
 	PAGEALIGN 5
 	
-	; put crap here
 TitleGraphics
     ;-----PF1--------PF2--------PF2--------PF1------
     .byte %00001000, %11111100, %11111100, %00001000
@@ -7483,13 +7732,16 @@ PFMaskLookupBank2
 	.byte $C0, $30, $0C, $03
 	.byte $03, $0C, $30, $C0
 
-
+RotationOdd
+	.byte 0	;and first 3 bytes of next table
+RotationEven
+	.byte 2, 1, 3, 0
 
     ALIGNGFXDATA 3
        
         
         
-PlayerTankDown3 ;= * - 1
+PlayerTankDown3 
         .byte 0
         .byte #%11011000;--2
         .byte #%00011011;--4
@@ -7529,7 +7781,7 @@ PowerUpImage2 = * - 1       ;straight right
         .byte #%01110100;--6
         .byte #%01111000;--8
         .byte #%00110000;--10
-        .byte #%00000000;--12      
+        .byte #%00000000;--12
 PowerUpImage2b        
         .byte 0
         .byte #%00000000;--1
@@ -7537,66 +7789,67 @@ PowerUpImage2b
         .byte #%01111110;--5
         .byte #%01111100;--7
         .byte #%01100000;--9
-        .byte #%00011110;--11
+        .byte #%00011100;--11
         .byte 0
+        
+
 PowerUpImage3 = * - 1       ;angled right
-        .byte #%00001110;--2
-        .byte #%00111110;--4
-        .byte #%01101000;--6
-        .byte #%01111000;--8
-        .byte #%00100100;--10
+        .byte #%00001111;--2
+        .byte #%00111111;--4
+        .byte #%01101100;--6
+        .byte #%01111100;--8
+        .byte #%00100010;--10
         .byte #%00000000;--12
+        
 PowerUpImage3b
      .byte 0
         .byte #%00000000;--1
-        .byte #%00011110;--3
-        .byte #%01111100;--5
-        .byte #%01111100;--7
-        .byte #%01001000;--9
-        .byte #%00011011;--11
-        .byte 0     
-
-PowerUpImage4 = * - 1       ;straight left
-        .byte #%01100000;--2
-        .byte #%01111100;--4
-        .byte #%00101110;--6
-        .byte #%00011110;--8
-        .byte #%00001100;--10
-        .byte #%00000000;--12
-PowerUpImage4b
-        .byte 0
-        .byte #%00000000;--1
-        .byte #%01111000;--3
+        .byte #%00111111;--3
         .byte #%01111110;--5
-        .byte #%00111110;--7
-        .byte #%00000110;--9
-        .byte #%01111000;--11
-        .byte 0        
-PowerUpImage5 = * - 1       ;angled left
-        .byte #%01110000;--2
-        .byte #%01111100;--4
-        .byte #%00010110;--6
-        .byte #%00011110;--8
-        .byte #%00100100;--10
+        .byte #%01111110;--7
+        .byte #%01000100;--9
+        .byte #%00011001;--11
+     .byte 0     
+ 
+StaticMazeImage =    * - 1
+        .byte #%10111110;--2
+        .byte #%11101011;--4
+        .byte #%10001000;--6
+        .byte #%00100011;--8
+        .byte #%11111010;--10
         .byte #%00000000;--12
-PowerUpImage5b
+StaticMazeImageb
         .byte 0
         .byte #%00000000;--1
-        .byte #%01111000;--3
-        .byte #%00111110;--5
-        .byte #%00111110;--7
-        .byte #%00010010;--9
-        .byte #%11011000;--11
+        .byte #%10111110;--3
+        .byte #%11101011;--5
+        .byte #%10001000;--7
+        .byte #%00100011;--9
+        .byte #%11111010;--11
         .byte 0        
+        
+RandomMazeImage =   * - 1
+        .byte #%10100010;--2
+        .byte #%11100011;--4
+        .byte #%10010000;--6
+        .byte #%00100101;--8
+        .byte #%11000010;--10
+        .byte #%00000000;--12
+RandomMazeImageb
+        .byte 0
+        .byte #%00000000;--1
+        .byte #%10101010;--3
+        .byte #%11001011;--5
+        .byte #%10100000;--7
+        .byte #%00011001;--9
+        .byte #%11111010;--11
+        .byte 0            
+        
         
 PlayerStartingStatus
     .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
-;     .byte TANKRIGHT|8, TANKRIGHT|10, TANKRIGHT|12, TANKRIGHT|14
 
     
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine
-	;.byte <DigitA, <DigitB, <DigitC, <DigitD, <DigitE, <DigitF
 PFPointer
 	.word PF1Left, PF2Left, PF2Right, PF1Right
     
@@ -7611,11 +7864,6 @@ DigitDataMissileLo
 RotationTables
 	.word RotationEven, RotationOdd	
 
-RotationOdd
-	.byte 0	;and first 3 bytes of next table
-RotationEven
-	.byte 2, 1, 3, 0
-    ;--have a lot of space left here. (currently $2F bytes)
 	
     
     
@@ -7641,21 +7889,40 @@ BulletRightBank2
 TankCollisionRotationTables
     .word TankCollisionBitsEven, TankCollisionBitsOdd
 
-TankCollisionBitsOdd
-    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -player tank
-    .byte %11000100 ;M0 to P0, M0 to P1, and M0 to M1   -enemy tank 1
-    .byte %10011000 ;M0 to P0, M1 to P0, and P0 to P1   -enemy tank 2
-    .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3
+    
+TankCollisionBitsOdd    ;--this is a 4-byte table, uses first 3 bytes of next table
+    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -player tank (odd)
 TankCollisionBitsEven
-    .byte %11000100, %10011000, %00110100, %01101000
+    .byte %11000100 ;M0 to P0, M0 to P1, and M0 to M1   -enemy tank 1 (odd), player tank (even)
+    .byte %10011000 ;M0 to P0, M1 to P0, and P0 to P1   -enemy tank 2 (odd), enemy tank 1 (even)
+    .byte %00110100 ;M1 to P1, M1 to P0, and M0 to M1   -enemy tank 3 (odd), enemy tank 2 (even)
+    .byte %01101000 ;M0 to P1, M1 to P1, and P0 to P1   -enemy tank 3 (even) 
     
 PFClearLookup
 	.byte $3F, $CF, $F3, $FC
 	.byte $FC, $F3, $CF, $3F
 	.byte $3F, $CF, $F3, $FC
 	.byte $FC, $F3, $CF, $3F
-    
-	
+   
+StartingTankStatus
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+	 
+;--these tables are offset into RespawnTankXPosition and RespawnTankYPosition	
+;--tank 1 respawns farthest from player
+;--tank 2 respawns middle
+;--tank 3 respawns closest to player
+
+;for left/right: 0 = left, 6 = right
+TankRespawnPlayerRight = * - 1
+    .byte 0, 6, 6
+TankRespawnPlayerLeft = * - 2       ;uses 6 from previous table
+    .byte /*8, */0, 0
+; for top/bottom: 0 = top, 12 = bottom    
+TankRespawnPlayerTop = * - 1
+    .byte 12, 12, 0
+TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
+    .byte /*0, */0, 12
+
     PAGEALIGN 6
 
     
@@ -7666,8 +7933,8 @@ StartingTankXPosition
 	.byte PLAYERSTARTINGX, ENEMY1TOPLEFTSTARTINGX1, ENEMY2TOPLEFTSTARTINGX1, ENEMY3TOPRIGHTSTARTINGX1
     
     
-
-	
+    Echo "---", BLOCKHEIGHT+1 - (* & $FF), "bytes left at BlockRowTable"
+		
 	ds BLOCKHEIGHT+1 - (* & $FF)
 BlockRowTable
 DigitBlank
@@ -7694,13 +7961,7 @@ DigitBlank
 TankDeadStatus
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
 
-RemoveBrickColumnShift
-    .byte 1,1,-2,2
-    .byte -2,1,1;,0
     
-RemoveBrickRowShift
-    .byte 0,0,-1,0
-    .byte -1,0,0,0	
 	
 	
 ToneBank2
@@ -7717,9 +7978,6 @@ SoundLengthBank2
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
-	
-NextPowerUpActivation
-    .byte %01000000, %10000000, %11000000, %11000000    
 
 	
 NumberOfBitsSetBank2
@@ -7728,16 +7986,21 @@ NumberOfBitsSetBank2
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
 
-	
+RemoveBrickColumnShift
+    .byte 1,1,-2,2
+    .byte -2,1,1;,0 ;--uses byte in next table
 AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 0, 0, 1, 1
     .byte 1, 1, 1, 1
     .byte 1, 1, 1, 1
-    .byte 1, 1, 0, 0		
-	
-PlayerTankColor
-    .byte TANKCOLOR1, TANKCOLOR3
+    .byte 1, 1, 0, 0	
+RemoveBrickRowShift = * - 2
+    .byte /*0,0,*/-1,0
+    .byte -1,0,0,0	
     
+RespawnCountdownGraphic = * - 1
+    .byte /*$00, */$80, $C0, $E0
+    .byte $F0, $F8, $FC, $FE
     
 ;****************************************************************************	
 
@@ -7763,6 +8026,7 @@ BankSwitchSubroutine2
 ; 	lsr             ;+10
 ; 	tax             ;+2
 ; 	nop $1FF8,X     ;+4
+BankSwitchAltRoutine2
     nop $1FF8
 
 	jmp (MiscPtr)   ;+5     57
