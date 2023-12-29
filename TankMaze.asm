@@ -581,7 +581,7 @@ ENEMYDEBOUNCEBITS =     %00011111
 
 BULLETSPEEDHOR		=		1
 BULLETSPEEDVER		=		1
-BULLETFRACTIONALPERCENT =   55   
+BULLETFRACTIONALPERCENT =   80   
 BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down so the collision detection works better
 
 BASECOLOR		            =		GOLD
@@ -3121,7 +3121,7 @@ FiringRight
 	sta BulletDirection
 	lda Temp
 	clc
-	adc #5
+	adc #6
 	sta Temp
     jmp DoneFiring
 NotFiringRight
@@ -3133,7 +3133,7 @@ NotFiringRight
 	sta BulletDirection
 	lda Temp
 	sec
-	sbc #6
+	sbc #7
 	sta Temp
 	jmp DoneFiring
 NotFiringLeft
@@ -3158,7 +3158,7 @@ NotFiringDown
 	sta BulletDirection
 	lda Temp+1
 	clc
-	adc #4
+	adc #5
 	sta Temp+1
 	jmp DoneFiring
 DoneFiring
@@ -6219,7 +6219,7 @@ FoundDeadTankNowKill
     bcs TankAliveKillIt
     ;--so we hit a not-in-play tank.  
     ;--now see if we it is an explosion or a powerup.  if explosion, ignore
-    and #TANKDIRECTION>>1       ;direction bits, shifted right one
+    and #(TANKUP|TANKDOWN)>>1       ;direction bits, shifted right one
     cmp #(TANKUP|TANKDOWN)>>1              ;UP and DOWN together means powerup icon
     bne TankAlreadyDeadCannotBeShot
     ;--so we hit a powerup.
