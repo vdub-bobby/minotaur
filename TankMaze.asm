@@ -1067,6 +1067,7 @@ GameNotOver
 	bne GameNotOn	
 	brk
 	.word CollisionsSubroutine
+BackFromCollisionsSubroutine	
 	;--need to recheck, since a collision could have modified these flags
 	lda GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
@@ -4801,7 +4802,8 @@ RespawnTankYPosition
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP, ENEMYSTARTINGYTOP 
 	.byte /*PLAYERSTARTINGY, PLAYERSTARTINGY, */ENEMYSTARTINGYLOW, ENEMYSTARTINGYMIDHIGH, ENEMYSTARTINGYMIDLOW, ENEMYSTARTINGYHIGHMID, ENEMYSTARTINGYMID, ENEMYSTARTINGYHIGH ;removed "+4" from enemy tank #s 1-3 starting Y 
 	
-	
+P0M0Color
+    .byte TANKCOLOR1, TANKCOLOR3
 	
 ;----------------End Some Data Stuck Here	
 	
@@ -6132,35 +6134,84 @@ BallHasNotHitBlock
 
 	
 	;--we check only the bullet that was just displayed on the screen using the hardware collision registers	
-	lda FrameCounter
-	and #1
-	tay
-	
-	bit CXP0FB
-	bvs BulletCollisionP0
-	bit CXP1FB
-	bvs BulletCollisionP1
-	bit CXM0FB
-	bvs BulletCollisionM0
-	bit CXM1FB
-	bvs BulletCollisionM1
-	jmp NoBulletToTankCollision
-	
-BulletCollisionP0
-    lda P0CollisionTable,Y
-    tax ;index into which tank is hit
-    bvs FoundDeadTankNowKill    ;branch always following bvs branch above
-BulletCollisionP1
-    lda P1CollisionTable,Y
-    tax
-    bvs FoundDeadTankNowKill
-BulletCollisionM0
-    lda M0CollisionTable,Y
-    tax
-    bvs FoundDeadTankNowKill
-BulletCollisionM1
-    lda M1CollisionTable,Y
-    tax
+; 	lda FrameCounter
+; 	and #1
+; 	tay
+; 	
+; 	bit CXP0FB
+; 	bvs BulletCollisionP0
+; 	bit CXP1FB
+; 	bvs BulletCollisionP1
+; 	bit CXM0FB
+; 	bvs BulletCollisionM0
+; 	bit CXM1FB
+; 	bvs BulletCollisionM1
+; 	jmp NoBulletToTankCollision
+; 	
+; BulletCollisionP0
+;     lda P0CollisionTable,Y
+;     tax ;index into which tank is hit
+;     bvs FoundDeadTankNowKill    ;branch always following bvs branch above
+; BulletCollisionP1
+;     lda P1CollisionTable,Y
+;     tax
+;     bvs FoundDeadTankNowKill
+; BulletCollisionM0
+;     lda M0CollisionTable,Y
+;     tax
+;     bvs FoundDeadTankNowKill
+; BulletCollisionM1
+;     lda M1CollisionTable,Y
+;     tax
+
+
+
+	;--now check if bullet has hit an enemy tank
+	;   X is index into tank (outer loop)
+	;   Y is index into bullet (inner loop)
+	ldx #3
+CheckBulletTankCollisionOuterLoop
+	;first check if tank is offscreen
+; 	jsr IsTankOnScreen
+; 	and #$FF
+; 	bne EnemyTankOnScreen
+; 	jmp EnemyTankOffscreen
+; EnemyTankOnScreen
+	;now compare ball location to tank location
+	ldy #3
+CheckBulletTankCollisionInnerLoop
+	lda BulletX,Y
+; 	cmp #BALLOFFSCREEN
+	bne BulletOnScreen2
+	jmp BulletOffScreen2    
+BulletOnScreen2
+	clc
+	adc #1
+	cmp TankX,X
+	bcc BulletDidNotHitTank1 
+	sbc #1
+	sta Temp
+	lda TankX,X
+	clc
+	adc #8
+	cmp Temp
+	bcc BulletDidNotHitTank1
+	;--compare Y position
+	lda BulletY,Y
+	sec
+	sbc #1
+	cmp TankY,X
+	bcs BulletDidNotHitTank1
+	adc #1
+	sta Temp
+	lda TankY,X
+	sec
+	sbc #TANKHEIGHT
+	cmp Temp
+	bcs BulletDidNotHitTank1
+    bcc FoundDeadTankNowKill
+BulletDidNotHitTank1
+    jmp BulletDidNotHitTank
 FoundDeadTankNowKill
     ;--check if tank is already dead (but still on screen)
     lda TankStatus,X
@@ -6203,6 +6254,9 @@ KillAllTanksWithinBlastRadius
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
     sta TankStatus,X
     stx Temp+5
+    ;--save X
+    txa
+    pha
     ldx #3
 KillAllTanksInLoop
     cpx Temp+5  ;are we killing the powerup?
@@ -6224,11 +6278,17 @@ DoNotKillPowerUp
 NotInsideBlastRadius
     dex
     bpl KillAllTanksInLoop  
-        
+    pla
+    tax ;restore X  
     
     ;--third, play sound
+    ;--need to save/restore Y
+    tya
+    pha
     ldy #POWERUPEXPLOSIONSOUND
     jsr StartSoundSubroutineBank2
+    pla
+    tay
     
     jmp DoneWithBulletCollision
 TankAliveKillIt    
@@ -6236,20 +6296,20 @@ TankAliveKillIt
     jsr IsTankOnScreen  ;returns 0 if tank (index=X) is offscreen, 1 if onscreen
     bne TankIsOnScreenKillIt
     ;--let's remove the bullet
-    lda FrameCounter
-    and #3
-    tax
+;     lda FrameCounter
+;     and #3
+    ;--need to save/restore X here
 ;     lda #BALLOFFSCREEN
 ;     sta BulletX,X
 ;     sta BulletY,X
-    jsr MoveBulletOffScreenSubroutine
-    beq TankOffScreenCannotBeKilled
+    jsr MoveBulletOffScreenSubroutine2  ;uses Y index into which ball to remove
+    jmp TankOffScreenCannotBeKilled     ;branch always
     
 TankIsOnScreenKillIt    
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
-	lda FrameCounter
-	and #3
-	tay ;get bullet # into Y so it will be removed appropriately below
+; 	lda FrameCounter
+; 	and #3
+; 	tay ;get bullet # into Y so it will be removed appropriately below
 	cpy #2
 	bcs NoPointsForEnemyOwnGoals
 	txa ;set flags based on X
@@ -6264,6 +6324,20 @@ TankAlreadyDeadCannotBeShot
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
 DoneWithBulletCollision
+BulletDidNotHitTank
+BulletOffScreen2
+	dey
+	bmi DoneWithBulletTankCollisionInnerLoop
+	jmp CheckBulletTankCollisionInnerLoop
+	
+DoneWithBulletTankCollisionInnerLoop
+    
+	dex
+	bmi DoneWithCheckBulletTankCollisionOuterLoop
+	jmp CheckBulletTankCollisionOuterLoop
+DoneWithCheckBulletTankCollisionOuterLoop
+
+
 
     ;if a tank was killed immediately above, we cleared all bits except for TANKINPLAY
     ;   so that we could correctly tell if tanks if collided with it
@@ -6318,23 +6392,16 @@ CheckNextTankForNewDeath
 
 ;****************************************************************************
 
-MoveBulletOffScreenSubroutine
-    lda #BALLOFFSCREEN
-    sta BulletX,X
-    sta BulletY,X
-    rts
-;****************************************************************************
-
     SUBROUTINE
 PowerUpExplosionRemoveBricks  
         ;come in with X = tank (powerup icon) index
     txa
     pha             ;save index into tank (powerup icon) that got hit
     ;--remove bullet from screen
-    lda FrameCounter
-    and #3
-    tax
-    jsr MoveBulletOffScreenSubroutine
+;     lda FrameCounter
+;     and #3
+;     tax
+    jsr MoveBulletOffScreenSubroutine2  ;--removing bullet indexed by Y
 ;     lda #BALLOFFSCREEN
 ;     sta BulletX,Y
 ;     sta BulletY,Y
@@ -6378,7 +6445,9 @@ PowerUpExplosionRemoveBricks
 	sta Temp+6     ;store row back into Temp+6
 
 
-	
+	;--save Y
+	tya
+	pha
 	
 	;now remove bricks in a loop
 	ldy #7
@@ -6447,17 +6516,12 @@ PowerUpExplosionRemoveBricks
 .NotBrick9Row0    
 .OffMazeGoToNext  
 .GoToNextBrick 
-;     pla
-;     tay ;restore loop index
     ldy Temp+7
     dey
     bpl .RemoveBricksLoop
 
-
-
-    
-    
-    
+    pla
+    tay     ;restore Y index into bullet
     pla
     tax     ;restore X index into tank
     rts
@@ -6780,9 +6844,10 @@ BulletHitTank
     ;  X is index into which tank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
-	lda #BALLOFFSCREEN
-	sta BulletX,Y
-	sta BulletY,Y
+	jsr MoveBulletOffScreenSubroutine2
+; 	lda #BALLOFFSCREEN
+; 	sta BulletX,Y
+; 	sta BulletY,Y
 
 
 	
@@ -6847,10 +6912,11 @@ EnemyTankHit
 	sta TankStatus
 	
 	ldy #3
-	lda #BALLOFFSCREEN
+; 	lda #BALLOFFSCREEN
 RemoveBulletsFromScreenLoop
-	sta BulletX,Y
-	sta BulletY,Y
+; 	sta BulletX,Y
+; 	sta BulletY,Y
+    jsr MoveBulletOffScreenSubroutine2
 	dey
 	bpl RemoveBulletsFromScreenLoop
 	
@@ -7025,7 +7091,8 @@ PositionASpriteSubroutineBank2
 	
 	
 	
-
+P1M1Color
+    .byte TANKCOLOR2, TANKCOLOR4
 
 
 	
@@ -7438,14 +7505,25 @@ EntryPointRowOffsetTable
         
         
 	
-P1CollisionTable
-	.byte 1, 2
-M0CollisionTable
-	.byte 0, 1
-M1CollisionTable
-	.byte 2, 3	
-P0CollisionTable
-	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
+; P1CollisionTable
+; 	.byte 1, 2
+; M0CollisionTable
+; 	.byte 0, 1
+; M1CollisionTable
+; 	.byte 2, 3	
+; P0CollisionTable
+; 	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
+
+
+;****************************************************************************
+
+MoveBulletOffScreenSubroutine
+    lda #BALLOFFSCREEN
+    sta BulletX,X
+    sta BulletY,X
+    rts
+
+;****************************************************************************
 
     ALIGNGFXDATA 2
 		
@@ -7833,11 +7911,7 @@ RotationTables
 	
     
     
-P0M0Color
-    .byte TANKCOLOR1, TANKCOLOR3
 
-P1M1Color
-    .byte TANKCOLOR2, TANKCOLOR4
 	
 BulletDirectionMask
 	.byte %11, %11<<2, %11<<4, %11<<6
@@ -7889,6 +7963,19 @@ TankRespawnPlayerTop = * - 1
 TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
     .byte /*0, */0, 12
 
+    
+;****************************************************************************
+
+MoveBulletOffScreenSubroutine2
+    lda #BALLOFFSCREEN
+    sta BulletX,Y
+    sta BulletY,Y
+    rts
+
+;****************************************************************************
+    
+    
+    
     PAGEALIGN 6
 
     
@@ -7945,16 +8032,16 @@ SoundLengthBank2
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
 
+RemoveBrickColumnShift 
+    .byte 1,1,-2,2
+    .byte -2,1,1,0 
 	
-NumberOfBitsSetBank2
-	.byte 0, 1, 1, 2
+NumberOfBitsSetBank2 = * - 1
+	.byte /*0, */1, 1, 2
 	.byte 1, 2, 2, 3
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
 
-RemoveBrickColumnShift
-    .byte 1,1,-2,2
-    .byte -2,1,1;,0 ;--uses byte in next table
 AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 0, 0, 1, 1
     .byte 1, 1, 1, 1
@@ -7963,6 +8050,7 @@ AllowCarveDownTable ;can't carve downward in the outer two columns
 RemoveBrickRowShift = * - 2
     .byte /*0,0,*/-1,0
     .byte -1,0,0,0	
+    
     
 RespawnCountdownGraphic = * - 1
     .byte /*$00, */$80, $C0, $E0
