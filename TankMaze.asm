@@ -5271,13 +5271,22 @@ MoveBulletSubroutine
 ;     bcs MoveBulletsThisFrame
 ;     jmp ReturnFromBSSubroutine2
 ; MoveBulletsThisFrame    
-; 	ldx #3
-    lda FrameCounter
-    and #3
-    tax
-MoveBulletsLoop
+;     lda FrameCounter
+;     and #3
+;     tax
+    
+    lda BulletFractional
+    clc
+    adc #BULLETFRACTIONALSPEED
+    sta BulletFractional
     lda #0
-    sta Temp
+    adc #0          ;moving either 1 or 0 pixels per frame
+    sta Temp    
+    
+	ldx #3
+MoveBulletsLoop
+;     lda #0
+;     sta Temp
 ;     lda BulletFractional
 ;     clc
     ;--apply update four times (because only once every four frames)
@@ -5298,18 +5307,18 @@ MoveBulletsLoop
 ;     lda NumberOfBitsSetBank2,Y       ;+42 (max) this is how many pixels to move
 
     ;--try diff routine - works because bullets move either 3 or 4 pixels every 4 frames.
-    lda BulletFractional
-    clc
-    adc #BULLETFRACTIONALSPEED
-    sta Temp+1
-    lda #3
-    adc #0
-    sta Temp
-    cpx #0
-    bne NoUpdateBulletFractionalThisFrame
-    lda Temp+1
-    sta BulletFractional
-NoUpdateBulletFractionalThisFrame    
+;     lda BulletFractional
+;     clc
+;     adc #BULLETFRACTIONALSPEED
+;     sta Temp+1
+;     lda #3
+;     adc #0
+;     sta Temp
+;     cpx #0
+;     bne NoUpdateBulletFractionalThisFrame
+;     lda Temp+1
+;     sta BulletFractional
+; NoUpdateBulletFractionalThisFrame    
 
     
     
@@ -5382,8 +5391,8 @@ BulletOffScreen
 	jsr StartSoundSubroutineBank2
 NoBulletMovement
 BulletOnScreen
-; 	dex
-; 	bpl MoveBulletsLoop
+	dex
+	bpl MoveBulletsLoop
 
 	jmp ReturnFromBSSubroutine2
 
