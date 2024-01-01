@@ -75,6 +75,17 @@
 
 
 	To do:
+	Highest priority:
+	With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
+	Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
+    Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
+    Allow use of joystick to change options at title screen
+    Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
+    Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
+    Update standard/random maze indicator
+    Change score color to be static (or change so different for every game variation?)
+	
+    Secondary priority or duplicate of above:
 	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 	PAL60 version
 	DONE Turn powerups off with difficulty switch (or use select?).  Working, but look for a bit we can use to store this during a game so you can't turn it on and off during gameplay.  
