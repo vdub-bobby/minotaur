@@ -2179,7 +2179,7 @@ AboutToCheckForEnemyTank
 	eor #$F0
 	
 	;--if single direction, then move that direction
-	pha			;--save direction
+	pha			;--save direction BUT DOES NOT SET FLAGS
 	bne ThereAreSomeAllowedDirections ;if no allowed directions, skip all the nonsense below
 	jmp NoAllowedDirections
   	
@@ -2345,7 +2345,7 @@ TryAnotherDirection
 	dey
 	bpl TryAnotherDirection
 	ldy #3					;loop around
-	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction
+	bne TryAnotherDirection	;branch always -- this assumes we will always find a good direction 
 
 NoAllowedDirections	
     ;--if no allowed directions, set direction to zero
@@ -5265,9 +5265,10 @@ MoveBulletSubroutine
     clc
     adc #BULLETFRACTIONALSPEED
     sta BulletFractional
-    lda #0
-    adc #0          ;moving either 1 or 0 pixels per frame
-    sta Temp    
+    ;if carry clear, we didn't overflow BulletFractional and we aren't moving any bullets this frame so just return early
+    bcc DoNotMoveBulletsThisFrame
+;     lda #1
+;     sta Temp    
     
 	ldx #3
 MoveBulletsLoop
@@ -5314,46 +5315,51 @@ MoveBulletsLoop
 	beq NoBulletMovement;BulletOffScreen;
 	lda BulletDirection
 	and BulletDirectionMask,X
-	tay							;save value
 	cmp BulletUpBank2,X
 	bne BulletNotUp
 	;--move bullet up
-	lda BulletY,X
-	clc
-	adc Temp    ;was #BULLETSPEEDVER
-	sta BulletY,X
-	bcc CheckBulletIsOffScreenVertical      ;branch always
+	inc BulletY,X
+; 	lda BulletY,X
+; 	clc
+; 	adc Temp    ;was #BULLETSPEEDVER
+; 	sta BulletY,X
+; 	bcc CheckBulletIsOffScreenVertical      ;branch always
+    bne CheckBulletIsOffScreenVertical      ;branch always
 BulletNotUp
-	tya
 	cmp BulletDownBank2,X
 	bne BulletNotDown
 	;--move bullet down
-	lda BulletY,X
-; 	sec         ;carry is set following not-taken BNE above
-	sbc Temp    ;was #BULLETSPEEDVER
-	sta BulletY,X
-	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
+    dec BulletY,X
+; 	lda BulletY,X
+; ; 	sec         ;carry is set following not-taken BNE above
+; 	sbc Temp    ;was #BULLETSPEEDVER
+; 	sta BulletY,X
+; 	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
+    lda BulletY,X
+    ;--Y values range from 0 to about 80, so negative means we went off screen low
+    bmi BulletOffScreen
 	beq BulletOffScreen                     ;if Y value is zero, then bullet is also offscreen
     bne BulletOnScreen                      ;branch always
 BulletNotDown
-	tya	
 	cmp BulletRightBank2,X
 	bne BulletNotRight
 	;--move bullet right
-	lda BulletX,X
-	clc
-	adc Temp    ;was #BULLETSPEEDHOR
-	sta BulletX,X
-	bcc CheckBulletIsOffScreenHorizontal    ;branch always
+	inc BulletX,X
+; 	lda BulletX,X
+; 	clc
+; 	adc Temp    ;was #BULLETSPEEDHOR
+; 	sta BulletX,X
+; 	bcc CheckBulletIsOffScreenHorizontal    ;branch always
+    bne CheckBulletIsOffScreenHorizontal    ;branch always
 BulletNotRight	
-	tya
 	cmp BulletLeftBank2,X
 	bne NoBulletMovement
 	;--move bullet left
-	lda BulletX,X
-; 	sec         ;carry is set following not-taken BNE above
-	sbc Temp    ;was #BULLETSPEEDHOR
-	sta BulletX,X
+; 	lda BulletX,X
+; ; 	sec         ;carry is set following not-taken BNE above
+; 	sbc Temp    ;was #BULLETSPEEDHOR
+; 	sta BulletX,X
+    dec BulletX,X
 
 	;--check for off screen:
 CheckBulletIsOffScreenHorizontal
@@ -5379,7 +5385,7 @@ NoBulletMovement
 BulletOnScreen
 	dex
 	bpl MoveBulletsLoop
-
+DoNotMoveBulletsThisFrame
 	jmp ReturnFromBSSubroutine2
 
 	
