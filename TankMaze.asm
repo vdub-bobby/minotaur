@@ -76,6 +76,9 @@
 	To do:
 	Highest priority:
 	With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
+	    in overscan, big issues are: 
+	        bullet to tank collisions can take 14+ scanlines (!!!) including ScoreForKillingTank... takes 4 scanlines just to update score.
+	        PlayerTankMovement takes 10+ scanlines, including 6 scanlines for CheckForWallSubroutine
 	Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     Allow use of joystick to change options at title screen
@@ -240,6 +243,17 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
         ds DATASPACEBEFOREGFX - (* & $FF)
         ECHO "---", (*-.marker), "bytes left at ALIGNGFXDATA", [{1}]d, "at location", .marker
     ENDM
+    
+    ;--pass in 1- to 4-digit decimal number and will spit out it as hex BCD number
+    MACRO DecimalToBCD
+.Ones SET {1}%10
+.Tens Set ({1}/10)%10
+.Hundreds Set ({1}/100)%10
+.Thousands Set ({1}/1000)%10
+        .word [.Ones]+[.Tens<<4]+[.Hundreds<<8]+[.Thousands<<12]
+    ENDM
+     
+    
         
 ;-------------------------Constants Below---------------------------------
 
@@ -247,7 +261,7 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 VBLANK_TIMER = 37       ;--I think this (38) is fine
 OVERSCAN_TIMER = 32     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
-SOUNDTIMEBUFFER     =   (6*76)/64
+SOUNDTIMEBUFFER     =   (8*76)/64
 ;--scanline count constants end
 
 TANKHEIGHT	=	7
@@ -542,7 +556,7 @@ SNARE2PITCH	=	12
 WALLDESTRUCTIONSCORE    =   $0005
 KILLTANKSCORE           =   $0100
 LEVELENDBRICKSCORE      =   $0010
-CONSECUTIVEKILLBONUS    =   $0075
+CONSECUTIVEKILLBONUS    =   75
 POWERUPSCOREBONUS       =   $1000
 
 
@@ -2931,11 +2945,11 @@ SkipReadingControllers
     lda TankStatus
     and #TANKDIRECTION
     ora #PLAYERTANKSPEED
-    ldx TankX
-    cpx #16
-    bcs RegularPlayerTankSpeed
-    ;and #$F1          ;change from TANKSPEED3 to TANKSPEED1
-RegularPlayerTankSpeed    
+;     ldx TankX
+;     cpx #16
+;     bcs RegularPlayerTankSpeed
+;     ;and #$F1          ;change from TANKSPEED3 to TANKSPEED1
+; RegularPlayerTankSpeed    
     sta TankStatus 
 
 	ldx #0		;index into which tank	
@@ -2965,13 +2979,15 @@ MovementAllowed
 	pha		;save allowed directions (stack holds [top down]: allowed directions, desired directions, movement flag, return address)
 	
 	
-	txa
-	pha		;save index into which tank
+; 	txa
+; 	pha		;save index into which tank
+    stx Temp    ;save index into which tank (Temp used above and below, but unused here)
 	tsx
-	lda $02,X	;load allowed directions (see above)
-	sta $03,X	;overwrite desired directions (either joystick (if player) or calc direction if enemy)
-	pla			;pull tank index off stack
-	tax			;restore tank index
+	lda $01,X	;load allowed directions (see above)
+	sta $02,X	;overwrite desired directions (either joystick (if player) or calc direction if enemy)
+; 	pla			;pull tank index off stack
+; 	tax			;restore tank index
+    ldx Temp    ;restore tank index
 	pla			;pulls allowed directions off as it is duplicative
 ProcessDirections
 	pla			;pulls final directions off stack (directions that are both allowed and desired) 
@@ -3619,7 +3635,11 @@ TankFractionalAddition
 ;-------------------------Data Below-----------------------------------------
 ;----------------------------------------------------------------------------
 	
-
+PreventReverses ;= *-1	;--the FF are wasted bytes EXCEPT for the first!
+    .byte $FF
+	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
+ReverseDirection = *-1	;--the FF are wasted bytes
+	.byte 	J0DOWN, J0UP, $FF, J0RIGHT, $FF, $FF, $FF, J0LEFT
 		
 	PAGEALIGN 1
 	
@@ -3770,10 +3790,6 @@ NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
 	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2
 	
 	
-PreventReverses = *-1	;--the FF are wasted bytes
-	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
-ReverseDirection = *-1	;--the FF are wasted bytes
-	.byte 	J0DOWN, J0UP, $FF, J0RIGHT, $FF, $FF, $FF, J0LEFT
 	
 	
 	
@@ -4800,7 +4816,28 @@ BottomHUDSpritePositions
 DigitDataLo
 	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine, <BlankDigit
 
-    
+ConsecutiveKillBonusTable
+    DecimalToBCD CONSECUTIVEKILLBONUS*0
+    DecimalToBCD CONSECUTIVEKILLBONUS*1
+    DecimalToBCD CONSECUTIVEKILLBONUS*2
+    DecimalToBCD CONSECUTIVEKILLBONUS*3
+    DecimalToBCD CONSECUTIVEKILLBONUS*4
+    DecimalToBCD CONSECUTIVEKILLBONUS*5
+    DecimalToBCD CONSECUTIVEKILLBONUS*6
+    DecimalToBCD CONSECUTIVEKILLBONUS*7
+    DecimalToBCD CONSECUTIVEKILLBONUS*8
+    DecimalToBCD CONSECUTIVEKILLBONUS*9
+    DecimalToBCD CONSECUTIVEKILLBONUS*10
+    DecimalToBCD CONSECUTIVEKILLBONUS*11
+    DecimalToBCD CONSECUTIVEKILLBONUS*12
+    DecimalToBCD CONSECUTIVEKILLBONUS*13
+    DecimalToBCD CONSECUTIVEKILLBONUS*14
+    DecimalToBCD CONSECUTIVEKILLBONUS*15
+    DecimalToBCD CONSECUTIVEKILLBONUS*16
+    DecimalToBCD CONSECUTIVEKILLBONUS*17
+    DecimalToBCD CONSECUTIVEKILLBONUS*18
+    DecimalToBCD CONSECUTIVEKILLBONUS*19
+    DecimalToBCD CONSECUTIVEKILLBONUS*20
 
 ;----------------End Some Data Stuck Here	
 	
@@ -5247,19 +5284,6 @@ BottomKernelLoopDone
 
 	
 MoveBulletSubroutine
-    ;--if used only hardware collision registers, could just move one bullet every 4 frames.
-    ;   but would probably need to redesign tank graphic for that to work.
-
-;     lda #BULLETFRACTIONALSPEED
-;     clc
-;     adc BulletFractional
-;     sta BulletFractional
-;     bcs MoveBulletsThisFrame
-;     jmp ReturnFromBSSubroutine2
-; MoveBulletsThisFrame    
-;     lda FrameCounter
-;     and #3
-;     tax
     
     lda BulletFractional
     clc
@@ -5267,48 +5291,9 @@ MoveBulletSubroutine
     sta BulletFractional
     ;if carry clear, we didn't overflow BulletFractional and we aren't moving any bullets this frame so just return early
     bcc DoNotMoveBulletsThisFrame
-;     lda #1
-;     sta Temp    
     
 	ldx #3
 MoveBulletsLoop
-;     lda #0
-;     sta Temp
-;     lda BulletFractional
-;     clc
-    ;--apply update four times (because only once every four frames)
-;     adc #BULLETFRACTIONALSPEED
-;     rol Temp    ;get carry into Temp  +7
-;     adc #BULLETFRACTIONALSPEED
-;     rol Temp    ;get carry into Temp  +7
-;     adc #BULLETFRACTIONALSPEED
-;     rol Temp    ;get carry into Temp  +7
-;     adc #BULLETFRACTIONALSPEED
-;     rol Temp    ;get carry into Temp  +7      28
-;     ;--only actually save this change every four frames.
-;     cpx #0
-;     bne NoUpdateBulletFractionalThisFrame
-;     sta BulletFractional
-; NoUpdateBulletFractionalThisFrame
-;     ldy Temp
-;     lda NumberOfBitsSetBank2,Y       ;+42 (max) this is how many pixels to move
-
-    ;--try diff routine - works because bullets move either 3 or 4 pixels every 4 frames.
-;     lda BulletFractional
-;     clc
-;     adc #BULLETFRACTIONALSPEED
-;     sta Temp+1
-;     lda #3
-;     adc #0
-;     sta Temp
-;     cpx #0
-;     bne NoUpdateBulletFractionalThisFrame
-;     lda Temp+1
-;     sta BulletFractional
-; NoUpdateBulletFractionalThisFrame    
-
-    
-    
 
 	lda BulletX,X
 	;cmp #BALLOFFSCREEN     == 0
@@ -5319,22 +5304,12 @@ MoveBulletsLoop
 	bne BulletNotUp
 	;--move bullet up
 	inc BulletY,X
-; 	lda BulletY,X
-; 	clc
-; 	adc Temp    ;was #BULLETSPEEDVER
-; 	sta BulletY,X
-; 	bcc CheckBulletIsOffScreenVertical      ;branch always
     bne CheckBulletIsOffScreenVertical      ;branch always
 BulletNotUp
 	cmp BulletDownBank2,X
 	bne BulletNotDown
 	;--move bullet down
     dec BulletY,X
-; 	lda BulletY,X
-; ; 	sec         ;carry is set following not-taken BNE above
-; 	sbc Temp    ;was #BULLETSPEEDVER
-; 	sta BulletY,X
-; 	bcc BulletOffScreen                     ;if we are less than zero, then bullet is offscreen
     lda BulletY,X
     ;--Y values range from 0 to about 80, so negative means we went off screen low
     bmi BulletOffScreen
@@ -5345,22 +5320,12 @@ BulletNotDown
 	bne BulletNotRight
 	;--move bullet right
 	inc BulletX,X
-; 	lda BulletX,X
-; 	clc
-; 	adc Temp    ;was #BULLETSPEEDHOR
-; 	sta BulletX,X
-; 	bcc CheckBulletIsOffScreenHorizontal    ;branch always
     bne CheckBulletIsOffScreenHorizontal    ;branch always
 BulletNotRight	
 	cmp BulletLeftBank2,X
 	bne NoBulletMovement
 	;--move bullet left
-; 	lda BulletX,X
-; ; 	sec         ;carry is set following not-taken BNE above
-; 	sbc Temp    ;was #BULLETSPEEDHOR
-; 	sta BulletX,X
     dec BulletX,X
-
 	;--check for off screen:
 CheckBulletIsOffScreenHorizontal
 	lda BulletX,X
@@ -5869,10 +5834,10 @@ IncreaseScoreSubroutine
 	adc Temp
 	sta Score+1
 	lda Score
-	adc #0
+	adc #0      
 	sta Score
 	cld
-	rts
+	rts                 ;+35    35      plus 6 for JSR
 
 ;****************************************************************************
     SUBROUTINE
@@ -6539,10 +6504,10 @@ GetInitialTankCountSubroutine
     clc
     adc #4
     cmp #MAXTANKSREMAINING
-    bcc .FoundInitialTankCount
-    lda #MAXTANKSREMAINING
+    bcc .FoundInitialTankCount  ;14/15
+    lda #MAXTANKSREMAINING      ;16
 .FoundInitialTankCount
-    rts
+    rts                         ;21/22 cycles (plus 6 for JSR)
             
 ;****************************************************************************
 
@@ -6552,20 +6517,20 @@ ScoreForKillingTank
     pha ;save X
     lda MazeGenerationPass      ;used for powerups and etc during level
     and #PLAYERDEATHCOUNTBITS
-    bne .PlayerDiedUsePOWERUPCOUNTDOWN
+    bne .PlayerDiedUsePOWERUPCOUNTDOWN      ;       12/13
     ;--if player hasn't died, use tanks killed since start of level
-    jsr GetInitialTankCountSubroutine   ;returns with initial count in A
+    jsr GetInitialTankCountSubroutine       ;+21/22 33/34   returns with initial count in A
     sec
     sbc TanksRemaining
-    bcs .FigureOutScoreBonus    ;branch always, the subtraction above should never result in a negative number
-.PlayerDiedUsePOWERUPCOUNTDOWN
+    bcs .FigureOutScoreBonus                ;+8     41/42   branch always, the subtraction above should never result in a negative number
+.PlayerDiedUsePOWERUPCOUNTDOWN              ;       13
     ;--give number of tanks killed since last death x CONSECUTIVEKILLBONUS
     lda MazeGenerationPass
     and #POWERUPACTIVATEDBITS
-    beq .NotAtMaximumAfterDeathBonus
+    beq .NotAtMaximumAfterDeathBonus        ;+7/8   20/21
     lda #7
-    bne .FigureOutScoreBonus
-.NotAtMaximumAfterDeathBonus
+    bne .FigureOutScoreBonus                ;+5     25      branch always
+.NotAtMaximumAfterDeathBonus                ;       21      when branching here
     lda MazeGenerationPass    
     and #POWERUPCOUNTDOWNBITS
     sta Temp
@@ -6573,37 +6538,25 @@ ScoreForKillingTank
     sec
     sbc Temp   
     lsr
-    lsr
-.FigureOutScoreBonus    
+    lsr                                     ;+19    40
+.FigureOutScoreBonus                        ;       25/41/42    when branching here     
+    asl     ;multiply by two because indexing into table of words  
     tax
-    sed
-    lda #0
-    sta Temp
+    sed                                     ;                   set decimal mode, is cleared by subroutine below!
+    lda #<KILLTANKSCORE
+;     clc                                   ;                   carry cleared by ASL above, A always holds 0 through 20 before ASL
+    adc ConsecutiveKillBonusTable,X
     sta Temp+1
-.TankScoreMultiplierLoop
-    dex
-    bmi .DoneTankScoreMultiplierLoop
-    lda Temp+1
-    clc
-    adc #<CONSECUTIVEKILLBONUS
-    sta Temp+1
-    lda Temp
-    adc #>CONSECUTIVEKILLBONUS
+    lda #>KILLTANKSCORE
+    adc ConsecutiveKillBonusTable+1,X
     sta Temp
-    jmp .TankScoreMultiplierLoop        ;can probably make this a BCC 
-.DoneTankScoreMultiplierLoop
-    cld                                 ;probably not necessary, the subroutine below just sets it again
-    lda Temp+1
-    jsr IncreaseScoreSubroutine
-.PlayerDiedNoExtraScore
-	lda #>KILLTANKSCORE
-	sta Temp
-	lda #<KILLTANKSCORE
-	jsr IncreaseScoreSubroutine
+    lda Temp+1                              ;+27    52/68/69
+    jsr IncreaseScoreSubroutine             ;+41    93/109/110
 	pla
 	tax ;--restore X
-    rts        
+    rts                                     ;+12    105/121/122 takes about 1.5 scanlines maximum
 
+   
     
 ;****************************************************************************
     
