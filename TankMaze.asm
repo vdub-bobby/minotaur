@@ -6477,6 +6477,7 @@ PowerUpExplosionRemoveBricks
 
 	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
 	clv     ;we will use overflow as flag to blow up 2 or three bricks (clear means blow up 3, set means blow up 2)
+	lda Temp+6
 	cmp #MAZEROWS;-1
 	bcc .InMazeBlowUpBricks
 	;--so if we are here we want to ignore the top row and blow up the middle and bottom row.... hm.
