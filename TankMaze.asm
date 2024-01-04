@@ -6432,6 +6432,7 @@ PowerUpExplosionRemoveBricks
 	;now remove bricks in a loop.  looping through three columns to speed this up.
 	lda Temp+2
 	ldy #2
+	sty Temp+7
 	bne .LoopEntryPoint ;branch always
 .RemoveBricksLoop
     sty Temp+7      ;save loop index 
@@ -6458,20 +6459,14 @@ PowerUpExplosionRemoveBricks
 .NotBrick6Row0
     sbc #3
     bne .NotBrick9Row0	
-    sta LastRowL
+    sta LastRowR
     beq .GoToNextBrick  ;branch always
 .ItIsBrick6Row0    
     ;--following subtractions, A holds zero
-    sta LastRowR
+    sta LastRowL
     beq .GoToNextBrick  ;branch always	
 .NotRowZero
-	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
-	cmp #MAZEROWS;-1
-	bcs .OffMazeGoToNext
-    ;--if we are here, we have a legit brick location and we will remove it
-    ;--get row into Y
-    ldy Temp+6
-    dey                 ;adjust because Temp+6 is zero-indexed for entire maze but the PF data stored in RAM starts at row 1
+    ;first, adjust MiscPtr because we will use overflow flag below and so all additions/subtractions need to be moved above
     ;--get column into X
     ldx Temp+2
     ;--get which PF register and use it to adjust our pointer
@@ -6479,6 +6474,20 @@ PowerUpExplosionRemoveBricks
 ;     clc   ;--not necessary following not-taken BCS branch above
     adc MiscPtr
     sta MiscPtr
+
+	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
+	clv     ;we will use overflow as flag to blow up 2 or three bricks (clear means blow up 3, set means blow up 2)
+	cmp #MAZEROWS;-1
+	bcc .InMazeBlowUpBricks
+	;--so if we are here we want to ignore the top row and blow up the middle and bottom row.... hm.
+	;--first, set overflow
+	bit Return      ;set overflow
+	dec Temp+6      ;and decrease the row by one (will have to adjust later!)
+.InMazeBlowUpBricks	
+    ;--if we are here, we have a legit brick location and we will remove it
+    ;--get row into Y
+    ldy Temp+6
+    dey                 ;adjust because Temp+6 is zero-indexed for entire maze but the PF data stored in RAM starts at row 1
     ;--then lookup specific brick mask
     lda PFClearLookup,X
     tax ;save for below 
@@ -6493,6 +6502,12 @@ PowerUpExplosionRemoveBricks
     ;--then erase brick
     and (MiscPtr),Y
     sta (MiscPtr),Y
+    ;--if overflow cleared, we do one more row
+    bvc .BlowUpLastRow
+    ;--if overflow set, we readjust the initial row and then start the loop again
+    inc Temp+6
+    bne .GoToNextBrick  ;branch always
+.BlowUpLastRow    
     tya ;we decremented Y above already, this resets flags
     beq .RowZeroCheck    
     ;not on row zero, so clear the next brick down
@@ -6513,6 +6528,7 @@ PowerUpExplosionRemoveBricks
     tay     ;restore Y index into bullet
     pla
     tax     ;restore X index into tank
+Return    
     rts
     
 
