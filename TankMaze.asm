@@ -6219,7 +6219,7 @@ KillAllTanksWithinBlastRadius
     ;--discarding X (powerup icon index) at this point
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
     sta TankStatus,X
-    stx Temp+5
+    stx Temp+5      ;what is this for?
     ;--save X
     txa
     pha
@@ -6410,63 +6410,68 @@ PowerUpExplosionRemoveBricks
 	lsr
 	sta Temp+6     ;store row back into Temp+6
 
+	    ;--at this point we have position, in Temp+2 (column), Temp+6 (row), of upper left of the 9 brick square:
+	    /*
+	        P=powerup icon
+	        X=bricks to remove
+	        *=position pointed to by Temp+2, Temp+6
+	        
+	           *XX 
+	           XPX
+	           XXX
+	    */
 
 	;--save Y
 	tya
 	pha
+	lda #>PF1Left
+	sta MiscPtr+1
+	lda #<PF1Left
+	sta MiscPtr
 	
-	;now remove bricks in a loop
-	ldy #7
+	;now remove bricks in a loop.  looping through three columns to speed this up.
+	lda Temp+2
+	ldy #2
+	bne .LoopEntryPoint ;branch always
 .RemoveBricksLoop
-    sty Temp+7      ;MiscPtr = Temp+4, MiscPtr+1 = Temp+5
-;     pha ;save loop index
+    sty Temp+7      ;save loop index 
+	lda #<PF1Left
+	sta MiscPtr
     ;--first, move to next row and column
     lda Temp+2  ;column
     clc
     adc RemoveBrickColumnShift,Y
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
     sta Temp+2
-    lda Temp+6  ;row
-    clc       
-    adc RemoveBrickRowShift,Y
-    sta Temp+6
-	lda #<PF1Left
-	sta MiscPtr
-	lda #>PF1Left
-	sta MiscPtr+1
-	;--check if column > 15 (means we are either left or right of the maze)
-	lda Temp+2
+.LoopEntryPoint
 	cmp #16
 	bcs .OffMazeGoToNext
     ;--check if we are on row zero
 	lda Temp+6
 	bne .NotRowZero
+.RowZeroCheck    
 	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
 	lda Temp+2
-	;cmp #6
-	sbc #5      ;--actually subtracting 6, but carry is clear following not-taken BCS branch above
+	sec             ;I think carry is always clear here, whether coming from above or below.  So if we need to save 6 cycles and 1 byte, we could remove and change to SBC #5 below
+	sbc #6 
 	beq .ItIsBrick6Row0
-; 	bne .NotBrick6Row0
-; 	lda #0
-; 	sta LastRowL
-; 	beq .GoToNextBrick  ;branch always
 .NotBrick6Row0
-;     cmp #9
     sbc #3
     bne .NotBrick9Row0	
+    sta LastRowL
+    beq .GoToNextBrick  ;branch always
 .ItIsBrick6Row0    
     ;--following subtractions, A holds zero
-;     lda #0        
     sta LastRowR
     beq .GoToNextBrick  ;branch always	
-	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
 .NotRowZero
+	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
 	cmp #MAZEROWS;-1
 	bcs .OffMazeGoToNext
     ;--if we are here, we have a legit brick location and we will remove it
     ;--get row into Y
     ldy Temp+6
-    dey                 ;is this correct?
+    dey                 ;adjust because Temp+6 is zero-indexed for entire maze but the PF data stored in RAM starts at row 1
     ;--get column into X
     ldx Temp+2
     ;--get which PF register and use it to adjust our pointer
@@ -6475,10 +6480,28 @@ PowerUpExplosionRemoveBricks
     adc MiscPtr
     sta MiscPtr
     ;--then lookup specific brick mask
-    lda PFClearLookup,X    
+    lda PFClearLookup,X
+    tax ;save for below 
     ;--then erase brick
     and (MiscPtr),Y
     sta (MiscPtr),Y
+    tya ;we decremented Y above already, this resets flags
+    beq .RowZeroCheck    
+    ;not on row zero, so clear the next brick down
+    dey    
+    txa             ;restore PFClearLookup,X
+    ;--then erase brick
+    and (MiscPtr),Y
+    sta (MiscPtr),Y
+    tya ;we decremented Y above already, this resets flags
+    beq .RowZeroCheck    
+    ;not on row zero, so clear the next brick down
+    dey    
+    txa             ;restore PFClearLookup,X
+    ;--then erase brick
+    and (MiscPtr),Y
+    sta (MiscPtr),Y
+    
 .NotBrick9Row0    
 .OffMazeGoToNext  
 .GoToNextBrick 
@@ -7993,8 +8016,7 @@ SoundLengthBank2
 	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
 
 RemoveBrickColumnShift 
-    .byte 1,1,-2,2
-    .byte -2,1,1,0 
+    .byte 1, 1, 0
 	
 NumberOfBitsSetBank2 = * - 1
 	.byte /*0, */1, 1, 2
@@ -8007,9 +8029,9 @@ AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 1, 1, 1, 1
     .byte 1, 1, 1, 1
     .byte 1, 1, 0, 0	
-RemoveBrickRowShift = * - 2
-    .byte /*0,0,*/-1,0
-    .byte -1,0,0,0	
+; RemoveBrickRowShift = * - 2
+;     .byte /*0,0,*/-1,0
+;     .byte -1,0,0,0	
     
     
 RespawnCountdownGraphic = * - 1
