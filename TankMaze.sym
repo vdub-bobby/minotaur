@@ -1,8 +1,8 @@
 --- Symbol List (sorted by symbol)
-10.PlayerHasDiedNoBonus  1c59                  
-10.PlayerNotInPlayNoBonus 1c59              (R )
-10.PlayerNotMovingNoSpeedBoost 1c59              (R )
-10.PowerUpNotActivated   1c59              (R )
+10.PlayerHasDiedNoBonus  1c52                  
+10.PlayerNotInPlayNoBonus 1c52              (R )
+10.PlayerNotMovingNoSpeedBoost 1c52              (R )
+10.PowerUpNotActivated   1c52              (R )
 12.CYCLES                0004              (R )
 13.SkipEOR               36f3              (R )
 13.wait                  3199              (R )
@@ -149,11 +149,12 @@
 8.ThisTankNotToLeft      1b38              (R )
 8.ThisTankNotToRight     1b5b              (R )
 8.ThisTankNotToUp        1b7e              (R )
-9.CheckBrick6_0          1bfb              (R )
-9.LookForBrickLoop       1bc9              (R )
-9.NoBrick                1c22              (R )
-9.NotRowZero             1c01              (R )
-9.YesBrick               1c19              (R )
+9.CheckBrick6_0          1bf8              (R )
+9.EntryPoint             1bda              (R )
+9.LookForBrickLoop       1bc8              (R )
+9.NoBrick                1c1d              (R )
+9.NotRowZero             1bfe              (R )
+9.YesBrick               1c16              (R )
 A3                       0090              (R )
 A4                       0070              (R )
 A5                       00c0              (R )
@@ -222,8 +223,8 @@ BulletDirection          00a6              (R )
 BulletDirectionClear     1d4b              (R )
 BulletDirectionClearBank2 3ec0                  
 BulletDirectionMask      3ebc              (R )
-BULLETDOWN               0002              (R )
 BulletDown               1d4f              (R )
+BULLETDOWN               0002              (R )
 BulletDownBank2          3ec4              (R )
 BulletFractional         00a7              (R )
 BULLETFRACTIONALPERCENT  0063              (R )
@@ -539,9 +540,10 @@ HMM1                     0023              (R )
 HMOVE                    002a              (R )
 HMP0                     0020              (R )
 HMP1                     0021              (R )
+HORIZONTALBLASTDISTANCE  0010              (R )
 InBetweenLevels          1094              (R )
 IncreaseScoreSubroutine  370a              (R )
-IncreaseScoreSubroutineBank0 1c2c              (R )
+IncreaseScoreSubroutineBank0 1c25              (R )
 InitialSetupSubroutine   1366              (R )
 INPT0                    0008                  
 INPT1                    0009                  
@@ -646,8 +648,8 @@ MoveEnemyTanksSubroutine 14e3              (R )
 MovementAllowed          1985              (R )
 MovementMask             1df1              (R )
 MoveTankOnYAxis          139b              (R )
-MoveTanksOffscreenLoop   12ff              (R )
 MoveTanksOffScreenLoop   1173              (R )
+MoveTanksOffscreenLoop   12ff              (R )
 MusicIsNotPlaying        176e              (R )
 MusicIsPlaying           1775              (R )
 MusicRoutine             1766                  
@@ -838,7 +840,7 @@ PositionASpriteSubroutineBank2NoHMCLR 3bc1
 PositioningLoop          3233              (R )
 PositionLoopBottom       3418              (R )
 POWERUPACTIVATEDBITS     0020              (R )
-PowerUpBonusRoutine      1c40              (R )
+PowerUpBonusRoutine      1c39              (R )
 POWERUPCOUNTDOWNBITS     001c              (R )
 POWERUPCOUNTDOWNDECREMENT 0004              (R )
 POWERUPCOUNTDOWNDEFAULT  001c              (R )
@@ -862,7 +864,7 @@ POWERUPSCOREBONUS        1000              (R )
 POWERUPSDISABLED         0001              (R )
 PowerUpsTurnedOff        3907              (R )
 POWERUPTESTING           0000              (R )
-PreventReverses          1c68              (R )
+PreventReverses          1c61              (R )
 PreWaitForVblankEnd      316e                  
 PRIORITYPF               0004              (R )
 ProcessDirections        1990              (R )
@@ -907,7 +909,7 @@ RespawnTankYPosition     32b1              (R )
 Return                   39b9              (R )
 ReturnFromBSSubroutine1  1ff4                  
 ReturnFromBSSubroutine2  3ff4              (R )
-ReverseDirection         1c70                  
+ReverseDirection         1c69                  
 RIGHTEIGHT               0080                  
 RIGHTFIVE                00b0                  
 RIGHTFOUR                00c0                  
@@ -1054,7 +1056,7 @@ TankDownAnimated4        3caf
 TankDownAnimated4b       3cb6                  
 TankDownFrame            325b              (R )
 TankFractional           009a              (R )
-TankFractionalAddition   1c5a              (R )
+TankFractionalAddition   1c53              (R )
 TankGfxHorizontal        3d4d                  
 TankGfxIndexSet          3062              (R )
 TankGfxVertical          3c4d                  
@@ -1084,8 +1086,8 @@ TankNotOffLeftEdge       1557              (R )
 TankNotOffRightEdge      155f              (R )
 TankNotOnScreenCannotDie 3803              (R )
 TankNotTurning           19af              (R )
-TankOffScreen            1526              (R )
 TANKOFFSCREEN            007f              (R )
+TankOffScreen            1526              (R )
 TankOffScreenCannotBeKilled 38cb              (R )
 TankOffscreenCannotShoot 1465              (R )
 TANKONSCREENLEFT         0010              (R )
@@ -1205,6 +1207,7 @@ VDELP0                   0025              (R )
 VDELP1                   0026              (R )
 VERSION_MACRO            0069                  
 VERSION_VCS              0069                  
+VERTICALBLASTDISTANCE    000e              (R )
 VOLUME0                  0000              (R )
 VOLUME10                 000a                  
 VOLUME12                 000c                  

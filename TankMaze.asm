@@ -328,7 +328,9 @@ TANKONSCREENTOP     =   MAZEAREAHEIGHT
 
 FIRSTCOLUMNX    =   16
 
-
+;--these are used for the kill zone when a powerup is shot.  They were set at 1.5 bricks, but increasing to 2 brick-widths/-heights
+HORIZONTALBLASTDISTANCE = 16
+VERTICALBLASTDISTANCE = (TANKHEIGHT+TANKHEIGHT)
 
 ;--constants for game over routine
 ;--TankMovementCounter is reused for this routine
@@ -521,16 +523,6 @@ G3      =   $A0
 C5      =   $B0
 A5      =   $C0
 
-
-; SQUARE_19   =   $00
-; SQUARE_20   =   $10
-; SQUARE_23   =   $20
-; SQUARE_26   =   $30
-; SQUARE_31   =   $40
-; LEAD_15     =   $50
-; LEAD_17     =   $60
-; LEAD_11     =   $70
-; LEAD_13     =   $80
 
 PATTERNEND  =   255
 
@@ -3464,15 +3456,15 @@ CheckForWallSubroutine
     lsr
     lsr
 	sec
-	sbc #2
+	sbc #2              ;<-- why is this necessary?
 	sta Temp+2  ;block X (column)
 	;--divide by 7
 	lda TankY,X ;technically should subtract 1 first but the divide by 7 will drop the remainder so we're cool
 	tay
 	lda DivideBySevenBank0,Y
 	
-	sec
-	sbc #1      ;adjust so zero indexed            
+; 	sec
+; 	sbc #1      ;adjust so zero indexed  -- remove this because initial adjustment is to add 1 here.          
     sta Temp+6  ;block Y (row)
 
     txa
@@ -3482,19 +3474,20 @@ CheckForWallSubroutine
     sta MiscPtr+1
 
     
-    ldy #3
+    ldx #3
+    bne .EntryPoint ;branch always.  first time through, the column shift is zero and the row shift is +1, but we do that already (see above)
 .LookForBrickLoop
-    sty Temp+1  ;save loop index
     ;move our brick coords to the next brick to check
     lda Temp+2
     clc
-    adc CheckForBrickColumnShift,Y       
+    adc CheckForBrickColumnShift,X      
     and #$1F
     sta Temp+2
     lda Temp+6
     clc
-    adc CheckForBrickRowShift,Y
+    adc CheckForBrickRowShift,X
     sta Temp+6
+.EntryPoint
     ;--now brick to check is at coords (Temp+2, Temp+6)
     lda #<PF1Left
     sta MiscPtr
@@ -3514,37 +3507,34 @@ CheckForWallSubroutine
     ;--else check brick (9, 0)
     lda LastRowR
     beq .NoBrick
-    bne .YesBrick
+    bne .YesBrick   ;branch always
 .CheckBrick6_0
     lda LastRowL
     beq .NoBrick
-    bne .YesBrick
+    bne .YesBrick   ;branch always
 .NotRowZero
     ;--check if we are off top of bottom of maze
     cmp #MAZEROWS
     bcs .YesBrick
     ;--ok, we are in the maze.  Check specific brick:
-    ldy Temp+6  ;row
-    dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
-    ldx Temp+2  ;column
-    lda PFRegisterLookup,X
+    ldy Temp+2  ;column
+    lda PFRegisterLookup,Y
     clc
     adc MiscPtr
     sta MiscPtr
-    lda PFMaskLookup,X
+    lda PFMaskLookup,Y
+    ldy Temp+6  ;row
+    dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
     and (MiscPtr),Y
     beq .NoBrick
 .YesBrick
-    ldy Temp+1      ;restore loop index
     lda Temp        ;get directions back in accumulator
-    ora DirectionBlock,Y
+    ora DirectionBlock,X
     sta Temp
 .NoBrick   
-    ldy Temp+1      ;restore loop index 
-    dey
+    dex
     bpl .LookForBrickLoop
 
-    
     pla
     tax             ;restore tank index 
     
@@ -6202,19 +6192,19 @@ KillAllTanksWithinBlastRadius
     ;   using blast radius of 1.5 bricks
     lda TankX,X
     sec
-    sbc #12
+    sbc #HORIZONTALBLASTDISTANCE
     sta Temp+4        ;left boundary
     lda TankY,X
 ;     clc
-    adc #(TANKHEIGHT+TANKHEIGHT/2)       ;carry is set here so actual value being added is (TANKHEIGHT+TANKHEIGHT/2)+1
+    adc #VERTICALBLASTDISTANCE ;carry is set here so actual value being added is (TANKHEIGHT+TANKHEIGHT/2)+1
     sta Temp+1      ;upper boundary+1
     lda TankX,X
 ;     clc
-    adc #13         ;carry clear following addition above
+    adc #HORIZONTALBLASTDISTANCE+1         ;carry clear following addition above
     sta Temp+2      ;right boundary+1
     lda TankY,X
 ;     sec
-    sbc #(TANKHEIGHT+TANKHEIGHT/2)-1     ;carry is clear here so actual value being subtracted is (TANKHEIGHT+TANKHEIGHT/2)
+    sbc #VERTICALBLASTDISTANCE-1     ;carry is clear here so actual value being subtracted is (TANKHEIGHT+TANKHEIGHT/2)
     sta Temp+3      ;lower boundary
     ;--discarding X (powerup icon index) at this point
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
