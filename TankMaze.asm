@@ -75,17 +75,14 @@
 
 	To do:
 	Highest priority:
-	With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
-	    in overscan, big issues are: 
-	        bullet to tank collisions can take 14+ scanlines (!!!) including ScoreForKillingTank... takes 4 scanlines just to update score.
-	        PlayerTankMovement takes 10+ scanlines, including 6 scanlines for CheckForWallSubroutine
-	Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
+	VERY CLOSE TO DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
+	FIXED: Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
-    Allow use of joystick to change options at title screen
-    Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-    Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
+    DONE: Allow use of joystick to change options at title screen
+    MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
+    DONE: Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
     Update standard/random maze indicator
-    Change score color to be static (or change so different for every game variation?)
+    DONE: Change score color to be static (or change so different for every game variation?)
 	
     Secondary priority or duplicate of above:
 	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
@@ -4546,10 +4543,10 @@ SetupScorePtrsLoop
 ;     lda GameStatus2
 ;     and #POWERUPSDISABLED
 ;     bne ScoreColorNoPowerUps
-    ldx #SCORECOLOR_POWERUPSENABLED
+;     ldx #SCORECOLOR_POWERUPSENABLED
 ;     .byte $2C
 ; ScoreColorNoPowerUps
-;     ldx #SCORECOLOR_POWERUPSDISABLED
+    ldx #SCORECOLOR_POWERUPSDISABLED
     
     
 PreWaitForVblankEnd    
@@ -5962,6 +5959,7 @@ NoBulletToBaseCollision
 
     ldy #0  ;start with player tank and count up
 TankCollisionLoop
+    ;--can we add a check that we ignore this tank if it is already dead?  That would eliminate half the collision loops... do we need to run through this if the tank is dead?
     lda Temp+1    ;get all collision registers
     and (MiscPtr),Y
     beq NoTankCollision
@@ -5987,22 +5985,22 @@ CheckForExplosionCollisionLoopEntry
     ldy #3
 CheckForExplosionCollisionCheckEnd
     cpy Temp+2
-    beq DidNotHitAnythingLive
+    beq DidNotHitAnythingLive   ;we have looped around completely and we exit the loop completely.
     bne CheckForExplosionCollisionLoop ;branch always
     
 TankHitLiveTank
     ;--if Y = 0 then tank run into by player
-    sty Temp+6  ;save this we will check below
-    ;--restore Y
-    ldy Temp+2
+    sty Temp+6  ;save this we will check below  ;tank that ran into tank we are checking
+    ;--restore Y index of tank we are checking
+    ldy Temp+2              ;tank we are checking.
     ;--now what?
     ;--remove tank only if fully onscreen
     tya
-    tax ;
+    tax ;what is point of this?  subsequent code uses X as index into tank variables instead of Y
     ;--check if tank in play (can be on screen but not in play, if dead)
     lda TankStatus,X        
     lsr     ;get TANKINPLAY bit into carry
-    bcs TankNotDeadYetKillIt
+    bcs TankNotDeadYetKillIt            ;
     ;--tank is not in play, is it an explosion or a powerup?
     and #TANKDOWN>>1    ;shifted due to LSR above
     beq TankAlreadyDeadCannotDie
@@ -6015,22 +6013,23 @@ TankHitLiveTank
     
     
     ;--first respawn tank to get powerup off the screen
-    tya
-    pha     ;save Y
-    jsr TankRespawnRoutine
+;     tya
+;     pha     ;save Y ... except Y is in Temp+2 already, can we just use that?
+    jsr TankRespawnRoutine          ;this uses X as index into tank.  and this blows away Y
     ;--second actually activate powerup
     lda MazeGenerationPass  ;used for powerups during levels
     and #POWERUPACTIVATEDBITS
     beq ActivateInitialPowerUp
-    jsr KillAllTanksBonus
+    jsr KillAllTanksBonus           ;this actually blows away X
     ;--now reset powerup countdown 
     lda MazeGenerationPass
     ora #POWERUPCOUNTDOWNRESTART
     sta MazeGenerationPass  ;reset counter to the max 
 
     ;--I think we can skip the subsequent stuff
-    pla ;restore Y
-    tay
+;     pla ;restore Y
+;     tay
+    ldy Temp+2      ;restore Y
     jmp TankAlreadyDeadCannotDie
 ActivateInitialPowerUp
     lda MazeGenerationPass
@@ -6038,8 +6037,9 @@ ActivateInitialPowerUp
     sta MazeGenerationPass    
     ldy #SPEEDBOOSTSOUND
     jsr StartSoundSubroutineBank2
-    pla ;restore Y
-    tay
+;     pla ;restore Y
+;     tay
+    ldy Temp+2      ;restore Y
     jmp TankAlreadyDeadCannotDie        ;branch always 
 
 
@@ -6129,17 +6129,25 @@ BallHasNotHitBlock
 CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
 ; 	jsr IsTankOnScreen
-; 	and #$FF
+; ; 	and #$FF
 ; 	bne EnemyTankOnScreen
 ; 	jmp EnemyTankOffscreen
-; EnemyTankOnScreen
+EnemyTankOnScreen
 	;now compare ball location to tank location
 	ldy #3
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 ; 	cmp #BALLOFFSCREEN
 	bne BulletOnScreen2
-	jmp BulletOffScreen2    
+	;--what if we inline the Y loop stuff here.  so when a bullet is offscreen we cycle through the loop in 11 cycles instead of 16.   
+	;   each bullet is processed 4 times, potentially saving 20 cycles per bullet.  
+	;   And when a bullet hits something, it is removed from the screen, so subsequent loops will save 5 cycles each.
+	dey
+	bpl CheckBulletTankCollisionInnerLoop
+	dex
+	bpl CheckBulletTankCollisionOuterLoop
+	jmp DoneWithCheckBulletTankCollisionOuterLoop 
+; 	jmp BulletOffScreen2    
 BulletOnScreen2
 	clc
 	adc #1
@@ -6209,10 +6217,10 @@ KillAllTanksWithinBlastRadius
     ;--discarding X (powerup icon index) at this point
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
     sta TankStatus,X
-    stx Temp+5      ;what is this for?
-    ;--save X
-    txa
-    pha
+    stx Temp+5      ;save X index of powerup so we can make sure not to "kill" it in loop below
+    ;--save X.... except we saved it above, so .... hmmm?
+;     txa
+;     pha
     ldx #3
 KillAllTanksInLoop
     cpx Temp+5  ;are we killing the powerup?
@@ -6234,17 +6242,16 @@ DoNotKillPowerUp
 NotInsideBlastRadius
     dex
     bpl KillAllTanksInLoop  
-    pla
-    tax ;restore X  
+;     pla
+;     tax ;restore X  
+    ldx Temp+5
     
     ;--third, play sound
     ;--need to save/restore Y
-    tya
-    pha
+    sty Temp+1          ;overwrite one of the coords used for the blast radius calc above
     ldy #POWERUPEXPLOSIONSOUND
     jsr StartSoundSubroutineBank2
-    pla
-    tay
+    ldy Temp+1
     
     jmp DoneWithBulletCollision
 TankAliveKillIt    
@@ -6258,8 +6265,10 @@ TankAliveKillIt
 ;     lda #BALLOFFSCREEN
 ;     sta BulletX,X
 ;     sta BulletY,X
+    ;--we should do something else here, like play a weird noise so player knows he shot a tank that can't be killed since it is partially offscreen
     jsr MoveBulletOffScreenSubroutine2  ;uses Y index into which ball to remove
-    jmp TankOffScreenCannotBeKilled     ;branch always
+        ;routine loads BALLOFFSCREEN (=0) and then stores it to two RAM locations
+    beq TankOffScreenCannotBeKilled     ;branch always
     
 TankIsOnScreenKillIt    
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
@@ -6287,7 +6296,7 @@ BulletOffScreen2
 	jmp CheckBulletTankCollisionInnerLoop
 	
 DoneWithBulletTankCollisionInnerLoop
-    
+EnemyTankOffscreen    
 	dex
 	bmi DoneWithCheckBulletTankCollisionOuterLoop
 	jmp CheckBulletTankCollisionOuterLoop
@@ -6747,13 +6756,6 @@ EnemyTankRespawnRoutine
 	inx                 ;get X back to 1-3
 	rol
 	tay	                ;at this point Y holds 0, 1, 2, 3, 4, 5
-; 	bne FoundRespawnPosition    ;branch always, since enemy tank = 1, 2, or 3.  so Y holds either 2, 3, 4, 5, 6, 7 (but not 0 or 1)
-
-; ; UseRegularRespawnPosition
-; UsePlayerRespawnPosition
-;     ldy #0             ;at this point X and Y should hold zero 
-;     beq SetPlayerRespawnLocation
-; FoundRespawnPosition
 
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
@@ -6766,7 +6768,7 @@ EnemyTankRespawnRoutine
     bcc LeftRightRespawnAdjust     ;branch always 
 PlayerNearTop    
     tya
-    clc
+    clc             ;<--could remove this CLC by adjusting the table in command below
     adc TankRespawnPlayerTop,X
     tay
 LeftRightRespawnAdjust
