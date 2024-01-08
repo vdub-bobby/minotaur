@@ -76,13 +76,14 @@
 	To do:
 	Highest priority:
 	VERY CLOSE TO DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
-	FIXED: Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
-    Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
-    DONE: Allow use of joystick to change options at title screen
-    MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-    DONE: Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
     Update standard/random maze indicator
+    Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
+    MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
+
+    DONE: Allow use of joystick to change options at title screen
+    DONE: Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
     DONE: Change score color to be static (or change so different for every game variation?)
+    DONE: Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
 	
     Secondary priority or duplicate of above:
 	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
@@ -2174,6 +2175,7 @@ TankInMaze
     ;       if there is more than one allowable direction:
     ;           save those directions, then push a target (X and Y) onto the stack, and then turn towards the direction that best goes to the target.
 	lda #0      ;#(J0LEFT|J0RIGHT|J0UP|J0DOWN)  = all directions
+CallingCheckForWallSubroutine
 	jsr CheckForWallSubroutine	;--returns with allowable directions in A
 AboutToCheckForEnemyTank
 	jsr CheckForEnemyTankSubroutine ;--returns with allowable directions in A
@@ -3447,14 +3449,6 @@ CheckForWallSubroutine
 	
 	sta Temp        ;save directions
 	
-	;--get brick X and Y coordinates of Tank
-	lda TankX,X
-    lsr
-    lsr
-    lsr
-	sec
-	sbc #2              ;<-- why is this necessary?
-	sta Temp+2  ;block X (column)
 	;--divide by 7
 	lda TankY,X ;technically should subtract 1 first but the divide by 7 will drop the remainder so we're cool
 	tay
@@ -3467,34 +3461,48 @@ CheckForWallSubroutine
     txa
     pha ;save tank index
        
-    lda #>PF1Left
+    lda #>PF1Left           ;<--this value is zero
     sta MiscPtr+1
-
+	;--get brick X and Y coordinates of Tank
+	lda TankX,X
+    lsr
+    lsr
+    lsr
+	sec
+	sbc #2
+	sta Temp+2  ;block X (column)
+    ;A needs to hold Temp+2 (column) when we enter loop
     
     ldx #3
-    bne .EntryPoint ;branch always.  first time through, the column shift is zero and the row shift is +1, but we do that already (see above)
+    clc     ;need to clear ahead of ADC after branch
+    bcc .EntryPoint ;branch always.  first time through, the column shift is zero and the row shift is +1, but we do that already (see above)
 .LookForBrickLoop
     ;move our brick coords to the next brick to check
+    lda Temp+6
+    clc
+    adc CheckForBrickRowShift,X
+    sta Temp+6
     lda Temp+2
     clc
     adc CheckForBrickColumnShift,X      
     and #$1F
     sta Temp+2
-    lda Temp+6
-    clc
-    adc CheckForBrickRowShift,X
-    sta Temp+6
-.EntryPoint
-    ;--now brick to check is at coords (Temp+2, Temp+6)
-    lda #<PF1Left
-    sta MiscPtr
     ;--check if column > 15 (means off left or right side of maze)
-    lda Temp+2
     cmp #16
     bcs .YesBrick
+.EntryPoint
+    ;--now brick to check is at coords (Temp+2, Temp+6)
+    ;--adjust MiscPtr now even though we don't need it if on row zero.
+    tay         ;A holds Temp+2 (column), get into Y
+    lda PFRegisterLookup,Y
+    ;--carry clear following not-taken BCS above
+    adc #<PF1Left
+    sta MiscPtr
+        
     ;--check if we are checking the bottom row
     lda Temp+6
     bne .NotRowZero
+.RowZero
     ;--on row zero, so just check the two specific bricks in that row:
     lda Temp+2
     cmp #6
@@ -3510,17 +3518,14 @@ CheckForWallSubroutine
     beq .NoBrick
     bne .YesBrick   ;branch always
 .NotRowZero
-    ;--check if we are off top of bottom of maze
+    ;--check if we are off top or bottom of maze
     cmp #MAZEROWS
     bcs .YesBrick
     ;--ok, we are in the maze.  Check specific brick:
-    ldy Temp+2  ;column
-    lda PFRegisterLookup,Y
-    clc
-    adc MiscPtr
-    sta MiscPtr
+    ;--Y still holds the column at this point
     lda PFMaskLookup,Y
     ldy Temp+6  ;row
+.NotRowZeroSecondCheck
     dey         ;this is necessary because the indexed PF data starts at row 1 (row zero is special case)
     and (MiscPtr),Y
     beq .NoBrick
@@ -3529,6 +3534,19 @@ CheckForWallSubroutine
     ora DirectionBlock,X
     sta Temp
 .NoBrick   
+    ;--if column is unchanged (i.e., first time through the loop), just adjust Y and check again
+    cpx #3
+    bne .SkipSecondCheck
+    ldy Temp+2  ;reload column
+    lda PFMaskLookup,Y
+    ldy Temp+6  ;reload row
+    dex
+    dey
+    dey     ;adjust again to tile below player
+    bmi .YesBrick   ;off bottom of maze
+    beq .RowZero
+    bne .NotRowZeroSecondCheck  ;branch always
+.SkipSecondCheck
     dex
     bpl .LookForBrickLoop
 
@@ -3687,14 +3705,14 @@ BulletLeft
 BulletRight
 	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
 
-CheckForBrickColumnShift    ;we'll go around clockwise starting with the top and ending with the left
-    .byte -1, -1, 1, 0
-    
+CheckForBrickColumnShift    ;we'll go around top, bottom, right, left.   indexing in from last to first.  
+                            ;First check (4th value) no adjustment needed; second check (third value) is adjusted manually in code.
+                            ;So only two values are needed, and adjustments are from the top (not bottom!)
+    .byte -2, 1
 CheckForBrickRowShift
-    .byte 1, -1, -1, 1    
- 
+    .byte 0, -1  
 DirectionBlock
-    .byte TANKLEFT, TANKDOWN, TANKRIGHT, TANKUP    
+    .byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP    
 
 	
 PFMaskLookup
