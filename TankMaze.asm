@@ -1327,8 +1327,9 @@ CheckTimeForSound
 	;--if no sound effects, play music in channel 1
     ldx #1
     jsr PlaySoundSubroutine
-
+    jmp WaitForOverscanEnd      ;--for testing
 NoTimeForSoundThisFrame
+    nop                         ;--for testing
 WaitForOverscanEnd
 	lda INTIM
  	bpl WaitForOverscanEnd
@@ -1482,9 +1483,23 @@ AlreadyStartingNewLevel
     
 GoImmediatelyToCompleteTitleScreen
     ;--if we are already there, then we don't need to do anything
+    lda GameStatus
+    and #GAMEOFF
+    beq GameOnGoingJumpToTitleScreen
+    ;--this check works if we are on the title screen and we need to know if we are in the middle of drawing it.
     lda MazeGenerationPass
+    bpl OnTitleScreenButImmediatelyDraw
     bmi AlreadyOnTitleScreenWeAreFine
-
+GameOnGoingJumpToTitleScreen
+    lda #BALLOFFSCREEN      ;<-- this is zero
+    sta BulletY
+    sta BulletY+1
+    sta BulletY+2
+    sta BulletY+3
+    sta TanksRemaining
+    jsr MoveAllTanksOffScreenSubroutine
+    
+OnTitleScreenButImmediatelyDraw
     ;--reset GameStatus flags
     lda GameStatus
     ora #TITLESCREEN|DRAWBASE|GAMEOFF
@@ -1510,16 +1525,10 @@ DrawTitleScreenWhenSELECTPressed
     sta PF1Left,Y
     dex
     bpl DrawTitleScreenWhenSELECTPressed
+    stx MazeGenerationPass
 	lda #%11111100
 	sta LastRowL
 	sta LastRowR	    
-    ;--reposition tanks and bullets
-    lda #BALLOFFSCREEN
-    sta BulletY
-    sta BulletY+1
-    sta BulletY+2
-    sta BulletY+3
-    jsr MoveAllTanksOffScreenSubroutine
     ;--put song at spot where tanks show on screen:
     lda SongIndex
     cmp #$FF
@@ -4568,7 +4577,7 @@ SetupScorePtrsLoop
     
     
 PreWaitForVblankEnd    
- ;   nop
+    nop
     
 
 WaitForVblankEnd
