@@ -7565,18 +7565,6 @@ EntryPointRowOffsetTable
 
 
     ALIGNGFXDATA 2
-/*
-
-new enemy tank gfx:
-Right1
-Right1b
-Right2
-Right2b
-Right3
-Right3b
-Right4
-Right4b
-*/		
 TankGfxHorizontal
 TankRightAnimated1
         .byte 0
@@ -7767,18 +7755,18 @@ PowerUpImage1 = * - 1
         .byte #%00111100;--2
         .byte #%00111100;--4
         .byte #%01011010;--6
-        .byte #%11111111;--8
-        .byte #%10000001;--10
-        .byte #%00000000;--12
+        .byte #%01111110;--8
+        .byte #%10111101;--10
+        .byte #%01000010;--12
         
 PowerUpImage1b 
         .byte 0
-        .byte #%00000000;--1
+        .byte #%00111100;--1
         .byte #%00111100;--3
         .byte #%01111110;--5
         .byte #%01111110;--7
-        .byte #%10000001;--9
-        .byte #%01000010;--11
+        .byte #%11111111;--9
+        .byte #%10000001;--11
         .byte 0
         
         
@@ -7797,47 +7785,17 @@ TanksRemainingGfx
 	
 /*
 NEW POWERUP ICON IMAGES: 2024.1.10
-Frame0	;straight ahead
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%00111100;--
-        .byte #%01111110;--
-        .byte #%01011010;--
-        .byte #%01111110;--
-        .byte #%01111110;--
-        .byte #%11111111;--
-        .byte #%10111101;--
-        .byte #%10000001;--
-        .byte #%01000010;--
-Frame1 ;angled right
-        .byte #%00001111;--
-        .byte #%00011111;--
-        .byte #%00111111;--
-        .byte #%00111111;--
-        .byte #%01111110;--
-        .byte #%01101100;--
-        .byte #%01111110;--
-        .byte #%01111100;--
-        .byte #%01111100;--
-        .byte #%01011100;--
-        .byte #%00100010;--
-        .byte #%00011001;--
-Frame2 ;straight right
-        .byte #%00000110;--
-        .byte #%00011110;--
-        .byte #%00111110;--
-        .byte #%00111110;--
-        .byte #%01111100;--
-        .byte #%01110100;--
-        .byte #%01111100;--
-        .byte #%01111000;--
-        .byte #%01111000;--
-        .byte #%01100000;--
-        .byte #%00110000;--
-        .byte #%00011100;--
+PowerUpImage1	;straight ahead
+Image1b
 
-New enemy tank gfx:
+Frame2 ;angled right
+Frame2b
+Frame3 ;straight right
+        
+3b
+        
+        
+        New enemy tank gfx:
 Moving 
         	*/
 	
@@ -7917,39 +7875,39 @@ PlayerTankDown4b
         .byte 0
 
 PowerUpImage2 = * - 1       ;straight right
-        .byte #%00000110;--2
+        .byte #%00011110;--2
         .byte #%00111110;--4
         .byte #%01110100;--6
         .byte #%01111000;--8
-        .byte #%00110000;--10
-        .byte #%00000000;--12
+        .byte #%01100000;--10
+        .byte #%00011100;--12
 PowerUpImage2b        
         .byte 0
-        .byte #%00000000;--1
-        .byte #%00011110;--3
-        .byte #%01111110;--5
+        .byte #%00000110;--1
+        .byte #%00111110;--3
+        .byte #%01111100;--5
         .byte #%01111100;--7
-        .byte #%01100000;--9
-        .byte #%00011100;--11
+        .byte #%01111000;--9
+        .byte #%00110000;--11
         .byte 0
         
 
 PowerUpImage3 = * - 1       ;angled right
-        .byte #%00001111;--2
+        .byte #%00011111;--2
         .byte #%00111111;--4
         .byte #%01101100;--6
         .byte #%01111100;--8
-        .byte #%00100010;--10
-        .byte #%00000000;--12
+        .byte #%01011100;--10
+        .byte #%00011001;--12
         
 PowerUpImage3b
      .byte 0
-        .byte #%00000000;--1
+        .byte #%00001111;--1
         .byte #%00111111;--3
         .byte #%01111110;--5
         .byte #%01111110;--7
-        .byte #%01000100;--9
-        .byte #%00011001;--11
+        .byte #%01111100;--9
+        .byte #%00100010;--11
      .byte 0     
  
 StaticMazeImage =    * - 1
