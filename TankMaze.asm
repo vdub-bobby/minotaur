@@ -79,6 +79,7 @@
     Update standard/random maze indicator
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
+    Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)
     Final color, gfx, sound tweaking
 
     DONE: Allow use of joystick to change options at title screen
@@ -236,12 +237,15 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
         endif
     ENDM
 	
-    SUBROUTINE
     MAC ALIGNGFXDATA
 .marker set *
-        ds DATASPACEBEFOREGFX - (* & $FF)
+        IF DATASPACEBEFOREGFX > (* & $FF)
+            ds DATASPACEBEFOREGFX - (* & $FF)
+        ENDIF
         ECHO "---", (*-.marker), "bytes left at ALIGNGFXDATA", [{1}]d, "at location", .marker
     ENDM
+    
+    
     
     ;--pass in 1- to 4-digit decimal number and will spit out it as hex BCD number
     MACRO DecimalToBCD
@@ -593,9 +597,10 @@ CONSOLEDEBOUNCEFLAG	    =	%01000000
 JOYSTICKDEBOUNCEFLAG    =   %00100000
 ENEMYDEBOUNCEBITS       =   %00011111
 
-
-BULLETSPEEDHOR		=		1
-BULLETSPEEDVER		=		1
+BULLETHORIZONTALSPEED   =   4
+BULLETVERTICALSPEED = 3	
+	
+;--note that bullet speeds are no longer fractional, so these constants aren't used AND ALSO the ZP RAM location BulletFractional also isn't used.
 BULLETFRACTIONALPERCENT =   99   
 BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down so the collision detection works better
 
@@ -605,7 +610,6 @@ SCORECOLOR_POWERUPSENABLED  =       BROWNGREEN|$4
 WALLCOLOR			        =		RED|$8
 TANKSREMAININGCOLOR         =   TURQUOISE|$A
 
-;--old colors: GOLD|A and BLUE2|C
 
 
 /*              even frame          odd frame
@@ -3745,9 +3749,6 @@ DoNotMoveBulletsThisFrame
 ; 	jmp ReturnFromBSSubroutine2
     rts
 
-BULLETHORIZONTALSPEED   =   4
-BULLETVERTICALSPEED = 3	
-	
 	
 	
 ;****************************************************************************
@@ -3812,7 +3813,7 @@ TankTitleScreenX
 TankTitleScreenY
     .byte 20, 40, 30, 20
 TankTitleScreenStatus
-    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
+    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
 
 
 	
@@ -4470,14 +4471,24 @@ NotPlayerTankSkipNotMovingCheck
 	lda GameStatus2
 	and #RANDOMMAZES
 	beq StandardMazeIcon
-	lda #<(RandomMazeImage+TANKHEIGHT)
-	pha
-	lda #>(RandomMazeImage+TANKHEIGHT)
-	bne SetTankGfxPtr
+	lda FrameCounter
+	lsr
+	lsr
+; 	lsr
+	and #%00001110
+	tax
+	lda RandomMazeFrame,X
+    pha
+    lda RandomMazeFrame+1,X
+    bne SetTankGfxPtr
+; 	lda #<(RandomMazeImage+TANKHEIGHT)
+; 	pha
+; 	lda #>(RandomMazeImage+TANKHEIGHT)
+; 	bne SetTankGfxPtr
 StandardMazeIcon	
-	lda #<(StaticMazeImage+TANKHEIGHT)
+	lda #<(StandardMazeImage+TANKHEIGHT)
 	pha
-	lda #>(StaticMazeImage+TANKHEIGHT)
+	lda #>(StandardMazeImage+TANKHEIGHT)
 	bne SetTankGfxPtr                   ;branch always
 DisplayRegularTanks
 NotOnTitleScreenDisplayRegularEnemyTanks	
@@ -4939,8 +4950,6 @@ P1M1Color
 BottomHUDSpritePositions
     .byte 104, 112, 60, 66
     
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine, <BlankDigit
 
 ConsecutiveKillBonusTable
     DecimalToBCD CONSECUTIVEKILLBONUS*0
@@ -7158,18 +7167,105 @@ MoveBulletOffScreenSubroutine
 ;------------------------------------------------------
 
 
-
+    ALIGNGFXDATA 1
     
+/*
+new random maze gfx
+Morph1
+        .byte #%00111110;--2
+        .byte #%00101000;--4
+        .byte #%01011110;--6
+        .byte #%01000001;--8
+        .byte #%01011110;--10
+        .byte #%00101000;--12
+Morph1b
+Morph2
+Morph2b
 
 
-	
-	
-	
+*/
+; 
+; new maze (standard vs random) gfx:
+StandardMazeImage
+        .byte 0
+        .byte #%01011011;--2
+        .byte #%01001000;--4
+        .byte #%11011111;--6
+        .byte #%00000001;--8
+        .byte #%01011101;--10
+        .byte #%01001000;--12
+StandardMazeImageb
+        .byte 0
+        .byte #%01011011;--1
+        .byte #%01001000;--3
+        .byte #%11011111;--5
+        .byte #%00000001;--7
+        .byte #%01011101;--9
+        .byte #%01001000;--11
+        .byte 0
+MorphImage1 = * - 1
+        .byte #%00111110;--2
+        .byte #%00101000;--4
+        .byte #%01011110;--6
+        .byte #%01000001;--8
+        .byte #%01011110;--10
+        .byte #%00101000;--12
+MorphImage1b
+        .byte 0
+        .byte #%00111110;--1
+        .byte #%00101000;--3
+        .byte #%01011110;--5
+        .byte #%01000001;--7
+        .byte #%01011110;--9
+        .byte #%00101000;--11
+        .byte 0
+MorphImage2 = * - 1
+        .byte #%00011100;--2
+        .byte #%00101000;--4
+        .byte #%00001100;--6
+        .byte #%00100010;--8
+        .byte #%01101110;--10
+        .byte #%00111100;--12
+MorphImage2b
+        .byte 0
+        .byte #%00011100;--1
+        .byte #%00101000;--3
+        .byte #%00001100;--5
+        .byte #%00100010;--7
+        .byte #%01101110;--9
+        .byte #%00111100;--11
+        .byte 0
+QuestionMarkImage = * - 1
+        .byte #%00011000;--2
+        .byte #%00011000;--4
+        .byte #%00001100;--6
+        .byte #%00000110;--8
+        .byte #%01100110;--10
+        .byte #%00111100;--12
+QuestionMarkImageb
+        .byte 0
+        .byte #%00011000;--1
+        .byte #%00000000;--3
+        .byte #%00011000;--5
+        .byte #%00001110;--7
+        .byte #%01100110;--9
+        .byte #%00111100;--11
+        .byte 0
 
 
-	
+; animation runs maze-morph1-morph2-questionmark-questionmark-morph2-morph1-maze and then loop to beginning 
+; (so holding on maze for 2 beats and holding on question mark for 2 beats)
 
-	
+
+
+RandomMazeFrame
+    .word StandardMazeImage+TANKHEIGHT, MorphImage1+TANKHEIGHT
+    .word MorphImage2+TANKHEIGHT, QuestionMarkImage+TANKHEIGHT
+	.word QuestionMarkImage+TANKHEIGHT, MorphImage2+TANKHEIGHT
+	.word MorphImage1+TANKHEIGHT, StandardMazeImage+TANKHEIGHT
+
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine, <BlankDigit
 	
     PAGEALIGN 3
     
@@ -7283,7 +7379,7 @@ PlayerTankColor
     
 	
 	
-    ALIGNGFXDATA 1
+    ALIGNGFXDATA 2
 	
 TankGfxVertical
      ;--animation for upward facing tank:   
@@ -7483,6 +7579,8 @@ PlayerTankUp4b
         .byte #%11011011;--1
         .byte 0		
         
+        
+        
 		PAGEALIGN 4
 	
 DigitData
@@ -7587,7 +7685,8 @@ P0CollisionTable
 
 
 
-    ALIGNGFXDATA 2
+
+    ALIGNGFXDATA 3
 TankGfxHorizontal
 TankRightAnimated1
         .byte 0
@@ -7843,7 +7942,7 @@ RotationOdd
 RotationEven
 	.byte 2, 1, 3, 0
 
-    ALIGNGFXDATA 3
+    ALIGNGFXDATA 4
        
         
         
