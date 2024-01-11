@@ -229,7 +229,7 @@ BulletDirection          00a6              (R )
 BulletDirectionClear     1d4b              (R )
 BulletDirectionClearBank2 3ec0                  
 BulletDirectionMask      3ebc              (R )
-BulletDirectionMaskBank0 1cdb              (R )
+BulletDirectionMaskBank0 1ced              (R )
 BulletDown               1d4f              (R )
 BULLETDOWN               0002              (R )
 BulletDownBank2          3ec4                  
@@ -238,18 +238,19 @@ BULLETFRACTIONALPERCENT  0063              (R )
 BULLETFRACTIONALSPEED    00fd                  
 BulletHitBrickSubroutine 398c              (R )
 BulletHitTank            3a84              (R )
+BULLETHORIZONTALSPEED    0004                  
 BULLETLEFT               0001              (R )
 BulletLeft               1d53              (R )
 BulletLeftBank2          3ec8              (R )
 BulletMovingLeft         39c4              (R )
-BulletNotDown            1c99              (R )
+BulletNotDown            1ca4              (R )
 BulletNotOnBottomRow     39b7              (R )
-BulletNotRight           1ca2              (R )
-BulletNotUp              1c8a              (R )
-BulletOffScreen          1cbb              (R )
+BulletNotRight           1cb2              (R )
+BulletNotUp              1c92              (R )
+BulletOffScreen          1cd0              (R )
 BulletOffScreen2         3861                  
 BulletOnLeftLastRow      39b1              (R )
-BulletOnScreen           1cc6              (R )
+BulletOnScreen           1cdb              (R )
 BULLETRIGHT              0000              (R )
 BulletRight              1d57              (R )
 BulletRightBank2         3ecc                  
@@ -259,9 +260,10 @@ BULLETSOUNDLENGTH        000d              (R )
 BULLETSOUNDTONE          0003              (R )
 BULLETSPEEDHOR           0001                  
 BULLETSPEEDVER           0001                  
-BULLETUP                 0003              (R )
 BulletUp                 1d4b              (R )
+BULLETUP                 0003              (R )
 BulletUpBank2            3ec0                  
+BULLETVERTICALSPEED      0003                  
 BulletX                  009e              (R )
 BulletY                  00a2              (R )
 BURNTORANGE              0030                  
@@ -274,8 +276,8 @@ CallingMoveEnemyTank     1086
 Channel0PlayMusicOnly    176e              (R )
 Channel1Decay            008c              (R )
 Channel1PlaySoundFX      174d                  
-CheckBulletIsOffScreenHorizontal 1ca9              (R )
-CheckBulletIsOffScreenVertical 1cb5              (R )
+CheckBulletIsOffScreenHorizontal 1cbe              (R )
+CheckBulletIsOffScreenVertical 1cca              (R )
 CheckForBrickColumnShift 1d5b              (R )
 CheckForBrickRowShift    1d5d              (R )
 CheckForEnemyTankSubroutine 1b08              (R )
@@ -360,7 +362,7 @@ DoNotBringTankOnscreenYet 1570              (R )
 DoNotDrawBase            33f9              (R )
 DoNotEndPercussion       18a8                  
 DoNotKillPowerUp         3839              (R )
-DoNotMoveBulletsThisFrame 1cc9                  
+DoNotMoveBulletsThisFrame 1cdb                  
 DoNotMoveTankOffscreenYet 152d              (R )
 DoNotPlayLevelStartMusic 17b1              (R )
 DoNotReadConsoleSwitchesWhileGeneratingMaze 1095              (R )
@@ -651,7 +653,6 @@ MoveAllTanksOffScreenSubroutine 12f5              (R )
 MoveAnEnemyTank          14f6              (R )
 MoveBulletOffScreenSubroutine 3b5b              (R )
 MoveBulletOffScreenSubroutine2 3ef7              (R )
-MoveBulletsLoop          1c78              (R )
 MoveBulletSubroutine     1c76              (R )
 MoveEnemyTanksOffScreen  369a              (R )
 MoveEnemyTanksSubroutine 14eb              (R )
@@ -674,7 +675,7 @@ NoAllowedDirections      172c              (R )
 NoArticulation           180e              (R )
 NoAvailableBalls         1adb              (R )
 NoAvailableEnemyBalls    146d                  
-NoBulletMovement         1cc6              (R )
+NoBulletMovement         1cdb              (R )
 NoBulletSound            1a5f              (R )
 NoBulletToBaseCollision  3704              (R )
 NoBulletToTankCollision  3861              (R )
@@ -744,7 +745,7 @@ ONECOPYQUAD              0007
 OnlyOnePlaceToCarve      35aa              (R )
 OnTitleScreenButImmediatelyDraw 132b              (R )
 ORANGE                   0020                  
-OVERSCAN_TIMER           0021              (R )
+OVERSCAN_TIMER           0024              (R )
 OverscanRoutine          10a9                  
 P0CollisionTable         3d4b              (R )
 P0DIFF                   0040              (R )
@@ -875,7 +876,7 @@ POWERUPSCOREBONUS        1000              (R )
 POWERUPSDISABLED         0001              (R )
 PowerUpsTurnedOff        388e              (R )
 POWERUPTESTING           0000              (R )
-PreventReverses          1cca              (R )
+PreventReverses          1cdc              (R )
 PreWaitForVblankEnd      316e                  
 PRIORITYPF               0004              (R )
 ProcessDirections        1998              (R )
@@ -920,7 +921,7 @@ RespawnTankYPosition     32b2              (R )
 Return                   393d              (R )
 ReturnFromBSSubroutine1  1ff4                  
 ReturnFromBSSubroutine2  3ff4              (R )
-ReverseDirection         1cd2                  
+ReverseDirection         1ce4                  
 RIGHTEIGHT               0080                  
 RIGHTFIVE                00b0                  
 RIGHTFOUR                00c0                  
@@ -1209,7 +1210,7 @@ UpdateMazeNumber         3537              (R )
 UpdateRandomNumberBank2  3690              (R )
 UsePowerUpGraphic        3074              (R )
 VBLANK                   0001              (R )
-VBLANK_TIMER             0024              (R )
+VBLANK_TIMER             0021              (R )
 VBLANKRoutine            1011              (R )
 vcs.h                    0000 ????         (R )
 VDELBL                   0027              (R )

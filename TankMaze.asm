@@ -257,8 +257,8 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ;-------------------------Constants Below---------------------------------
 
 ;--scanline count constants
-VBLANK_TIMER = 36       ;--I think this (38) is fine
-OVERSCAN_TIMER = 33     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 33       ;--I think this is fine
+OVERSCAN_TIMER = 36     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
 SOUNDTIMEBUFFER     =   (8*76)/64
 ;--scanline count constants end
@@ -3656,8 +3656,16 @@ MoveBulletSubroutine
 ;     ;if carry clear, we didn't overflow BulletFractional and we aren't moving any bullets this frame so just return early
 ;     bcc DoNotMoveBulletsThisFrame
     ;--new hotness, move bullets 1 pixel every frame.  no fractional bullet speeds 
-	ldx #3
-MoveBulletsLoop
+    
+    
+    ;--new new hotness, move only the bullet we will be displaying
+    
+    lda FrameCounter
+    and #3
+    tax
+    
+; 	ldx #3
+; MoveBulletsLoop
 	lda BulletX,X
 	;cmp #BALLOFFSCREEN     == 0
 	beq NoBulletMovement;BulletOffScreen;
@@ -3666,14 +3674,22 @@ MoveBulletsLoop
 	cmp BulletUp,X
 	bne BulletNotUp
 	;--move bullet up
-	inc BulletY,X
+	lda BulletY,X
+	clc
+	adc #BULLETVERTICALSPEED
+	sta BulletY,X
+; 	inc BulletY,X
     bne CheckBulletIsOffScreenVertical      ;branch always
 BulletNotUp
 	cmp BulletDown,X
 	bne BulletNotDown
 	;--move bullet down
-    dec BulletY,X
+;     dec BulletY,X
     lda BulletY,X
+    sec
+    sbc #BULLETVERTICALSPEED
+    sta BulletY,X
+;     lda BulletY,X
     ;--Y values range from 0 to about 80, so negative means we went off screen low
     bmi BulletOffScreen
 	beq BulletOffScreen                     ;if Y value is zero, then bullet is also offscreen
@@ -3682,13 +3698,21 @@ BulletNotDown
 	cmp BulletRight,X
 	bne BulletNotRight
 	;--move bullet right
-	inc BulletX,X
+; 	inc BulletX,X
+    lda BulletX,X
+    clc
+    adc #BULLETHORIZONTALSPEED
+    sta BulletX,X
     bne CheckBulletIsOffScreenHorizontal    ;branch always
 BulletNotRight	
 	cmp BulletLeft,X
 	bne NoBulletMovement                    ;is this branch ever taken?  it isn't.  bullets are always moving, and if we are here the bullet is onscreen and will be moved.
 	;--move bullet left
-    dec BulletX,X
+;     dec BulletX,X
+    lda BulletX,X
+    sec
+    sbc #BULLETHORIZONTALSPEED
+    sta  BulletX,X
 	;--check for off screen:
 CheckBulletIsOffScreenHorizontal
 	lda BulletX,X
@@ -3715,13 +3739,14 @@ BulletOffScreen
 	jsr StartSoundSubroutine
 NoBulletMovement
 BulletOnScreen
-	dex
-	bpl MoveBulletsLoop
+; 	dex
+; 	bpl MoveBulletsLoop
 DoNotMoveBulletsThisFrame
 ; 	jmp ReturnFromBSSubroutine2
     rts
 
-	
+BULLETHORIZONTALSPEED   =   4
+BULLETVERTICALSPEED = 3	
 	
 	
 	
