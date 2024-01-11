@@ -6160,95 +6160,98 @@ BallHasNotHitBlock
 
 	;--now check if bullet has hit an enemy tank
 
-	
+	;switching back to hardware collision detection
 	;--we check only the bullet that was just displayed on the screen using the hardware collision registers	
-; 	lda FrameCounter
-; 	and #1
-; 	tay
-; 	
-; 	bit CXP0FB
-; 	bvs BulletCollisionP0
-; 	bit CXP1FB
-; 	bvs BulletCollisionP1
-; 	bit CXM0FB
-; 	bvs BulletCollisionM0
-; 	bit CXM1FB
-; 	bvs BulletCollisionM1
-; 	jmp NoBulletToTankCollision
-; 	
-; BulletCollisionP0
-;     lda P0CollisionTable,Y
-;     tax ;index into which tank is hit
-;     bvs FoundDeadTankNowKill    ;branch always following bvs branch above
-; BulletCollisionP1
-;     lda P1CollisionTable,Y
-;     tax
-;     bvs FoundDeadTankNowKill
-; BulletCollisionM0
-;     lda M0CollisionTable,Y
-;     tax
-;     bvs FoundDeadTankNowKill
-; BulletCollisionM1
-;     lda M1CollisionTable,Y
-;     tax
-
+	lda FrameCounter
+	and #1
+	tay
+	
+	bit CXP0FB
+	bvs BulletCollisionP0
+	bit CXP1FB
+	bvs BulletCollisionP1
+	bit CXM0FB
+	bvs BulletCollisionM0
+	bit CXM1FB
+	bvs BulletCollisionM1
+	jmp NoBulletToTankCollision
+	
+BulletCollisionP0
+    lda P0CollisionTable,Y
+    tax ;index into which tank is hit
+    bvs FoundDeadTankNowKill    ;branch always following bvs branch above
+BulletCollisionP1
+    lda P1CollisionTable,Y
+    tax
+    bvs FoundDeadTankNowKill
+BulletCollisionM0
+    lda M0CollisionTable,Y
+    tax
+    bvs FoundDeadTankNowKill
+BulletCollisionM1
+    lda M1CollisionTable,Y
+    tax
 
 
 	;--now check if bullet has hit an enemy tank
 	;   X is index into tank (outer loop)
 	;   Y is index into bullet (inner loop)
-	ldx #3                                          ;+2     2
-CheckBulletTankCollisionOuterLoop
+; 	ldx #3                                          ;+2     2
+; CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
 ; 	jsr IsTankOnScreen
 ; ; 	and #$FF
 ; 	bne EnemyTankOnScreen
 ; 	jmp EnemyTankOffscreen
-EnemyTankOnScreen
-	;now compare ball location to tank location
-	ldy #3                                          ;+2      2      will count cycles for single loop through
-CheckBulletTankCollisionInnerLoop
-	lda BulletX,Y
-; 	cmp #BALLOFFSCREEN
-	bne BulletOnScreen2                             ;+4/5    6/7
+; EnemyTankOnScreen
+; 	;now compare ball location to tank location
+; 	ldy #3                                          ;+2      2      will count cycles for single loop through
+; CheckBulletTankCollisionInnerLoop
+; 	lda BulletX,Y       ;<--this ... maybe isn't necessary if we are using hardware collision?
+; ; 	cmp #BALLOFFSCREEN
+; 	bne BulletOnScreen2                             ;+4/5    6/7
 	;--what if we inline the Y loop stuff here.  so when a bullet is offscreen we cycle through the loop in 11 cycles instead of 16.   
 	;   each bullet is processed 4 times, potentially saving 20 cycles per bullet.  
 	;   And when a bullet hits something, it is removed from the screen, so subsequent loops will save 5 cycles each.
-	dey
-	bpl CheckBulletTankCollisionInnerLoop
-	dex
-	bpl CheckBulletTankCollisionOuterLoop
-	jmp DoneWithCheckBulletTankCollisionOuterLoop 
-; 	jmp BulletOffScreen2    
-BulletOnScreen2                                     ;        7
-	clc
-	adc #1
-	cmp TankX,X
-	bcc BulletDidNotHitTank1                        ;+10/11 17/18
-	sbc #1
-	sta Temp
-	lda TankX,X
-	clc
-	adc #8
-	cmp Temp
-	bcc BulletDidNotHitTank1                        ;+18/19 35/36
-	;--compare Y position
-	lda BulletY,Y
-	sec
-	sbc #1
-	cmp TankY,X                         
-	bcs BulletDidNotHitTank1                        ;+14/15 49/50
-	adc #1
-	sta Temp
-	lda TankY,X
-	sec
-	sbc #TANKHEIGHT
-	cmp Temp
-	bcs BulletDidNotHitTank1                        ;+18/19 67/68
-    bcc FoundDeadTankNowKill                        ;+3     70      branch always
-BulletDidNotHitTank1                                ;       18/36/50/68
-    jmp BulletDidNotHitTank                         ;+3     this is end of (inner) loop
+; 	dey
+; 	bpl CheckBulletTankCollisionInnerLoop
+; 	dex
+; 	bpl CheckBulletTankCollisionOuterLoop
+; 	jmp DoneWithCheckBulletTankCollisionOuterLoop 
+; ; 	jmp BulletOffScreen2    
+; BulletOnScreen2                                     ;        7
+; 	clc
+; 	adc #1
+; 	cmp TankX,X
+; 	bcc BulletDidNotHitTank1                        ;+10/11 17/18
+; 	sbc #1
+; 	sta Temp
+; 	lda TankX,X
+; 	clc
+; 	adc #8
+; 	cmp Temp
+; 	bcc BulletDidNotHitTank1                        ;+18/19 35/36
+; 	;--compare Y position
+; 	lda BulletY,Y
+; 	sec
+; 	sbc #1
+; 	cmp TankY,X                         
+; 	bcs BulletDidNotHitTank1                        ;+14/15 49/50
+; 	adc #1
+; 	sta Temp
+; 	lda TankY,X
+; 	sec
+; 	sbc #TANKHEIGHT
+; 	cmp Temp
+; 	bcs BulletDidNotHitTank1                        ;+18/19 67/68
+;     bcc FoundDeadTankNowKill                        ;+3     70      branch always
+; BulletDidNotHitTank1                                ;       18/36/50/68
+;     jmp BulletDidNotHitTank                         ;+3     this is end of (inner) loop
 FoundDeadTankNowKill                                ;       70
+    ;--now we have index of tank hit in X
+    lda FrameCounter
+    and #3
+    tay         ;now we have index of bullet in Y
     ;--check if tank is already dead (but still on screen)
     lda TankStatus,X
     lsr     ;get TANKINPLAY bit into carry
@@ -6363,15 +6366,15 @@ NoBulletToTankCollision
 DoneWithBulletCollision                         ;           1072  if branching to this label, this is (maximum) path if bullet hit power-up icon and killed all three non-powerup tanks.
 BulletDidNotHitTank                             ;       71 is longest path branching to this label
 BulletOffScreen2
-	dey
-	bmi DoneWithBulletTankCollisionInnerLoop    ;+4/5   
-	jmp CheckBulletTankCollisionInnerLoop       ;+3     
+; 	dey
+; 	bmi DoneWithBulletTankCollisionInnerLoop    ;+4/5   
+; 	jmp CheckBulletTankCollisionInnerLoop       ;+3     
 	    
 DoneWithBulletTankCollisionInnerLoop
 EnemyTankOffscreen    
-	dex
-	bmi DoneWithCheckBulletTankCollisionOuterLoop   ;+4/5
-	jmp CheckBulletTankCollisionOuterLoop           ;+3
+; 	dex
+; 	bmi DoneWithCheckBulletTankCollisionOuterLoop   ;+4/5
+; 	jmp CheckBulletTankCollisionOuterLoop           ;+3
 DoneWithCheckBulletTankCollisionOuterLoop
 
     /*in very contrived scenario:
@@ -7547,20 +7550,15 @@ BlankDigit
     .byte 0        
     .byte 0
         
-EntryPointRowOffsetTable
-    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
-    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
         
-        
-	
-; P1CollisionTable
-; 	.byte 1, 2
-; M0CollisionTable
-; 	.byte 0, 1
-; M1CollisionTable
-; 	.byte 2, 3	
-; P0CollisionTable
-; 	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
+M0CollisionTable = * - 1
+	;.byte 0, 1
+P1CollisionTable
+	.byte 1, 2
+M1CollisionTable
+	.byte 2, 3	
+P0CollisionTable
+	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
 
 
 
@@ -7782,22 +7780,6 @@ TanksRemainingGfx
 	.byte %11101110
 	.byte %01000100		
 	
-	
-/*
-NEW POWERUP ICON IMAGES: 2024.1.10
-PowerUpImage1	;straight ahead
-Image1b
-
-Frame2 ;angled right
-Frame2b
-Frame3 ;straight right
-        
-3b
-        
-        
-        New enemy tank gfx:
-Moving 
-        	*/
 	
 	
 	PAGEALIGN 5
@@ -8109,6 +8091,13 @@ AllowCarveDownTable ;can't carve downward in the outer two columns
 RespawnCountdownGraphic = * - 1
     .byte /*$00, */$80, $C0, $E0
     .byte $F0, $F8, $FC, $FE
+    
+    
+        
+EntryPointRowOffsetTable
+    .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
+    .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
+    
     
 ;****************************************************************************	
 
