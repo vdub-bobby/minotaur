@@ -79,6 +79,7 @@
     Update standard/random maze indicator
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
+    Final color, gfx, sound tweaking
 
     DONE: Allow use of joystick to change options at title screen
     DONE: Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
@@ -256,8 +257,8 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ;-------------------------Constants Below---------------------------------
 
 ;--scanline count constants
-VBLANK_TIMER = 37       ;--I think this (38) is fine
-OVERSCAN_TIMER = 32     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 36       ;--I think this (38) is fine
+OVERSCAN_TIMER = 33     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
 SOUNDTIMEBUFFER     =   (8*76)/64
 ;--scanline count constants end
@@ -949,11 +950,12 @@ CallingMoveEnemyTank
 CallingMoveBulletSubroutine	
 
     ;--this is faster than the BRK routine.   25 cycles to switch vs 52
-    lda #<MoveBulletSubroutine
-    sta MiscPtr
-    lda #>MoveBulletSubroutine
-    sta MiscPtr+1
-    jsr BankSwitchAltRoutine1
+;     lda #<MoveBulletSubroutine
+;     sta MiscPtr
+;     lda #>MoveBulletSubroutine
+;     sta MiscPtr+1
+;     jsr BankSwitchAltRoutine1
+    jsr MoveBulletSubroutine
 FinishedWithMoveBulletSubroutine	
     ;nop
     
@@ -3643,7 +3645,87 @@ TankFractionalAddition
 	sta TankFractional,X
     rts
     
+;****************************************************************************
+	
+MoveBulletSubroutine
     
+;     lda BulletFractional
+;     clc
+;     adc #BULLETFRACTIONALSPEED
+;     sta BulletFractional
+;     ;if carry clear, we didn't overflow BulletFractional and we aren't moving any bullets this frame so just return early
+;     bcc DoNotMoveBulletsThisFrame
+    ;--new hotness, move bullets 1 pixel every frame.  no fractional bullet speeds 
+	ldx #3
+MoveBulletsLoop
+	lda BulletX,X
+	;cmp #BALLOFFSCREEN     == 0
+	beq NoBulletMovement;BulletOffScreen;
+	lda BulletDirection
+	and BulletDirectionMaskBank0,X
+	cmp BulletUp,X
+	bne BulletNotUp
+	;--move bullet up
+	inc BulletY,X
+    bne CheckBulletIsOffScreenVertical      ;branch always
+BulletNotUp
+	cmp BulletDown,X
+	bne BulletNotDown
+	;--move bullet down
+    dec BulletY,X
+    lda BulletY,X
+    ;--Y values range from 0 to about 80, so negative means we went off screen low
+    bmi BulletOffScreen
+	beq BulletOffScreen                     ;if Y value is zero, then bullet is also offscreen
+    bne BulletOnScreen                      ;branch always
+BulletNotDown
+	cmp BulletRight,X
+	bne BulletNotRight
+	;--move bullet right
+	inc BulletX,X
+    bne CheckBulletIsOffScreenHorizontal    ;branch always
+BulletNotRight	
+	cmp BulletLeft,X
+	bne NoBulletMovement                    ;is this branch ever taken?  it isn't.  bullets are always moving, and if we are here the bullet is onscreen and will be moved.
+	;--move bullet left
+    dec BulletX,X
+	;--check for off screen:
+CheckBulletIsOffScreenHorizontal
+	lda BulletX,X
+	cmp #17
+	bcc BulletOffScreen
+	cmp #144
+	bcs BulletOffScreen
+	bcc BulletOnScreen      ;branch always
+CheckBulletIsOffScreenVertical
+	lda BulletY,X
+	cmp #(MAZEAREAHEIGHT)+4
+	bcc BulletOnScreen	
+BulletOffScreen
+;     jsr MoveBulletOffScreenSubroutine
+    lda #BALLOFFSCREEN
+    sta BulletX,X
+    sta BulletY,X
+
+; 	lda #BALLOFFSCREEN
+; 	sta BulletX,X       ;<--is this necessary?
+; 	sta BulletY,X	
+	;--make noise for when bullet hits outer wall
+	ldy #WALLSOUND
+	jsr StartSoundSubroutine
+NoBulletMovement
+BulletOnScreen
+	dex
+	bpl MoveBulletsLoop
+DoNotMoveBulletsThisFrame
+; 	jmp ReturnFromBSSubroutine2
+    rts
+
+	
+	
+	
+	
+;****************************************************************************
     
 ;----------------------------------------------------------------------------
 ;-------------------------Data Below-----------------------------------------
@@ -3654,7 +3736,12 @@ PreventReverses ;= *-1	;--the FF are wasted bytes EXCEPT for the first!
 	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
 ReverseDirection = *-1	;--the FF are wasted bytes
 	.byte 	J0DOWN, J0UP, $FF, J0RIGHT, $FF, $FF, $FF, J0LEFT
-		
+
+	
+BulletDirectionMaskBank0
+	.byte %11, %11<<2, %11<<4, %11<<6
+	
+			
 	PAGEALIGN 1
 	
 	
@@ -5297,82 +5384,6 @@ BottomKernelLoopDone
 
 
 	
-MoveBulletSubroutine
-    
-    lda BulletFractional
-    clc
-    adc #BULLETFRACTIONALSPEED
-    sta BulletFractional
-    ;if carry clear, we didn't overflow BulletFractional and we aren't moving any bullets this frame so just return early
-    bcc DoNotMoveBulletsThisFrame
-    
-	ldx #3
-MoveBulletsLoop
-
-	lda BulletX,X
-	;cmp #BALLOFFSCREEN     == 0
-	beq NoBulletMovement;BulletOffScreen;
-	lda BulletDirection
-	and BulletDirectionMask,X
-	cmp BulletUpBank2,X
-	bne BulletNotUp
-	;--move bullet up
-	inc BulletY,X
-    bne CheckBulletIsOffScreenVertical      ;branch always
-BulletNotUp
-	cmp BulletDownBank2,X
-	bne BulletNotDown
-	;--move bullet down
-    dec BulletY,X
-    lda BulletY,X
-    ;--Y values range from 0 to about 80, so negative means we went off screen low
-    bmi BulletOffScreen
-	beq BulletOffScreen                     ;if Y value is zero, then bullet is also offscreen
-    bne BulletOnScreen                      ;branch always
-BulletNotDown
-	cmp BulletRightBank2,X
-	bne BulletNotRight
-	;--move bullet right
-	inc BulletX,X
-    bne CheckBulletIsOffScreenHorizontal    ;branch always
-BulletNotRight	
-	cmp BulletLeftBank2,X
-	bne NoBulletMovement
-	;--move bullet left
-    dec BulletX,X
-	;--check for off screen:
-CheckBulletIsOffScreenHorizontal
-	lda BulletX,X
-	cmp #17
-	bcc BulletOffScreen
-	cmp #144
-	bcs BulletOffScreen
-	bcc BulletOnScreen      ;branch always
-CheckBulletIsOffScreenVertical
-	lda BulletY,X
-	cmp #(MAZEAREAHEIGHT)+4
-	bcc BulletOnScreen	
-BulletOffScreen
-    jsr MoveBulletOffScreenSubroutine
-; 	lda #BALLOFFSCREEN
-; 	sta BulletX,X       ;<--is this necessary?
-; 	sta BulletY,X	
-	;--make noise for when bullet hits outer wall
-	ldy #WALLSOUND
-	jsr StartSoundSubroutineBank2
-NoBulletMovement
-BulletOnScreen
-	dex
-	bpl MoveBulletsLoop
-DoNotMoveBulletsThisFrame
-	jmp ReturnFromBSSubroutine2
-
-	
-	
-	
-	
-;****************************************************************************
-	
 GenerateMazeSubroutine
 
 	;--first, save RandomNumber
@@ -5860,18 +5871,18 @@ IsTankOnScreen
     ;--return in accumulator:  0 if offscreen, 1 if onscreen
     lda TankX,X
     cmp #TANKONSCREENLEFT
-    bcc .TankOffScreen
-    cmp #TANKONSCREENRIGHT+1
-    bcs .TankOffScreen
+    bcc .TankOffScreen          ;+8/9    8/9
+    cmp #TANKONSCREENRIGHT+1    
+    bcs .TankOffScreen          ;+4/5   12/13
     lda TankY,X
     cmp #TANKONSCREENTOP+2
-    bcc .TankOnScreen    
-.TankOffScreen
+    bcc .TankOnScreen           ;+8/9   20/21
+.TankOffScreen                  ;       20 worst case
     lda #0
     rts
-.TankOnScreen
+.TankOnScreen                   ;       21 worst case
     lda #1
-    rts
+    rts                         ;+8     29  worst case
 
 ;****************************************************************************
 	
@@ -5898,6 +5909,34 @@ IsTankOnScreen
 	
 ;****************************************************************************
 
+/*
+actual worst-case for CollisionsSubroutine
+one player bullet hits wall, which is bullet that is displayed this frame. (252 cycles)
+all 4 tanks all collide with each other on same frame (852 cycles)
+other three bullets all hit the tanks as described above (3248 cycles)
+ plus various other stuff:  
+
+	33 cycles to see if base is hit
+	55 cycles to prep for tank-to-tank collision loop
+	137 cycles to update status for newly dead tanks (in scenario they are all newly dead)
+
+TOTAL is: 4577 or 60+ scanlines.
+
+this is extraordinarily unlikely, but .... probably need to go back to bullet-to-tank collisions handled via hardware collision.  makes 
+maximum some prep (50 cycles) plus 1080 for power-up explosion + 79 for hitting another tank at the same time. total is ~1200 cycles.
+
+then maximum for entire collision routine is:
+	33 to see if base is hit
+	55 to prep for tank-tank collisions
+	852 for all four tanks collide same frame
+	6 for bullet not hitting wall (only one bullet collision at a time!)
+	1200 for bullet hits powerup and another tank at the same time
+	137 to update status for all tanks newly dead
+total:  2283 (30 scanlines).  still too long (overscan is 2122 cycles) but maybe close enough to optimize down.  still a lot to do, 
+	moving player tank could take up to 9 scanlines (I think?  or longer) if player enters an intersection on this frame (possible with above scenario?  I don't think so.)
+*/
+
+
 CollisionsSubroutine
 
 
@@ -5905,19 +5944,20 @@ CollisionsSubroutine
     ;-check bullets first (and only)
     
     bit CXBLPF
-    bpl NoBulletToBaseCollision
+    bpl NoBulletToBaseCollision     ;+5/6       5
     ;--hit PF, now let's see if it is in the middle on the bottom row
     lda FrameCounter
     and #3
     tax
     lda BulletY,X
     cmp #BLOCKHEIGHT+2
-    bcs NoBulletToBaseCollision
+    bcs NoBulletToBaseCollision     ;+15/16     20/21
     lda BulletX,X
     cmp #76
-    bcc NoBulletToBaseCollision
+    bcc NoBulletToBaseCollision     ;+8/9       28/29
     cmp #85
-    bcs NoBulletToBaseCollision
+    bcs NoBulletToBaseCollision     ;+4/5       32/33
+    ;--if we drop through, we don't process any more collisions
     
     ;--collision!  Game Over, man, Game Over.
     lda GameStatus
@@ -5936,7 +5976,7 @@ CollisionsSubroutine
     sta Channel1Decay
     ;and return, so player doesn't get 5 points for shooting his own base lol
 	jmp ReturnFromBSSubroutine2
-NoBulletToBaseCollision
+NoBulletToBaseCollision             ;       33 cycles maximum
     
     
 
@@ -5958,13 +5998,13 @@ NoBulletToBaseCollision
 	
     lda CXM0P
     and #$C0
-    sta Temp+1
+    sta Temp+1      ;+8      8
     lda CXM1P
     and #$C0
     lsr
     lsr
     ora Temp+1
-    sta Temp+1
+    sta Temp+1      ;+15    23
     lda CXPPMM
     and #$C0
     lsr
@@ -5972,7 +6012,7 @@ NoBulletToBaseCollision
     lsr
     lsr
     ora Temp+1
-    sta Temp+1	
+    sta Temp+1	    ;+19    32
     
     lda FrameCounter
     and #1
@@ -5981,41 +6021,46 @@ NoBulletToBaseCollision
     lda TankCollisionRotationTables,X
     sta MiscPtr
     lda TankCollisionRotationTables+1,X
-    sta MiscPtr+1
+    sta MiscPtr+1   ;+23    55      cycles for tank-to-tank loop prep.
+    
+                    ;total max cycles to this point: 55+33=88
 	
 
-    ldy #0  ;start with player tank and count up
+    ldy #0          ;+2      2      start with player tank and count up
 TankCollisionLoop
     ;--can we add a check that we ignore this tank if it is already dead?  That would eliminate half the collision loops... do we need to run through this if the tank is dead?
     lda Temp+1    ;get all collision registers
     and (MiscPtr),Y
-    beq NoTankCollision
+    beq NoTankCollision     ;+10/11
 YesTankCollision    
     ;--check to see if what we are colliding into is already dead:
     sta Temp
     sty Temp+2
-    bne CheckForExplosionCollisionLoopEntry ;branch always following not-taken BEQ above
+    bne CheckForExplosionCollisionLoopEntry ;+9     19       branch always following not-taken BEQ above
 CheckForExplosionCollisionLoop
     
     lda Temp
     and (MiscPtr),Y
-    beq NoCollisionWithThisTank
+    beq NoCollisionWithThisTank             ;+10/11     
     ;--now check if tank is dead
     lda TankStatus,Y
     lsr     ;get TANKINPLAY bit into carry
-    bcs TankHitLiveTank
+    bcs TankHitLiveTank                     ;+8/9
     ;--now see if explosion or powerup
 NoCollisionWithThisTank    
 CheckForExplosionCollisionLoopEntry
     dey
-    bpl CheckForExplosionCollisionCheckEnd
-    ldy #3
+    bpl CheckForExplosionCollisionCheckEnd  ;+4/5
+    ldy #3                                  ;+2
 CheckForExplosionCollisionCheckEnd
-    cpy Temp+2
-    beq DidNotHitAnythingLive   ;we have looped around completely and we exit the loop completely.
-    bne CheckForExplosionCollisionLoop ;branch always
+    cpy Temp+2                              ;+3
+    beq DidNotHitAnythingLive               ;+2/3   we have looped around completely and we exit this loop AND we finish with the tank and go to the next
+    bne CheckForExplosionCollisionLoop      ;+3     branch always
+    ;--maximum for loop above is to go through all tanks and find out we hit the last one we check...but that would mean maximum of 2 tank-to-tank collisions.
+    ;if no tank collisions, loop above takes 85 cycles and skips all collision-handling immediately below and loops to check next tank.
+    ;--if any collisions, will end above loop early (at either 27, 51, or 75 cycles) and drop below:
     
-TankHitLiveTank
+TankHitLiveTank                             ;       cycle counts below are relative to this spot in this loop 
     ;--if Y = 0 then tank run into by player
     sty Temp+6  ;save this we will check below  ;tank that ran into tank we are checking
     ;--restore Y index of tank we are checking
@@ -6027,38 +6072,34 @@ TankHitLiveTank
     ;--check if tank in play (can be on screen but not in play, if dead)
     lda TankStatus,X        
     lsr     ;get TANKINPLAY bit into carry
-    bcs TankNotDeadYetKillIt            ;
+    bcs TankNotDeadYetKillIt                ;+18/19
     ;--tank is not in play, is it an explosion or a powerup?
-    and #TANKDOWN>>1    ;shifted due to LSR above
-    beq TankAlreadyDeadCannotDie
+    and #TANKDOWN>>1                  ;shifted due to LSR above
+    beq TankAlreadyDeadCannotDie            ;+4/5       22/23       if tank already dead (i.e., an explosion) then we end loop and check next tank
     ;--else tank is powerup.  what to do exactly?
     ;--if hit by non-player tank, ignore:
     lda Temp+6  ;--this holds zero if player tank is what hit it
-    bne NonPlayerTankHitPowerUp
+    bne NonPlayerTankHitPowerUp             ;+5/6       27/28       this branch, if taken, ends this loop since non-player tanks hitting powerups is ignored.
 
     
-    
-    
+    ;only reach here if tank we are checking is NOT player tank and what we ran into is a power-up
+    ;this is code that handles when the player tank runs into a powerup
     ;--first respawn tank to get powerup off the screen
-;     tya
-;     pha     ;save Y ... except Y is in Temp+2 already, can we just use that?
-    jsr TankRespawnRoutine          ;this uses X as index into tank.  and this blows away Y
+    jsr TankRespawnRoutine                  ;+98        125         this uses X as index into tank.  and this blows away Y
     ;--second actually activate powerup
     lda MazeGenerationPass  ;used for powerups during levels
     and #POWERUPACTIVATEDBITS
-    beq ActivateInitialPowerUp
-    jsr KillAllTanksBonus           ;this actually blows away X
+    beq ActivateInitialPowerUp              ;+7/8       132/133
+    jsr KillAllTanksBonus                   ;+306       438         this actually blows away X
     ;--now reset powerup countdown 
     lda MazeGenerationPass
     ora #POWERUPCOUNTDOWNRESTART
     sta MazeGenerationPass  ;reset counter to the max 
 
     ;--I think we can skip the subsequent stuff
-;     pla ;restore Y
-;     tay
     ldy Temp+2      ;restore Y
-    jmp TankAlreadyDeadCannotDie
-ActivateInitialPowerUp
+    jmp TankAlreadyDeadCannotDie            ;+14        452
+ActivateInitialPowerUp                      ;this is faster so for now I will ignore cycle counts of this code
     lda MazeGenerationPass
     ora #POWERUPACTIVATEDBITS|POWERUPCOUNTDOWNRESTART
     sta MazeGenerationPass    
@@ -6071,22 +6112,22 @@ ActivateInitialPowerUp
 
 
     
-TankNotDeadYetKillIt    
-    jsr IsTankOnScreen  ;returns 1 in A if onscreen, 0 in A if not, and zero flag set appropriately
-    beq TankNotOnScreenCannotDie
+TankNotDeadYetKillIt                    ;       19  
+    jsr IsTankOnScreen                  ;+35    54      35 is worst case returns 1 in A if onscreen, 0 in A if not, and zero flag set appropriately
+    beq TankNotOnScreenCannotDie        ;+2/3   56/57
     ;--tank is onscreen
-    tya ;--set flags based on which tank
-    bne EnemyTankDied   ;only get points if player runs into tank, not if tanks run into each other.
+    tya ;--set flags based on which tank, only get points if player runs into tank, not if tanks run into each other.
+    bne EnemyTankDied                   ;+4/5   60/61
  	;--score for killing enemy tank
  	lda Temp+1      ;need to save collision results!
- 	pha
- 	jsr ScoreForKillingTank
+ 	pha                                 ;+6     66
+ 	jsr ScoreForKillingTank             ;+128   194
  	pla
- 	sta Temp+1
-EnemyTankDied
+ 	sta Temp+1                          ;+7     201
+EnemyTankDied                           ;       201 worst case for player tank ran into enemy tank, 61 if enemy tanks collided
     tya
-    tax
-    jsr PlayerHitTank   ;this routine uses X to index into which tank got hit.
+    tax                                 ;+4     205/65
+    jsr PlayerHitTank                   ;+78    283/143     this routine uses X to index into which tank got hit.
 
 TankAlreadyDeadCannotDie
 TankNotOnScreenCannotDie    
@@ -6094,25 +6135,29 @@ NoTankCollision
 PlayerTankDead
 DidNotHitAnythingLive
 NonPlayerTankHitPowerUp
-;     dey
-;     bpl TankCollisionLoop  
     ;--looping up so player tank collisions are processed first
     iny
     cpy #4
-    bne TankCollisionLoop
-NoTankCollisionsAtAll
+    bne TankCollisionLoop               ;+6/7   7 on first 3 loops, 6 on last (27 cycles)
+    ;worst case scenario for above loop:  two enemy tanks collide and on same frame player tank runs into powerup icon when he already has first powerup, so also blows up the other tanks. 
+    ;   this would take approx 852 cycles.
+    
+    ;                                   ;+852   940 cycles, worst case, to this point. (12+ scanlines!!!!)
 
 
-    ;--bullet (ball) to wall collision check    
+    ;--bullet (ball) to wall collision check    (cycles for this collision routine counted from this point)
     bit CXBLPF
-    bpl BallHasNotHitBlock
+    bpl BallHasNotHitBlock              ;+5/6
     ;--bullet hit the wall, now identify which bullet.
     lda FrameCounter
     and #3
-    tax
-    jsr BulletHitBrickSubroutine
+    tax                                 ;+7      12 
+    jsr BulletHitBrickSubroutine        ;+252   264     worst case scenario
 
 BallHasNotHitBlock
+                                
+    ;                                   ;+252   1192 cycles, worst case, to this point.
+
 	;--now check if bullet has hit an enemy tank
 
 	
@@ -6152,7 +6197,7 @@ BallHasNotHitBlock
 	;--now check if bullet has hit an enemy tank
 	;   X is index into tank (outer loop)
 	;   Y is index into bullet (inner loop)
-	ldx #3
+	ldx #3                                          ;+2     2
 CheckBulletTankCollisionOuterLoop
 	;first check if tank is offscreen
 ; 	jsr IsTankOnScreen
@@ -6161,11 +6206,11 @@ CheckBulletTankCollisionOuterLoop
 ; 	jmp EnemyTankOffscreen
 EnemyTankOnScreen
 	;now compare ball location to tank location
-	ldy #3
+	ldy #3                                          ;+2      2      will count cycles for single loop through
 CheckBulletTankCollisionInnerLoop
 	lda BulletX,Y
 ; 	cmp #BALLOFFSCREEN
-	bne BulletOnScreen2
+	bne BulletOnScreen2                             ;+4/5    6/7
 	;--what if we inline the Y loop stuff here.  so when a bullet is offscreen we cycle through the loop in 11 cycles instead of 16.   
 	;   each bullet is processed 4 times, potentially saving 20 cycles per bullet.  
 	;   And when a bullet hits something, it is removed from the screen, so subsequent loops will save 5 cycles each.
@@ -6175,51 +6220,52 @@ CheckBulletTankCollisionInnerLoop
 	bpl CheckBulletTankCollisionOuterLoop
 	jmp DoneWithCheckBulletTankCollisionOuterLoop 
 ; 	jmp BulletOffScreen2    
-BulletOnScreen2
+BulletOnScreen2                                     ;        7
 	clc
 	adc #1
 	cmp TankX,X
-	bcc BulletDidNotHitTank1 
+	bcc BulletDidNotHitTank1                        ;+10/11 17/18
 	sbc #1
 	sta Temp
 	lda TankX,X
 	clc
 	adc #8
 	cmp Temp
-	bcc BulletDidNotHitTank1
+	bcc BulletDidNotHitTank1                        ;+18/19 35/36
 	;--compare Y position
 	lda BulletY,Y
 	sec
 	sbc #1
-	cmp TankY,X
-	bcs BulletDidNotHitTank1
+	cmp TankY,X                         
+	bcs BulletDidNotHitTank1                        ;+14/15 49/50
 	adc #1
 	sta Temp
 	lda TankY,X
 	sec
 	sbc #TANKHEIGHT
 	cmp Temp
-	bcs BulletDidNotHitTank1
-    bcc FoundDeadTankNowKill
-BulletDidNotHitTank1
-    jmp BulletDidNotHitTank
-FoundDeadTankNowKill
+	bcs BulletDidNotHitTank1                        ;+18/19 67/68
+    bcc FoundDeadTankNowKill                        ;+3     70      branch always
+BulletDidNotHitTank1                                ;       18/36/50/68
+    jmp BulletDidNotHitTank                         ;+3     this is end of (inner) loop
+FoundDeadTankNowKill                                ;       70
     ;--check if tank is already dead (but still on screen)
     lda TankStatus,X
     lsr     ;get TANKINPLAY bit into carry
-    bcs TankAliveKillIt
+    bcs TankAliveKillIt                             ;+8/9   78/79
     ;--so we hit a not-in-play tank.  
     ;--now see if we it is an explosion or a powerup.  if explosion, ignore
     and #(TANKUP|TANKDOWN)>>1       ;direction bits, shifted right one
     cmp #(TANKUP|TANKDOWN)>>1              ;UP and DOWN together means powerup icon
-    bne TankAlreadyDeadCannotBeShot
+    bne TankAlreadyDeadCannotBeShot                 ;+6/7   84/85    branch taken is to end of loop
     ;--so we hit a powerup.
     ;--want to kill everything - bricks, tanks - in a one-block radius
-    jsr PowerUpExplosionRemoveBricks ;(also removes bullet from screen)
+    jsr PowerUpExplosionRemoveBricks                ;+517   601     (also removes bullet from screen)  Q: could this happen 2x (or 3x?) per frame, if power-up icon is hit by 3 separate bullets on same frame?
+                                                    ;                                                  A: no, since power-up icon is "killed" as part of this routine, we would end up taking the the "BCS TankAliveKillIt" branch above
     ;--now reset powerup countdown
     lda MazeGenerationPass      ;used for all kinds of crap during game play
     ora #POWERUPCOUNTDOWNRESTART
-    sta MazeGenerationPass
+    sta MazeGenerationPass                          ;+8     609
 KillAllTanksWithinBlastRadius    
     ;--now, kill all tanks within blast radius }:-)
     ;   note: this will also as a side effect remove the powerup icon from the screen
@@ -6228,63 +6274,63 @@ KillAllTanksWithinBlastRadius
     lda TankX,X
     sec
     sbc #HORIZONTALBLASTDISTANCE
-    sta Temp+4        ;left boundary
+    sta Temp+4                                      ;+11    620     left boundary
     lda TankY,X
 ;     clc
     adc #VERTICALBLASTDISTANCE ;carry is set here so actual value being added is (TANKHEIGHT+TANKHEIGHT/2)+1
-    sta Temp+1      ;upper boundary+1
-    lda TankX,X
+    sta Temp+1                                      ;+9     629     upper boundary+1
+    lda TankX,X                                    
 ;     clc
     adc #HORIZONTALBLASTDISTANCE+1         ;carry clear following addition above
-    sta Temp+2      ;right boundary+1
+    sta Temp+2                                      ;+9     638     right boundary+1
     lda TankY,X
 ;     sec
     sbc #VERTICALBLASTDISTANCE-1     ;carry is clear here so actual value being subtracted is (TANKHEIGHT+TANKHEIGHT/2)
-    sta Temp+3      ;lower boundary
+    sta Temp+3                                      ;+9     647     lower boundary
     ;--discarding X (powerup icon index) at this point
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
-    sta TankStatus,X
-    stx Temp+5      ;save X index of powerup so we can make sure not to "kill" it in loop below
+    sta TankStatus,X                                ;               this "kills" the power-up icon
+    stx Temp+5                                      ;+9     656     save X index of powerup so we can make sure not to "kill" it in loop below
     ;--save X.... except we saved it above, so .... hmmm?
 ;     txa
 ;     pha
-    ldx #3
+    ldx #3                                          ;+2     658
 KillAllTanksInLoop
     cpx Temp+5  ;are we killing the powerup?
-    beq DoNotKillPowerUp        ;we don't kill it because the overall routine (PlayerHitTank) does all kinds of stuff like decrement TanksRemaining and etc. 
+    beq DoNotKillPowerUp        ;+5/6   5/6     cycle counts will be internal to the loop.  will always take this branch once and not take it the other 3 times.
+                                ;we don't kill it because the overall routine (PlayerHitTank) does all kinds of stuff like decrement TanksRemaining and etc. 
                                 ;just above we set it to dead so it's fine.
     lda TankX,X
     cmp Temp+4
-    bcc NotInsideBlastRadius
+    bcc NotInsideBlastRadius    ;+9/10  14/15
     cmp Temp+2
-    bcs NotInsideBlastRadius
+    bcs NotInsideBlastRadius    ;+5/6   19/20
     lda TankY,X
     cmp Temp+3
-    bcc NotInsideBlastRadius
+    bcc NotInsideBlastRadius    ;+9/10  28/29
     cmp Temp+1
-    bcs NotInsideBlastRadius
+    bcs NotInsideBlastRadius    ;+5/6   33/34
     ;--it is KILL KILL KILL
-    jsr PlayerHitTank
+    jsr PlayerHitTank           ;+78    111       can hit this every time if all three non-powerup tanks are within the blast radius
 DoNotKillPowerUp
 NotInsideBlastRadius
     dex
-    bpl KillAllTanksInLoop  
-;     pla
-;     tax ;restore X  
-    ldx Temp+5
+    bpl KillAllTanksInLoop      ;+5     116     total would be 116 three times + 10 once = 358 cycles
+                                                    ;+358   1016
+    ldx Temp+5                                      ;+3     1019
     
     ;--third, play sound
     ;--need to save/restore Y
     sty Temp+1          ;overwrite one of the coords used for the blast radius calc above
-    ldy #POWERUPEXPLOSIONSOUND
-    jsr StartSoundSubroutineBank2
-    ldy Temp+1
+    ldy #POWERUPEXPLOSIONSOUND                      ;+5     1024
+    jsr StartSoundSubroutineBank2                   ;+40    1064
+    ldy Temp+1                                      ;+3     1069
     
-    jmp DoneWithBulletCollision
-TankAliveKillIt    
+    jmp DoneWithBulletCollision                     ;+3     1072
+TankAliveKillIt                                     ;       79
     ;--ok actually let's check that the tank is fully on the screen:
-    jsr IsTankOnScreen  ;returns 0 if tank (index=X) is offscreen, 1 if onscreen
-    bne TankIsOnScreenKillIt
+    jsr IsTankOnScreen                              ;+35    114     returns 0 if tank (index=X) is offscreen, 1 if onscreen
+    bne TankIsOnScreenKillIt                        ;+2/3   116/117
     ;--let's remove the bullet
 ;     lda FrameCounter
 ;     and #3
@@ -6297,48 +6343,64 @@ TankAliveKillIt
         ;routine loads BALLOFFSCREEN (=0) and then stores it to two RAM locations
     beq TankOffScreenCannotBeKilled     ;branch always
     
-TankIsOnScreenKillIt    
+TankIsOnScreenKillIt                                ;       117
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
-; 	lda FrameCounter
-; 	and #3
-; 	tay ;get bullet # into Y so it will be removed appropriately below
 	cpy #2
-	bcs NoPointsForEnemyOwnGoals
+	bcs NoPointsForEnemyOwnGoals                    ;+4/5   121/122
 	txa ;set flags based on X
-	beq NoPointsForGettingShot	
-	jsr ScoreForKillingTank
+	beq NoPointsForGettingShot	                    ;+4/5   125/126   
+	jsr ScoreForKillingTank                         ;+128   253
 	
 
-NoPointsForGettingShot		
-NoPointsForEnemyOwnGoals
-	jsr BulletHitTank
-TankAlreadyDeadCannotBeShot
+NoPointsForGettingShot		                        ;           126 when branching here
+NoPointsForEnemyOwnGoals                            ;           122 when branching here
+	jsr BulletHitTank                               ;+137   390 for player bullets hitting enemy tank
+	                                                ;+113   235 for enemy bullets hitting enemy tank
+	                                                ;+113   239 for enemy bullets hitting player tank
+TankAlreadyDeadCannotBeShot                     ;           85 if branching to this label
 TankOffScreenCannotBeKilled
 NoBulletToTankCollision	
-DoneWithBulletCollision
-BulletDidNotHitTank
+DoneWithBulletCollision                         ;           1072  if branching to this label, this is (maximum) path if bullet hit power-up icon and killed all three non-powerup tanks.
+BulletDidNotHitTank                             ;       71 is longest path branching to this label
 BulletOffScreen2
 	dey
-	bmi DoneWithBulletTankCollisionInnerLoop
-	jmp CheckBulletTankCollisionInnerLoop
-	
+	bmi DoneWithBulletTankCollisionInnerLoop    ;+4/5   
+	jmp CheckBulletTankCollisionInnerLoop       ;+3     
+	    
 DoneWithBulletTankCollisionInnerLoop
 EnemyTankOffscreen    
 	dex
-	bmi DoneWithCheckBulletTankCollisionOuterLoop
-	jmp CheckBulletTankCollisionOuterLoop
+	bmi DoneWithCheckBulletTankCollisionOuterLoop   ;+4/5
+	jmp CheckBulletTankCollisionOuterLoop           ;+3
 DoneWithCheckBulletTankCollisionOuterLoop
 
+    /*in very contrived scenario:
+            E1E
+            BBB
+          E3E E2E
+            BBB
+            PPP
 
 
+    I think absolute worst case, maximum simultaneous bullet to tank collisions would be if two tanks were next to each other (about to collide) in exact middle of intersection, 
+    and one shot the other, and player tank was directly below shooting up and hit both simultaneously and other enemy tank was directly above shooting down and also hit both simultaneously.
+    And player shot up immediately before tanks got close enough so bullet passed through and hits top tank on same frame
+    
+    in this very contrived scenario, total time for bullet-to-tank collisions is something like 3600 cycles (calculated 3567) LMAO (46+ scanlines!)
+        in this scenario, there would be no bullet-to-wall collisions.  there could be tank-to tank collisions (tank 2 & 3 could be overlapping - tank 3 is powerup)
+        and player tank could have simultaneously ran into tanks 2&3 while shooting them and similarly for tank 1 running into tanks 2&3 while shooting them... except then player bullet could squeeze through to hit tank 1.
+        it could be hitting a wall instead.
+    
+    
+*/
     ;if a tank was killed immediately above, we cleared all bits except for TANKINPLAY
     ;   so that we could correctly tell if tanks if collided with it
     ;   and so now look for those tanks and set the rest of the bits correctly
-    ldy #3
+    ldy #3              ;+2
 SetTankStatusForDeadTanks
-    lda TankStatus,Y
+    lda TankStatus,Y            ;+3     3
     cmp #TANKINPLAY
-    bne TankNotNewlyDead
+    bne TankNotNewlyDead        ;+4/5   7/8
     ;--check to see if it should be a powerup
     ;   only a powerup if:
     ;       powerup countdown is zero
@@ -6346,37 +6408,44 @@ SetTankStatusForDeadTanks
     ;       and no powerup on screen
     ;       and left difficulty switch = B
 TankIsNewlyDead
+    ;add check for tank 0 here?  or maybe change loop to BNE and inline tank zero handling below.  none of this power-up stuff matters for player tank.
     lda GameStatus2
     and #POWERUPSDISABLED
-    bne PowerUpsTurnedOff
+    bne PowerUpsTurnedOff       ;+7/8   14/15
     lda MazeGenerationPass
     and #POWERUPCOUNTDOWNBITS
-    bne NoPowerUp
+    bne NoPowerUp               ;+7/8   21/22
     lda TanksRemaining
-    beq NoPowerUp
-    ldx #3
+    beq NoPowerUp               ;+5/6   26/27
+    ldx #3                      ;+2     28
 CheckForPowerUpOnscreenLoop   
     lda TankStatus,X
     and #TANKUP|TANKDOWN|TANKINPLAY
     cmp #TANKUP|TANKDOWN
-    beq NoPowerUp
+    beq NoPowerUp               ;+10/11 10/11   count for internal loop
     dex
-    bne CheckForPowerUpOnscreenLoop
+    bne CheckForPowerUpOnscreenLoop ;+4/5   14/15   
+        ;maximum is if no powerups on screen: 15*2+14=44
+                                ;+44    72  only possible first time through (Y) loop, subsequent times internal loop above will kick out on first time through 
     
     ;--else make it a powerup!
-    lda TankDeadStatus,Y
-    ora #TANKDOWN
+;     lda TankDeadStatus,Y
+;     ora #TANKDOWN               ;               could replace this LDA/ORA with "LDA #TANKDOWN|TANKUP|TANKDEADWAIT" and save 4 cycles and 3 bytes ROM
+    lda #TANKDOWN|TANKUP|TANKDEADWAIT
     sta TankStatus,Y
-    bne CheckNextTankForNewDeath    ;branch always
-PowerUpsTurnedOff    
-NoPowerUp
+    bne CheckNextTankForNewDeath;+9     81      branch always
+PowerUpsTurnedOff               ;       15 if branching here
+NoPowerUp                       ;       22/27 if branching here (or if branching from internal (X) loop, could be 39/54/69
     lda TankDeadStatus,Y
-    sta TankStatus,Y
+    sta TankStatus,Y            ;+8     30/35 47/62/77
 TankNotNewlyDead
-CheckNextTankForNewDeath
+CheckNextTankForNewDeath        ;       81 if branching here
     dey
-    bpl SetTankStatusForDeadTanks       
-
+    bpl SetTankStatusForDeadTanks;+4/5  85/86
+        ;maximum is we create a powerup (86 cycles) and then on subsequent loops we don't but have to check in internal loop (will find it on first internal loop every time: 53/52)
+        ;   86+53+53+52=244 cycles
+      
+        ;maximum in frame when power-up is shot is 35*3+32=137 since powerup countdown is not updated while powerup on screen
 
 
 	
@@ -6388,18 +6457,15 @@ CheckNextTankForNewDeath
 PowerUpExplosionRemoveBricks  
         ;come in with X = tank (powerup icon) index
     txa
-    pha             ;save index into tank (powerup icon) that got hit
+    pha                                 ;+5      5      save index into tank (powerup icon) that got hit
     ;--remove bullet from screen
 ;     lda FrameCounter
 ;     and #3
 ;     tax
-    jsr MoveBulletOffScreenSubroutine2  ;--removing bullet indexed by Y
+    jsr MoveBulletOffScreenSubroutine2  ;+20    25      removing bullet indexed by Y.  inline to save 12 cycles
 ;     lda #BALLOFFSCREEN
 ;     sta BulletX,Y
 ;     sta BulletY,Y
-    pla
-    tax
-    pha     ;restore X and also save it (again)
     ;--and now we don't need bullet index any longer 
         
         
@@ -6409,16 +6475,16 @@ PowerUpExplosionRemoveBricks
 
     lda #-20
     clc
-    adc TankX,X
+    adc TankX,X                         ;+8     33
                 ;subtract 1/2 tank width (4) and also 16 pixels so we are in the center of the block to the left, 
                 ;adjusted for column 0 starting at pixel 16
  
     lsr
     lsr
     lsr
-    sta Temp+2      ;column
+    sta Temp+2                          ;+9     42      column
     
-	;--now get row
+	;--now get row (fast divide by seven routine)
 	lda TankY,X
     clc
     adc #TANKHEIGHT/2
@@ -6434,7 +6500,7 @@ PowerUpExplosionRemoveBricks
 	ror
 	lsr
 	lsr
-	sta Temp+6     ;store row back into Temp+6
+	sta Temp+6                          ;+38    80      store row back into Temp+6
 
 	    ;--at this point we have position, in Temp+2 (column), Temp+6 (row), of upper left of the 9 brick square:
 	    /*
@@ -6450,113 +6516,117 @@ PowerUpExplosionRemoveBricks
 	;--save Y
 	tya
 	pha
-	lda #>PF1Left
+	lda #>PF1Left                       ;               this value is zero
 	sta MiscPtr+1
 	lda #<PF1Left
-	sta MiscPtr
+	sta MiscPtr                         ;+15    95
 	
 	;now remove bricks in a loop.  looping through three columns to speed this up.
 	lda Temp+2
 	ldy #2
 	sty Temp+7
-	bne .LoopEntryPoint ;branch always
+	bne .LoopEntryPoint                 ;+11    106     branch always
 .RemoveBricksLoop
     sty Temp+7      ;save loop index 
 	lda #<PF1Left
-	sta MiscPtr
+	sta MiscPtr                         ;+8      8 (2nd)    counting from start of second loop
     ;--first, move to next row and column
     lda Temp+2  ;column
     clc
     adc RemoveBrickColumnShift,Y
     and #%00011111      ;account for "negative" bricks (which will have column = 31 / $1F)
-    sta Temp+2
+    sta Temp+2                          ;+14    22 (2nd)    counting from start of second loop
 .LoopEntryPoint
-	cmp #16
-	bcs .OffMazeGoToNext
+	cmp #16                             
+	bcs .OffMazeGoToNext                ;+4/5   4/5 (1st)   cycle counts will be internal to this loop and the maximum possible
     ;--check if we are on row zero
 	lda Temp+6
-	bne .NotRowZero
+	bne .NotRowZero                     ;+5/6   9/10 (1st)
 .RowZeroCheck    
 	;--specific check for row zero: only care about brick 6 and 9 (if explosion hits base, should we end game?)
 	lda Temp+2
 	sec             ;I think carry is always clear here, whether coming from above or below.  So if we need to save 6 cycles and 1 byte, we could remove and change to SBC #5 below
 	sbc #6 
-	beq .ItIsBrick6Row0
+	beq .ItIsBrick6Row0                 ;+9/10  18/19 (1st)
 .NotBrick6Row0
     sbc #3
-    bne .NotBrick9Row0	
+    bne .NotBrick9Row0	                ;+4/5   22/23 (1st)
     sta LastRowR
-    beq .GoToNextBrick  ;branch always
-.ItIsBrick6Row0    
+    beq .GoToNextBrick                  ;+6     28 (1st)    branch always following not-taken BNE above
+.ItIsBrick6Row0                         ;       19 (1st)
     ;--following subtractions, A holds zero
     sta LastRowL
-    beq .GoToNextBrick  ;branch always	
-.NotRowZero
+    beq .GoToNextBrick                  ;+6     25 (1st)    branch always, we reach .ItIsBrick6Row0 via BEQ branch
+.NotRowZero                             ;       10 (1st)
     ;first, adjust MiscPtr because we will use overflow flag below and so all additions/subtractions need to be moved above
     ;--get column into X
     ldx Temp+2
     ;--get which PF register and use it to adjust our pointer
-    lda PFRegisterLookupBank2,X
-;     clc   ;--not necessary following not-taken BCS branch above
+    lda PFRegisterLookupBank2,X         
+;     clc   ;--not necessary following not-taken BCS branch after .LoopEntryPoint label
     adc MiscPtr
-    sta MiscPtr
+    sta MiscPtr                         ;+13    23 (1st)
 
 	;--check for row > MAZEROWS - 1 (means we are either above or below maze)
 	clv     ;we will use overflow as flag to blow up 2 or three bricks (clear means blow up 3, set means blow up 2)
 	lda Temp+6
-	cmp #MAZEROWS;-1
-	bcc .InMazeBlowUpBricks
+	cmp #MAZEROWS
+	bcc .InMazeBlowUpBricks             ;+9/10  34/35 (1st)
 	;--so if we are here we want to ignore the top row and blow up the middle and bottom row.... hm.
 	;--first, set overflow
-	bit Return      ;set overflow
-	dec Temp+6      ;and decrease the row by one (will have to adjust later!)
-.InMazeBlowUpBricks	
+	bit Return                          ;               set overflow, which is flag so we know to blow up two bricks not three
+	dec Temp+6                          ;+9     43      and decrease the row by one (will have to adjust later!)
+.InMazeBlowUpBricks	                    ;       35/43 (1st) if we branch here (lower cycle count), we will blow up 3 bricks, if we fell through we will blow up 2
+                                        ;                   blowing up three bricks is the longer path so we will count below for that only
     ;--if we are here, we have a legit brick location and we will remove it
     ;--get row into Y
     ldy Temp+6
-    dey                 ;adjust because Temp+6 is zero-indexed for entire maze but the PF data stored in RAM starts at row 1
+    dey                                 ;+5     40 (1st)    adjust because Temp+6 is zero-indexed for entire maze but the PF data stored in RAM starts at row 1
     ;--then lookup specific brick mask
     lda PFClearLookup,X
     tax ;save for below 
     ;--then erase brick
     and (MiscPtr),Y
-    sta (MiscPtr),Y
+    sta (MiscPtr),Y                     ;+16    56 (1st)
     tya ;we decremented Y above already, this resets flags
-    beq .RowZeroCheck    
+    beq .RowZeroCheck                   ;+4/5   60/61 (1st) this branch goes UP to the row zero check, which takes 28 cycles max
     ;not on row zero, so clear the next brick down
     dey    
     txa             ;restore PFClearLookup,X
     ;--then erase brick
     and (MiscPtr),Y
-    sta (MiscPtr),Y
+    sta (MiscPtr),Y                     ;+14    74 (1st)
     ;--if overflow cleared, we do one more row
-    bvc .BlowUpLastRow
+    bvc .BlowUpLastRow                  ;+2/3   84/77 (1st) will only count for taking this branch (if we don't take the branch, we are 8 cycles further along) 
     ;--if overflow set, we readjust the initial row and then start the loop again
     inc Temp+6
-    bne .GoToNextBrick  ;branch always
-.BlowUpLastRow    
+    bne .GoToNextBrick                  ;+8     92 (1st)    branch always
+.BlowUpLastRow                          ;       77 (1st)
     tya ;we decremented Y above already, this resets flags
-    beq .RowZeroCheck    
+    beq .RowZeroCheck                   ;+4/5   81/82 (1st) or 103/104 (2nd) branch goes UP to row zero check, which takes either 23 (blow up no brick on bottom row), 25 (blew up left brick on bottom row), or 28 (blew up right brick on bottom row)
     ;not on row zero, so clear the next brick down
     dey    
     txa             ;restore PFClearLookup,X
     ;--then erase brick
     and (MiscPtr),Y
-    sta (MiscPtr),Y
+    sta (MiscPtr),Y                     ;+14    95
     
 .NotBrick9Row0    
 .OffMazeGoToNext  
-.GoToNextBrick 
+.GoToNextBrick                          ;       110 (1st) 127 (2nd) 127 (3rd)
     ldy Temp+7
     dey
-    bpl .RemoveBricksLoop
-
+    bpl .RemoveBricksLoop               ;+7/8   118 (1st) 135 (2nd) 134 (3rd)
+                                        ;       118+135+134 is "theoretical" maximum, if blowing up 6 bricks above base and the right brick on the bottom row.   
+                                        ;       
+                                        ;total= 387
+                                        ;+387   493
     pla
     tay     ;restore Y index into bullet
     pla
-    tax     ;restore X index into tank
+    tax                                 ;+12    505     restore X index into tank
 Return    
-    rts
+    rts                                 ;+6     511     plus six  for JSR
     
 
     
@@ -6635,59 +6705,45 @@ ScoreForKillingTank
 BulletHitBrickSubroutine
 	;--first, add to score ONLY if player bullet
 	cpx #2
-	bcs NoScoreForWallDestructionByEnemies
+	bcs NoScoreForWallDestructionByEnemies  ;+4/5   4/5
 	lda #>WALLDESTRUCTIONSCORE
 	sta Temp
-	lda #<WALLDESTRUCTIONSCORE
-	jsr IncreaseScoreSubroutine
-NoScoreForWallDestructionByEnemies	
+	lda #<WALLDESTRUCTIONSCORE              ;+7     11
+	jsr IncreaseScoreSubroutine             ;+41    52
+NoScoreForWallDestructionByEnemies	        ;       5/52    below will count maximum cycles (i.e., from 52)
 	;--get row of block into Y and column into Temp+1
 
 	lda BulletY,X
 	sec
-	sbc #2
+	sbc #2                                  ;+8     60
 	;--use constant 27-cycle divide by 7 to get row instead of repeated-subtraction method
 	
 	tay
-	lda BlockRowTable,Y     ;can use this as a divide table only in bank 1
+	lda BlockRowTable,Y                     ;+6     66  can use this as a divide table only in bank 1
 	
 	
-; 	sta Temp
-; 	lsr
-; 	lsr
-; 	lsr
-; 	adc Temp
-; 	ror
-; 	lsr
-; 	lsr
-; 	adc Temp
-; 	ror
-; 	lsr
-; 	lsr                 ;+27
-	
-	tay
-; FoundWhichRowBulletIsIn
+	tay                     
 	;--special check for row = 0
-	bne BulletNotOnBottomRow
+	bne BulletNotOnBottomRow                ;+4/5   70/71
 	;--all we care is left or right of center
-	lda BulletX,X
+	lda BulletX,X   
 	cmp #80
-	bcc BulletOnLeftLastRow
+	bcc BulletOnLeftLastRow                 ;+8/9   78/79
 	lda #0
 	sta LastRowR
-	beq RemovedWallBlock
-BulletOnLeftLastRow
+	beq RemovedWallBlock                    ;+8     86      branch always
+BulletOnLeftLastRow                         ;       79
 	lda #0
 	sta LastRowL
-	beq RemovedWallBlock
-BulletNotOnBottomRow
+	beq RemovedWallBlock                    ;+8     87      branch always
+BulletNotOnBottomRow                        ;       79
     lda BulletDirection
     and BulletDirectionMask,X
     cmp BulletLeftBank2,X
-    beq BulletMovingLeft
+    beq BulletMovingLeft                    ;+13/14 92/93
     lda #-16
-    .byte $2C   ;skip two bytes
-BulletMovingLeft
+    .byte $2C                               ;+6     98      skip two bytes
+BulletMovingLeft                            ;       93/98   will count from maximum below
     lda #-17
     clc            
     adc BulletX,X
@@ -6696,41 +6752,35 @@ BulletMovingLeft
 	lsr
 	sta Temp+1
 	txa
-	pha
+	pha                                     ;+22    120
 		
 	lda #<PF1Left
 	sta MiscPtr
-	lda #>PF1Left
-	sta MiscPtr+1
+	lda #>PF1Left                           ;               this value is zero (zero page)
+	sta MiscPtr+1                           ;+10    130
 	ldx Temp+1
 	lda PFMaskLookupBank2,X
 	eor #$FF
-	pha
+	pha                                     ;+12    142
 	lda PFRegisterLookupBank2,X
 	clc
 	adc MiscPtr
-	sta MiscPtr
+	sta MiscPtr                             ;+12    154
 	pla
 	dey
 	and (MiscPtr),Y
-	sta (MiscPtr),Y	
+	sta (MiscPtr),Y	                        ;+16    170
 	pla
-	tax
-RemovedWallBlock
+	tax                                     ;+6     176
+RemovedWallBlock                            ;       86/87   from branches above or 176 if dropping directly through.  Will count from maximum
 	;--bullet has hit block, remove bullet from screen:
-	jsr MoveBulletOffScreenSubroutine
-; 	lda #BALLOFFSCREEN
-; 	sta BulletX,X
-; 	sta BulletY,X
-; 	
+	jsr MoveBulletOffScreenSubroutine       ;+22    198     should probably inline if we have ROM space to save time
 	;--play brick explosion sound
-	;--only start if longer explosion not happening
-	ldy #BRICKSOUND
-	jsr StartSoundSubroutineBank2
+	ldy #BRICKSOUND                         ;+2     200
+	jsr StartSoundSubroutineBank2           ;+40    240
 	
-NoSoundForBrickExplosion
 
-    rts
+    rts                                     ;+6     246
     
 ;****************************************************************************
 
@@ -6750,17 +6800,18 @@ TankRespawnRoutineWrapperEnemy
 
 TankRespawnRoutine  ;come in with X holding tank number (0 = player, 1-3 = enemy tanks)
 	txa
-	bne EnemyTankRespawnRoutine
+	bne EnemyTankRespawnRoutine     ;+4/5
+	;--if player tank we are here:
     ;--increase counter of number of deaths (in MazeGenerationPass) then increase respawn wait
     lda MazeGenerationPass
     and #PLAYERDEATHCOUNTBITS
     cmp #PLAYERDEATHCOUNTMAX
-    beq PlayerHasDiedMaxTimes
+    beq PlayerHasDiedMaxTimes       ;+9/10  13/14
     
-    inc MazeGenerationPass
+    inc MazeGenerationPass          
     lda MazeGenerationPass
-    and #PLAYERDEATHCOUNTBITS
-PlayerHasDiedMaxTimes    
+    and #PLAYERDEATHCOUNTBITS       ;+10    23
+PlayerHasDiedMaxTimes               ;       cycle counts from this point are for worst case scenario (i.e., 23)
     tay
 	lda PlayerStartingStatus,Y
 	sta TankStatus
@@ -6768,86 +6819,85 @@ PlayerHasDiedMaxTimes
 	sta TankX
 	lda #PLAYERSTARTINGY
 	sta TankY
-	rts
-;     bne UsePlayerRespawnPosition    ;branch always - all values of PlayerStartingStatus are non-zero
-EnemyTankRespawnRoutine
+	rts                             ;+25    48      maximum cycle count for player tank
+EnemyTankRespawnRoutine             ;        5
 	lda StartingTankStatus,X  
-	sta TankStatus,X
+	sta TankStatus,X                ;+8     13
 
 	;--new respawn routine: randomly pick between 2 respawn spots for each tank
 	;   formula is tank # times 2 + rand(0, 1)
 	lda RandomNumber
 	lsr
-	dex                 ;change index from 1-3 to 0-2
+	dex                             ;           change index from 1-3 to 0-2
 	txa
-	inx                 ;get X back to 1-3
+	inx                             ;           get X back to 1-3
 	rol
-	tay	                ;at this point Y holds 0, 1, 2, 3, 4, 5
+	tay	                            ;+15    28  at this point Y holds 0, 1, 2, 3, 4, 5
 
 	;--if player tank is in top part of screen, use different starting positions
 	lda TankY
 	cmp #BLOCKHEIGHT*7
-; 	bcc TopRowEnemyTankRespawn
-    bcs PlayerNearTop
+    bcs PlayerNearTop               ;+7/8   35/36
     tya
-    adc TankRespawnPlayerBottom,X
+    adc TankRespawnPlayerBottom,X   ;               carry clear following not-taken BCS branch above
     tay
-    bcc LeftRightRespawnAdjust     ;branch always 
-PlayerNearTop    
+    bcc LeftRightRespawnAdjust      ;+11    46      branch always 
+PlayerNearTop                       ;       36
     tya
     clc             ;<--could remove this CLC by adjusting the table in command below
     adc TankRespawnPlayerTop,X
-    tay
-LeftRightRespawnAdjust
+    tay                             ;+10    46
+LeftRightRespawnAdjust              ;       46      cycle count is same regardless of which path, coincidentally
 	;--use alternate positions
 	;--if player is on left part of screen, use variable respawn locations
 	lda TankX
 	cmp #80
-	bcc PlayerLeft
+	bcc PlayerLeft                  ;+7/8   53/54
     ;--else player right
     tya
     clc
     adc TankRespawnPlayerRight,X
     tay
-    bcc SetEnemyRespawnPosition     ;branch always 
-PlayerLeft
+    bcc SetEnemyRespawnPosition     ;+13    66      branch always 
+PlayerLeft                          ;       54
     tya
     adc TankRespawnPlayerLeft,X    ;carry already clear following BCC 
-    tay
-; TopRowEnemyTankRespawn
-SetEnemyRespawnPosition
-SetPlayerRespawnLocation
+    tay                             ;+8     62
+SetEnemyRespawnPosition             ;       62 or 66 cycles here
 	lda RespawnTankXPosition,Y
 	sta TankX,X
 	tya
 	lsr
 	tay
     lda RespawnTankYPosition,Y
-	sta TankY,X
+	sta TankY,X                     ;+22    84/88
 
-    rts
+    rts                             ;+6     90/94
 
 ;****************************************************************************
 
     
     SUBROUTINE   
+    ;--max number of tanks that can be killed is two
 KillAllTanksBonus
-    ldx #3
+    ldx #3                              ;+2      2
 .KillAllTanksLoop
     lda TankStatus,X
     lsr
-    bcc .TankAlreadyDeadCannotKillAgain
-    jsr PlayerHitTank
+    bcc .TankAlreadyDeadCannotKillAgain ;+8/9   10/11
+    jsr PlayerHitTank                   ;+78    88      assuming that level is not ended, if level is ended this takes a bit longer.
     ;--also give score bonus (of 1000?)
     lda #>POWERUPSCOREBONUS
     sta Temp
-    lda #<POWERUPSCOREBONUS
-    jsr IncreaseScoreSubroutine
+    lda #<POWERUPSCOREBONUS             ;+7     95
+    jsr IncreaseScoreSubroutine         ;+41    136
 .TankAlreadyDeadCannotKillAgain
     dex
-    bne .KillAllTanksLoop
-;     jmp ReturnFromBSSubroutine2    
-    rts       
+    bne .KillAllTanksLoop               ;+4/5   140/141
+    ;--so we loop through 3 times.  worst case: twice we blow up a tank (141 cycles) and once we don't (11 cycles).  minus 1 for the last time through the loop
+                                        ;+292   294     worst case scenario
+    
+    rts                                 ;+6     300     worst case scenario
 
  
 ;****************************************************************************
@@ -6857,7 +6907,7 @@ BulletHitTank
     ;  X is index into which tank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
-	jsr MoveBulletOffScreenSubroutine2
+	jsr MoveBulletOffScreenSubroutine2  ;+28    28
 ; 	lda #BALLOFFSCREEN
 ; 	sta BulletX,Y
 ; 	sta BulletY,Y
@@ -6867,38 +6917,38 @@ BulletHitTank
 		
     ;--first, reduce powerup tank kill countdown only if player killed the tank
     cpy #2
-    bcs NoUpdateToPowerUpCountdown  ;player bullets are indexed 0 & 1
-	
+    bcs EnemyTankBulletsNoUpdateToPowerUpCountdown      ;+4/5   34/35   player bullets are indexed 0 & 1
+	;--player bullets:
     lda MazeGenerationPass  ;used for powerup stuff during levels
     and #POWERUPCOUNTDOWNBITS
-    beq NoUpdateToPowerUpCountdown
+    beq NoUpdateToPowerUpCountdown      ;+7/8   41/42
     sec
     sbc #POWERUPCOUNTDOWNDECREMENT
-    sta Temp
+    sta Temp                            ;+7     48
     lda MazeGenerationPass
     and #~POWERUPCOUNTDOWNBITS
     ora Temp
-    sta MazeGenerationPass
+    sta MazeGenerationPass              ;+11    59  maximum cycle-count path for player bullets
 
-NoUpdateToPowerUpCountdown    
+NoUpdateToPowerUpCountdown              
+EnemyTankBulletsNoUpdateToPowerUpCountdown	;       35 when branching here, for enemy tank bullets
 	
-	
-PlayerHitTank
+PlayerHitTank       ;cycle counts below are relative to this point
 	;--save and restore Y in this routine
 	tya
-	pha
+	pha                             ;+5     5
 
 EnemyTanksNotMovedOffScreen
 
 	ldy #ENEMYTANKSOUND
-	jsr StartSoundSubroutineBank2
+	jsr StartSoundSubroutineBank2   ;+36    41
 	
 	;--clear "in play" flag, set wait counter, and set direction
     lda #TANKINPLAY ;--clear all bits except tank in play so we don't screw up subsequently-processed collisions
-    sta TankStatus,X
+    sta TankStatus,X                ;+6     47
 
     txa
-	bne EnemyTankHit
+	bne EnemyTankHit                ;+4/5   51/52
 	;--if player hit, remove all powerups and restart the power up countdown
 	lda MazeGenerationPass
 	and #~(POWERUPACTIVATEDBITS|POWERUPCOUNTDOWNBITS)
@@ -6906,11 +6956,11 @@ EnemyTanksNotMovedOffScreen
 	sta MazeGenerationPass
 	
 	
-	jmp PlayerTankHit
-EnemyTankHit
+	jmp PlayerTankHit               ;+13    64
+EnemyTankHit                        ;       52
     ;--decrease tanks remaining ONLY if enemy tank hit
 	dec TanksRemaining
-	bne LevelNotComplete
+	bne LevelNotComplete            ;+7/8   59/60
 	;--killed last tank, level is complete:
 	;--set levelcomplete flag
 	lda GameStatus
@@ -6934,62 +6984,32 @@ RemoveBulletsFromScreenLoop
 	bpl RemoveBulletsFromScreenLoop
 	
 	
-LevelNotComplete
-    ;--what I want to do here is IF the # of tanks remaining <= 3, 
-    ;   increase all enemy tank speeds by .... 4?  constant value.
-;     lda TanksRemaining
-;     cmp #4
-;     bcs MoreThanFourTanksRemainingStill
-    ;--loop through tanks and increase speed?
-    ;--use Y variable... or save X and restore?
-;     txa
-;     pha     ;save X
-;     ldx #3
-; IncreaseEnemyTankSpeedLoop
-;     lda TankStatus,X
-;     lsr     ;get TANKINPLAY flag into carry
-;     bcc TankNotOnScreenDoNotIncreaseSpeed
-;     rol     ;get TANKINPLAY flag back into lower bit
-;     and #TANKSPEED
-;     clc
-;     adc #LEVELENDTANKSPEEDBOOST
-;     cmp #TANKSPEED14+1
-;     bcc NewEnemyTankSpeedNotTooHigh
-;     lda #TANKSPEED14    
-; NewEnemyTankSpeedNotTooHigh
-;     sta Temp
-;     lda TankStatus,X
-;     and #TANKDIRECTION|TANKINPLAY  ;clears tank speed AND tank-in-play bits
-;     ora Temp
-;     sta TankStatus,X
-; TankNotOnScreenDoNotIncreaseSpeed
-;     dex
-;     bne IncreaseEnemyTankSpeedLoop
-;     pla
-;     tax     ;restore X
+LevelNotComplete                ;       60  cycle counts below are relative to the level NOT ending
 PlayerTankHit	
 MoreThanFourTanksRemainingStill    
 	;--save and restore Y in this routine
 	pla
 	tay
 
-	rts
-
+	rts                         ;+12    72
+                                ;   +59    131      longest path for BulletHitTank (player bullets)
+                                ;   +35    107      longest path for BulletHitTank (enemy bullets)
 ;****************************************************************************
     SUBROUTINE
 StartSoundSubroutineBank2
 	
 	lda Channel1Decay
 	and #$70
-	bne .DoNotStartSound
+	bne .DoNotStartSound        ;+7/8   7/8
 	lda ToneBank2,Y
 	sta AUDC1
 	lda FrequencyBank2,Y
 	sta AUDF1
 	lda SoundLengthBank2,Y
-	sta Channel1Decay
+	sta Channel1Decay           ;+21    28
 .DoNotStartSound
-	rts
+	rts                         ;+6     34      maximum cycle count is 34, minimum is 14
+	
 
 	
 ;****************************************************************************
@@ -7100,7 +7120,7 @@ MoveBulletOffScreenSubroutine
     lda #BALLOFFSCREEN
     sta BulletX,X
     sta BulletY,X
-    rts
+    rts                 ;+16    16      plus 6 for JSR
 
 ;****************************************************************************
 	
@@ -7237,6 +7257,124 @@ PlayerTankColor
 	
     ALIGNGFXDATA 1
 	
+/*
+
+    new enemy tank gfx:
+    
+Down:
+Down0
+        .byte #%00011011;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%10111101;--
+        .byte #%10100101;--
+        .byte #%10111100;--
+        .byte #%00111101;--
+        .byte #%10111101;--
+        .byte #%10111101;--
+        .byte #%11000000;--
+Down1
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%11011000;--
+        .byte #%00111101;--
+        .byte #%10100101;--
+        .byte #%10111101;--
+        .byte #%10111100;--
+        .byte #%00111101;--
+        .byte #%10111101;--
+        .byte #%11000011;--
+Down2
+        .byte #%11011011;--
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%10111100;--
+        .byte #%00100101;--
+        .byte #%10111101;--
+        .byte #%10111101;--
+        .byte #%10111100;--
+        .byte #%00111101;--
+        .byte #%11000011;--
+Down3
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%11011000;--
+        .byte #%00011011;--
+        .byte #%11011011;--
+        .byte #%10111101;--
+        .byte #%10100100;--
+        .byte #%00111101;--
+        .byte #%10111101;--
+        .byte #%10111101;--
+        .byte #%10111100;--
+        .byte #%00000011;--
+    
+
+Up:
+Up0
+        .byte #%10111101;--2
+        .byte #%00111101;--4
+        .byte #%10100101;--6
+        .byte #%00011011;--8
+        .byte #%11011011;--10
+        .byte #%00011011;--12
+        
+Up0b
+        .byte #%11000000;--1
+        .byte #%10111101;--3
+        .byte #%10111100;--5
+        .byte #%10111101;--7
+        .byte #%11011000;--9
+        .byte #%11011011;--11
+        
+Up1
+        .byte #%11000011;--
+        .byte #%10111101;--
+        .byte #%00111101;--
+        .byte #%10111100;--
+        .byte #%10111101;--
+        .byte #%10100101;--
+        .byte #%00111101;--
+        .byte #%11011000;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+Up2
+        .byte #%11000011;--
+        .byte #%00111101;--
+        .byte #%10111100;--
+        .byte #%10111101;--
+        .byte #%10111101;--
+        .byte #%00100101;--
+        .byte #%10111100;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte #%11011011;--
+Up3
+        .byte #%00000011;--
+        .byte #%10111100;--
+        .byte #%10111101;--
+        .byte #%10111101;--
+        .byte #%00111101;--
+        .byte #%10100100;--
+        .byte #%10111101;--
+        .byte #%11011011;--
+        .byte #%00011011;--
+        .byte #%11011000;--
+        .byte #%11011011;--
+        .byte #%11011011;--
+*/    
+    
+    
 TankGfxVertical
      ;--animation for upward facing tank:   
 TankUpAnimated1
@@ -7545,7 +7683,64 @@ EntryPointRowOffsetTable
 
 
     ALIGNGFXDATA 2
-		
+/*
+
+new enemy tank gfx:
+Right0
+        .byte #%10111011;--
+        .byte #%10111011;--
+        .byte #%10000011;--
+        .byte #%01111000;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01111000;--
+        .byte #%00000111;--
+        .byte #%01110111;--
+        .byte #%01110111;--
+Right1
+        .byte #%01110111;--
+        .byte #%01110111;--
+        .byte #%00000111;--
+        .byte #%01111000;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01111000;--
+        .byte #%10000110;--
+        .byte #%11101110;--
+        .byte #%11101110;--
+Right2
+        .byte #%11101110;--
+        .byte #%11101110;--
+        .byte #%10000110;--
+        .byte #%01111000;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01111000;--
+        .byte #%10000101;--
+        .byte #%11011101;--
+        .byte #%11011101;--
+Right3
+        .byte #%11011101;--
+        .byte #%11011101;--
+        .byte #%10000101;--
+        .byte #%01111000;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01101111;--
+        .byte #%01111000;--
+        .byte #%10000011;--
+        .byte #%10111011;--
+        .byte #%10111011;--
+
+
+*/		
 TankGfxHorizontal
 TankRightAnimated1
         .byte 0
@@ -7762,6 +7957,53 @@ TanksRemainingGfx
 	.byte %11101110
 	.byte %11101110
 	.byte %01000100		
+	
+	
+/*
+NEW POWERUP ICON IMAGES: 2024.1.10
+Frame0	;straight ahead
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%00111100;--
+        .byte #%01111110;--
+        .byte #%01011010;--
+        .byte #%01111110;--
+        .byte #%01111110;--
+        .byte #%11111111;--
+        .byte #%10111101;--
+        .byte #%10000001;--
+        .byte #%01000010;--
+Frame1 ;angled right
+        .byte #%00001111;--
+        .byte #%00011111;--
+        .byte #%00111111;--
+        .byte #%00111111;--
+        .byte #%01111110;--
+        .byte #%01101100;--
+        .byte #%01111110;--
+        .byte #%01111100;--
+        .byte #%01111100;--
+        .byte #%01011100;--
+        .byte #%00100010;--
+        .byte #%00011001;--
+Frame2 ;straight right
+        .byte #%00000110;--
+        .byte #%00011110;--
+        .byte #%00111110;--
+        .byte #%00111110;--
+        .byte #%01111100;--
+        .byte #%01110100;--
+        .byte #%01111100;--
+        .byte #%01111000;--
+        .byte #%01111000;--
+        .byte #%01100000;--
+        .byte #%00110000;--
+        .byte #%00011100;--
+
+New enemy tank gfx:
+Moving 
+        	*/
 	
 	
 	PAGEALIGN 5
@@ -7989,7 +8231,7 @@ MoveBulletOffScreenSubroutine2
     lda #BALLOFFSCREEN
     sta BulletX,Y
     sta BulletY,Y
-    rts
+    rts                 ;+22    22  plus six for JSR
 
 ;****************************************************************************
     
