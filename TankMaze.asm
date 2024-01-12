@@ -75,13 +75,13 @@
 
 	To do:
 	Highest priority:
-	VERY CLOSE TO DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
-    Update standard/random maze indicator
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-    Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)
     Final color, gfx, sound tweaking
 
+    DONE: Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)    
+    DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
+    DONE: Update standard/random maze indicator
     DONE: Allow use of joystick to change options at title screen
     DONE: Show game variation number somewhere (score?) briefly when SELECT is pressed (tie into item above)
     DONE: Change score color to be static (or change so different for every game variation?)
@@ -261,8 +261,8 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ;-------------------------Constants Below---------------------------------
 
 ;--scanline count constants
-VBLANK_TIMER = 33       ;--I think this is fine
-OVERSCAN_TIMER = 36     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 35       ;--I think this is fine
+OVERSCAN_TIMER = 34     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
 
 SOUNDTIMEBUFFER     =   (8*76)/64
 ;--scanline count constants end
@@ -454,6 +454,7 @@ PLAYERTANKENGINESOUND   =   7
 SCORESOUND              =   8
 POWERUPEXPLOSIONSOUND   =   9
 SPEEDBOOSTSOUND         =   10
+INVINCIBLETANKSOUND     =   11
 
 PLAYERTANKVOLUME	=	8
 
@@ -493,7 +494,9 @@ POWERUPEXPLOSIONSOUNDLENGTH =   63
 SPEEDBOOSTSOUNDTONE     =   PITFALLSOUND		
 SPEEDBOOSTSOUNDFREQ     =   30
 SPEEDBOOSTSOUNDLENGTH   =   20
-
+INVINCIBLETANKSOUNDTONE     =   SQUARESOUND
+INVINCIBLETANKSOUNDFREQ     =   15
+INVINCIBLETANKSOUNDLENGTH   =   9
 
 ;--music constants
 
@@ -2079,40 +2082,46 @@ AtIntersectionX
 	sbc #1
 
     ;--new new routine is a binary search.  Worst case is 27 cycles, best is 5.
-    cmp #ROWHEIGHT*6        ;middle value
-    beq AtIntersectionY     ;                   best case, 5 cycles
-    bcc Lower1
-    cmp #ROWHEIGHT*9
-    beq AtIntersectionY
-    bcc Lower2
-    cmp #ROWHEIGHT*11
-    beq AtIntersectionY
-    cmp #ROWHEIGHT*10
-    beq AtIntersectionY
-    cmp #ROWHEIGHT*12
-    beq AtIntersectionY
-    bne NotAtIntersectionY      ;       27  branch always, worst case
-Lower2                          ;       13
-    cmp #ROWHEIGHT*8
-    beq AtIntersectionY
-    cmp #ROWHEIGHT*7
-    beq AtIntersectionY
-    bne NotAtIntersectionY      ;+11    24  branch always
-Lower1                          ;        7
-    cmp #ROWHEIGHT*3
-    beq AtIntersectionY
-    bcc Lower3
-    cmp #ROWHEIGHT*5
-    beq AtIntersectionY
-    cmp #ROWHEIGHT*4    
-    beq AtIntersectionY
-    bne NotAtIntersectionY      ;+17    24  branch always
-Lower3                          ;       14
-    cmp #ROWHEIGHT*2
-    beq AtIntersectionY
-    cmp #ROWHEIGHT*1
-    beq AtIntersectionY         ;+9     23
+;     cmp #ROWHEIGHT*6        ;middle value
+;     beq AtIntersectionY     ;                   best case, 5 cycles
+;     bcc Lower1
+;     cmp #ROWHEIGHT*9
+;     beq AtIntersectionY
+;     bcc Lower2
+;     cmp #ROWHEIGHT*11
+;     beq AtIntersectionY
+;     cmp #ROWHEIGHT*10
+;     beq AtIntersectionY
+;     cmp #ROWHEIGHT*12
+;     beq AtIntersectionY
+;     bne NotAtIntersectionY      ;       27  branch always, worst case
+; Lower2                          ;       13
+;     cmp #ROWHEIGHT*8
+;     beq AtIntersectionY
+;     cmp #ROWHEIGHT*7
+;     beq AtIntersectionY
+;     bne NotAtIntersectionY      ;+11    24  branch always
+; Lower1                          ;        7
+;     cmp #ROWHEIGHT*3
+;     beq AtIntersectionY
+;     bcc Lower3
+;     cmp #ROWHEIGHT*5
+;     beq AtIntersectionY
+;     cmp #ROWHEIGHT*4    
+;     beq AtIntersectionY
+;     bne NotAtIntersectionY      ;+17    24  branch always
+; Lower3                          ;       14
+;     cmp #ROWHEIGHT*2
+;     beq AtIntersectionY
+;     cmp #ROWHEIGHT*1
+;     beq AtIntersectionY         ;+9     23
     ;--else not at an intersection      22
+    ;--new new new routine uses the divide by seven table:
+    tay
+    lda DivideBySevenBank0,Y	
+    dey
+    cmp DivideBySevenBank0,Y
+    bne AtIntersectionY		;+15 to see if at an intersection    l
 NotAtIntersectionY
 EnemyTankPossibleReversal
 	;--new thing.  when TankMovementCounter = 0 (i.e., switching from regular to "scatter" mode) make tanks switch direction if they are NOT at an intersection ONLY
@@ -2397,7 +2406,6 @@ NotAtIntersection
 
 ;****************************************************************************
 
-;--SPEEDBOOSTSOUNDLENGTH = 20
 
 
 
@@ -2519,9 +2527,17 @@ DoNotPlayLevelStartMusic
     
 
 PlayMusic
+ 
+
+
     lda FrameCounter
     and #7                  ;tempo = 112.5 BPM, 16th note every seven frames
-    beq GetNewNote          
+    beq GetNewNote   
+    ;--at this point, if songindex = 255, then we don't do anything
+    ldy SongIndex
+    iny
+    beq MusicIsNotPlaying
+           
     and #3
     bne NoPercussionDownBeat    ;percussion is all 32nds
     jmp GetNewPercussion
@@ -3792,17 +3808,17 @@ PFRegisterLookup = * - 4
 Tone
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
 	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE, INVINCIBLETANKSOUNDTONE
 
 Frequency
 	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
 	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ, INVINCIBLETANKSOUNDFREQ
 
 SoundLength
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
-	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80, INVINCIBLETANKSOUNDLENGTH
 
 	
 
@@ -5517,12 +5533,6 @@ GenerateMazePasses
 	tax
 	dex ;--now start on random number between 13 and 14 
 	
-	;--if on first pass (top row), always start with X=15
-; 	lda MazeGenerationPass
-; 	eor #MAZEGENERATIONPASSES+1
-; 	sta Temp+2                      ;holds zero if on first pass, non-zero otherwise
-; 	bne MakeMazeLoopOuter
-; 	ldx #15
 	
 MakeMazeLoopOuter	
 	stx Temp
@@ -5551,22 +5561,10 @@ MakeMazeLoopInner
 	cmp RandomNumber
     bcs EndOfRun
 
-; 	cmp #MAZEPATHCUTOFF     ;higher value means more vertical passages, lower value means more horizontal.
-; 	bcc EndOfRun
 	;--not at the end of the run, so loop around
 	dec Temp+1
 	dex
-; 	bmi EndOfRun
-;     lda Temp+2  ;holds zero if first pass
-;     bne DoNotCarveAllTheWayToLeftInner
-;     ;--top row, carve all the way to the left
-;     beq MakeMazeLoopInner ;branch always
-; DoNotCarveAllTheWayToLeftInner
-;     txa
-; ; 	bpl MakeMazeLoopInner
     bne MakeMazeLoopInner  ;<--don't go all the way to the left edge (again, unless we are on the first row)
-	
-    
 
 	;--need to carve a passage downward if we reach this spot:
 EndOfRun
@@ -5582,10 +5580,6 @@ EndOfRun
 	sta Temp+1		;now Temp+1 holds length of horizontal passage (minus 1)
  	beq OnlyOnePlaceToCarve
 	;--this routine tries to find a random place in our new passage to carve downwards
-;  	jsr UpdateRandomNumberBank2
-	;--new routine:
-	;	decrease length by 1, then remove random bits.  
-;	dec Temp+1      ;this is unnecessary, so removed.
 	lda Temp+1
 	and RandomNumber
 	sta Temp+1
@@ -5628,14 +5622,6 @@ NoCarveDownInThisColumn
 	dex
 	bmi DoneWithRow
 
-;     lda Temp+2  ;holds zero if first pass
-;     bne DoNotCarveAllTheWayToLeft
-;     ;--top row, carve all the way to the left
-;     beq MakeMazeLoopOuter ;branch always
-; ;     txa
-; ;     bpl MakeMazeLoopOuter
-; DoNotCarveAllTheWayToLeft
-;     txa
     bne MakeMazeLoopOuter ;<--don't carve all the way to the left edge
 EndRunBeginNextRun
 
@@ -5644,7 +5630,6 @@ DoneWithRow
 DoneWithFirstPass
 	dec MazeGenerationPass
 
-; 	bpl NotCompletelyDoneWithMaze
     jmp NotCompletelyDoneWithMaze
 LastPassThroughMazeGeneration
 
@@ -5713,6 +5698,9 @@ ClearSideEntryPointsLoop
 	dey
 	bpl ClearSideEntryPointsLoop
 
+	
+	;--probably need to add something here to prevent tanks from being stuck in top L/R corners
+	
 	;no longer necessary since PF1 completely cleared on top rows
 	;--if top corner entry points are enclosed, add escape routes downward
 ; 	lda PF1Left+MAZEROWS-2 ;top left
@@ -5768,10 +5756,6 @@ SkipCreatingConnectingPassageLeft
     
     
 
-; 	;--this is for testing:  enclose top left tank
-; 	lda PF1Left+MAZEROWS-2
-; 	ora #$CF
-; 	sta PF1Left+MAZEROWS-2
 	
 	
 	;--and clear GAMEOFF flag and turn off maze generation flag, and make base reappear
@@ -5790,18 +5774,6 @@ SkipCreatingConnectingPassageLeft
 	lda #255		;--loop until X = 255 (-1)
 	jsr MoveEnemyTanksOffScreen	
 	
-; 	lda #TANKAISWITCH+1
-;     lda FrameCounter
-;     and #$7F
-;     sec
-;     sbc #1
-;     lsr
-;     lsr
-;     sta Temp
-;     lda #7
-;     sec
-;     sbc Temp	
-;     ora #TANKAISWITCH
     lda #TANKAISWITCH+1
 	sta TankMovementCounter ;enemy tanks start in regular movement mode at beginning of every level....maybe?  
 	
@@ -6227,60 +6199,8 @@ BulletCollisionM1
     tax
 
 
-	;--now check if bullet has hit an enemy tank
-	;   X is index into tank (outer loop)
-	;   Y is index into bullet (inner loop)
-; 	ldx #3                                          ;+2     2
-; CheckBulletTankCollisionOuterLoop
-	;first check if tank is offscreen
-; 	jsr IsTankOnScreen
-; ; 	and #$FF
-; 	bne EnemyTankOnScreen
-; 	jmp EnemyTankOffscreen
-; EnemyTankOnScreen
-; 	;now compare ball location to tank location
-; 	ldy #3                                          ;+2      2      will count cycles for single loop through
-; CheckBulletTankCollisionInnerLoop
-; 	lda BulletX,Y       ;<--this ... maybe isn't necessary if we are using hardware collision?
-; ; 	cmp #BALLOFFSCREEN
-; 	bne BulletOnScreen2                             ;+4/5    6/7
-	;--what if we inline the Y loop stuff here.  so when a bullet is offscreen we cycle through the loop in 11 cycles instead of 16.   
-	;   each bullet is processed 4 times, potentially saving 20 cycles per bullet.  
-	;   And when a bullet hits something, it is removed from the screen, so subsequent loops will save 5 cycles each.
-; 	dey
-; 	bpl CheckBulletTankCollisionInnerLoop
-; 	dex
-; 	bpl CheckBulletTankCollisionOuterLoop
-; 	jmp DoneWithCheckBulletTankCollisionOuterLoop 
-; ; 	jmp BulletOffScreen2    
-; BulletOnScreen2                                     ;        7
-; 	clc
-; 	adc #1
-; 	cmp TankX,X
-; 	bcc BulletDidNotHitTank1                        ;+10/11 17/18
-; 	sbc #1
-; 	sta Temp
-; 	lda TankX,X
-; 	clc
-; 	adc #8
-; 	cmp Temp
-; 	bcc BulletDidNotHitTank1                        ;+18/19 35/36
-; 	;--compare Y position
-; 	lda BulletY,Y
-; 	sec
-; 	sbc #1
-; 	cmp TankY,X                         
-; 	bcs BulletDidNotHitTank1                        ;+14/15 49/50
-; 	adc #1
-; 	sta Temp
-; 	lda TankY,X
-; 	sec
-; 	sbc #TANKHEIGHT
-; 	cmp Temp
-; 	bcs BulletDidNotHitTank1                        ;+18/19 67/68
-;     bcc FoundDeadTankNowKill                        ;+3     70      branch always
-; BulletDidNotHitTank1                                ;       18/36/50/68
-;     jmp BulletDidNotHitTank                         ;+3     this is end of (inner) loop
+	;   X is index into tank 
+	;   Y is index into bullet
 FoundDeadTankNowKill                                ;       70
     ;--now we have index of tank hit in X
     lda FrameCounter
@@ -6368,17 +6288,13 @@ TankAliveKillIt                                     ;       79
     ;--ok actually let's check that the tank is fully on the screen:
     jsr IsTankOnScreen                              ;+35    114     returns 0 if tank (index=X) is offscreen, 1 if onscreen
     bne TankIsOnScreenKillIt                        ;+2/3   116/117
-    ;--let's remove the bullet
-;     lda FrameCounter
-;     and #3
-    ;--need to save/restore X here
-;     lda #BALLOFFSCREEN
-;     sta BulletX,X
-;     sta BulletY,X
+    ;--if we are here, the bullet hit a tank that was partially (or completely?) off screen
     ;--we should do something else here, like play a weird noise so player knows he shot a tank that can't be killed since it is partially offscreen
-    jsr MoveBulletOffScreenSubroutine2  ;uses Y index into which ball to remove
-        ;routine loads BALLOFFSCREEN (=0) and then stores it to two RAM locations
-    beq TankOffScreenCannotBeKilled     ;branch always
+    jsr MoveBulletOffScreenSubroutine2  ;uses Y index into which ball to remove.  routine loads BALLOFFSCREEN (=0) and then stores it to two RAM locations
+    ldy #INVINCIBLETANKSOUND
+    jsr StartSoundSubroutineBank2
+        
+    bne TankOffScreenCannotBeKilled     ;branch always
     
 TankIsOnScreenKillIt                                ;       117
 	;--add KILLTANKSCORE to score if X > 0 (enemy tank) and Y >= 2 (player bullets)
@@ -7219,38 +7135,6 @@ MorphImage1b
         .byte #%01011110;--9
         .byte #%00101000;--11
         .byte 0
-MorphImage2 = * - 1
-        .byte #%00011100;--2
-        .byte #%00101000;--4
-        .byte #%00001100;--6
-        .byte #%00100010;--8
-        .byte #%01101110;--10
-        .byte #%00111100;--12
-MorphImage2b
-        .byte 0
-        .byte #%00011100;--1
-        .byte #%00101000;--3
-        .byte #%00001100;--5
-        .byte #%00100010;--7
-        .byte #%01101110;--9
-        .byte #%00111100;--11
-        .byte 0
-QuestionMarkImage = * - 1
-        .byte #%00011000;--2
-        .byte #%00011000;--4
-        .byte #%00001100;--6
-        .byte #%00000110;--8
-        .byte #%01100110;--10
-        .byte #%00111100;--12
-QuestionMarkImageb
-        .byte 0
-        .byte #%00011000;--1
-        .byte #%00000000;--3
-        .byte #%00011000;--5
-        .byte #%00001110;--7
-        .byte #%01100110;--9
-        .byte #%00111100;--11
-        .byte 0
 
 
 ; animation runs maze-morph1-morph2-questionmark-questionmark-morph2-morph1-maze and then loop to beginning 
@@ -8015,41 +7899,40 @@ PowerUpImage3b
         .byte #%01111100;--9
         .byte #%00100010;--11
      .byte 0     
+MorphImage2 = * - 1
+        .byte #%00011100;--2
+        .byte #%00101000;--4
+        .byte #%00001100;--6
+        .byte #%00100010;--8
+        .byte #%01101110;--10
+        .byte #%00111100;--12
+MorphImage2b
+        .byte 0
+        .byte #%00011100;--1
+        .byte #%00101000;--3
+        .byte #%00001100;--5
+        .byte #%00100010;--7
+        .byte #%01101110;--9
+        .byte #%00111100;--11
+        .byte 0
+QuestionMarkImage = * - 1
+        .byte #%00011000;--2
+        .byte #%00011000;--4
+        .byte #%00001100;--6
+        .byte #%00000110;--8
+        .byte #%01100110;--10
+        .byte #%00111100;--12
+QuestionMarkImageb
+        .byte 0
+        .byte #%00011000;--1
+        .byte #%00000000;--3
+        .byte #%00011000;--5
+        .byte #%00001110;--7
+        .byte #%01100110;--9
+        .byte #%00111100;--11
+        .byte 0
  
-StaticMazeImage =    * - 1
-        .byte #%10111110;--2
-        .byte #%11101011;--4
-        .byte #%10001000;--6
-        .byte #%00100011;--8
-        .byte #%11111010;--10
-        .byte #%00000000;--12
-StaticMazeImageb
-        .byte 0
-        .byte #%00000000;--1
-        .byte #%10111110;--3
-        .byte #%11101011;--5
-        .byte #%10001000;--7
-        .byte #%00100011;--9
-        .byte #%11111010;--11
-        .byte 0        
-        
-RandomMazeImage =   * - 1
-        .byte #%10100010;--2
-        .byte #%11100011;--4
-        .byte #%10010000;--6
-        .byte #%00100101;--8
-        .byte #%11000010;--10
-        .byte #%00000000;--12
-RandomMazeImageb
-        .byte 0
-        .byte #%00000000;--1
-        .byte #%10101010;--3
-        .byte #%11001011;--5
-        .byte #%10100000;--7
-        .byte #%00011001;--9
-        .byte #%11111010;--11
-        .byte 0            
-        
+
         
 PlayerStartingStatus
     .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
@@ -8181,18 +8064,19 @@ TankDeadStatus
 ToneBank2
 	.byte BRICKSOUNDTONE, BULLETSOUNDTONE, ENEMYTANKSOUNDTONE, SHORTBRICKSOUNDTONE
 	.byte LONGEXPLOSIONTONE, ENEMYBULLETSOUNDTONE, WALLSOUNDTONE, PLAYERTANKENGINETONE
-	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE
+	.byte SCORESOUNDTONE, POWERUPEXPLOSIONSOUNDTONE, SPEEDBOOSTSOUNDTONE, INVINCIBLETANKSOUNDTONE
 
 FrequencyBank2
 	.byte BRICKSOUNDFREQ, BULLETSOUNDFREQ, ENEMYTANKSOUNDFREQ, SHORTBRICKSOUNDFREQ
 	.byte LONGEXPLOSIONFREQ, ENEMYBULLETSOUNDFREQ, WALLSOUNDFREQ, PLAYERTANKENGINEFREQ
-	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ
+	.byte SCORESOUNDFREQ, POWERUPEXPLOSIONSOUNDFREQ, SPEEDBOOSTSOUNDFREQ, INVINCIBLETANKSOUNDFREQ
 	
 SoundLengthBank2
 	.byte BRICKSOUNDLENGTH, BULLETSOUNDLENGTH, ENEMYTANKSOUNDLENGTH, SHORTBRICKSOUNDLENGTH
 	.byte LONGEXPLOSIONLENGTH, ENEMYBULLETSOUNDLENGTH, WALLSOUNDLENGTH, PLAYERTANKENGINELENGTH
-	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80	
-
+	.byte SCORESOUNDLENGTH, POWERUPEXPLOSIONSOUNDLENGTH, SPEEDBOOSTSOUNDLENGTH|$80, INVINCIBLETANKSOUNDLENGTH
+    
+	
 RemoveBrickColumnShift 
     .byte 1, 1, 0
 	
