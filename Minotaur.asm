@@ -257,10 +257,10 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
         
 ;-------------------------Constants Below---------------------------------
 
-; Standard TV
+; TV System
 PAL         = 1
 NTSC        = 0
-SYSTEM      = PAL
+SYSTEM      = NTSC
 
     IF SYSTEM = PAL
 ;--scanline count constants
