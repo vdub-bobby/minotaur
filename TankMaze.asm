@@ -263,6 +263,8 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 ; TV System
 PAL         = 1
 NTSC        = 0
+PAL60       = 2
+
 SYSTEM      = NTSC
 
     IF SYSTEM = PAL
@@ -270,6 +272,7 @@ SYSTEM      = NTSC
 VBLANK_TIMER = 76
 OVERSCAN_TIMER = 52
     ELSE
+    ;for NTSC or PAL60
 VBLANK_TIMER = 33       ;--I think this is fine
 OVERSCAN_TIMER = 36     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
     ENDIF
@@ -586,6 +589,13 @@ LEVELCOMPLETETIMER	=	$03
 
 ;--GameStatus2 flags
 
+
+TANKSKILLEDBITS     =   %11110000
+PLAYERKILLED        =   %10000000
+TANK1KILLED         =   %01000000
+TANK2KILLED         =   %00100000
+TANK3KILLED         =   %00010000
+
 GAMEVARIATIONBITS   =   %00000111
 RANDOMMAZES         =   %00000100
 HARDSTARTINGLEVEL   =   %00000010
@@ -656,25 +666,7 @@ TANKSPEED12	=	12
 TANKSPEED13	=	13
 TANKSPEED14	=	14
 TANKSPEED15	=	15
-    IF SYSTEM = PAL
-;-------------------------COLOR CONSTANTS (PAL)--------------------------
-GRAY		=	$00
-GOLD		=	$20
-ORANGE		=	$40
-BURNTORANGE	=	$60
-RED		    =	$60
-PURPLE		=	$A0
-PURPLEBLUE	=	$60
-BLUE		=	$C0
-BLUE2		=	$B0
-LIGHTBLUE	=	$90
-TURQUOISE	=	$30
-GREEN		=	$50
-BROWNGREEN	=	$70
-TANGREEN	=	$70
-TAN		    =	$20
-BROWN		=	$40
-    ELSE
+    IF SYSTEM = NTSC
 ;-------------------------COLOR CONSTANTS (NTSC)--------------------------
 GRAY		=	$00
 GOLD		=	$10
@@ -692,6 +684,27 @@ BROWNGREEN	=	$C0
 TANGREEN	=	$D0
 TAN		    =	$E0
 BROWN		=	$F0
+
+    ELSE
+
+
+;-------------------------COLOR CONSTANTS (PAL)--------------------------
+GRAY		=	$00
+GOLD		=	$20
+ORANGE		=	$40
+BURNTORANGE	=	$60
+RED		    =	$60
+PURPLE		=	$A0
+PURPLEBLUE	=	$60
+BLUE		=	$C0
+BLUE2		=	$B0
+LIGHTBLUE	=	$90
+TURQUOISE	=	$30
+GREEN		=	$50
+BROWNGREEN	=	$70
+TANGREEN	=	$70
+TAN		    =	$20
+BROWN		=	$40
     ENDIF
 ;--------------------------TIA CONSTANTS----------------------------------
 
@@ -5974,6 +5987,11 @@ total:  2283 (30 scanlines).  still too long (overscan is 2122 cycles) but maybe
 CollisionsSubroutine
 
 
+    ;zeroeth, clear the "tanks killed" bits:
+    lda GameStatus2    
+    and #~TANKSKILLEDBITS
+    sta GameStatus2
+
     ;--first and most important collision check: has anything at all touched the base?
     ;-check bullets first (and only)
     
@@ -6191,7 +6209,10 @@ NonPlayerTankHitPowerUp
 BallHasNotHitBlock
                                 
     ;                                   ;+252   1192 cycles, worst case, to this point.
-
+    ;--do we need to update dead tank status HERE before we process bullet-to-tank collisions?
+    ;--and then again after?
+    
+    
 	;--now check if bullet has hit an enemy tank
 
 	;switching back to hardware collision detection
@@ -6285,6 +6306,14 @@ KillAllTanksInLoop
     beq DoNotKillPowerUp        ;+5/6   5/6     cycle counts will be internal to the loop.  will always take this branch once and not take it the other 3 times.
                                 ;we don't kill it because the overall routine (PlayerHitTank) does all kinds of stuff like decrement TanksRemaining and etc. 
                                 ;just above we set it to dead so it's fine.
+    ;--need to check that tanks are in play.  this isn't perfect, but will prevent us from killing:
+    ;       tanks that were killed on previous frames (and are now explosions)
+    ;       tanks that are offscreen and have not started coming on screen yet
+    ;   we will "rekill" any tanks killed above in tank-to-tank collisions, but that's not a big deal, because we are flagging tanks killed and not re-killing (in PlayerHitTank routine)
+    ;   we will also kill tanks that have begun coming on screen but aren't fully onscreen yet, which *kinda* violates the "tanks are invincible until fully onscreen" but for now I'm going to let that slide.
+    lda TankStatus,X
+    lsr                         ;--get TANKINPLAY into carry
+    bcc DoNotKillTankAlreadyDead
     lda TankX,X
     cmp Temp+4
     bcc NotInsideBlastRadius    ;+9/10  14/15
@@ -6299,6 +6328,7 @@ KillAllTanksInLoop
     jsr PlayerHitTank           ;+78    111       can hit this every time if all three non-powerup tanks are within the blast radius
 DoNotKillPowerUp
 NotInsideBlastRadius
+DoNotKillTankAlreadyDead
     dex
     bpl KillAllTanksInLoop      ;+5     116     total would be 116 three times + 10 once = 358 cycles
                                                     ;+358   1016
@@ -6888,13 +6918,17 @@ BulletHitTank
     ;  X is index into which tank
 	;--bullet did hit tank.
 	;	remove bullet and tank from screen
+	
+    lda GameStatus2
+    and TanksKilled,X           ;X is index into which tank
+    bne AlreadyKilledThisTankThisFrame
+	
+	
+	
 	jsr MoveBulletOffScreenSubroutine2  ;+28    28
 ; 	lda #BALLOFFSCREEN
 ; 	sta BulletX,Y
 ; 	sta BulletY,Y
-
-
-	
 		
     ;--first, reduce powerup tank kill countdown only if player killed the tank
     cpy #2
@@ -6915,12 +6949,21 @@ NoUpdateToPowerUpCountdown
 EnemyTankBulletsNoUpdateToPowerUpCountdown	;       35 when branching here, for enemy tank bullets
 	
 PlayerHitTank       ;cycle counts below are relative to this point
-	;--save and restore Y in this routine
+    lda GameStatus2
+    and TanksKilled,X           ;X is index into which tank
+    bne AlreadyKilledThisTankThisFrame
+
+	;--haven't killed it, so set the bit
+	lda GameStatus2
+    ora TanksKilled,X
+    sta GameStatus2
+    
+    
+    ;--save and restore Y in this routine
 	tya
 	pha                             ;+5     5
 
-EnemyTanksNotMovedOffScreen
-
+		
 	ldy #ENEMYTANKSOUND
 	jsr StartSoundSubroutineBank2   ;+36    41
 	
@@ -6955,6 +6998,9 @@ EnemyTankHit                        ;       52
 	and #~TANKSPEED
 	sta TankStatus
 	
+	
+
+	
 	ldy #3
 ; 	lda #BALLOFFSCREEN
 RemoveBulletsFromScreenLoop
@@ -6968,13 +7014,17 @@ RemoveBulletsFromScreenLoop
 LevelNotComplete                ;       60  cycle counts below are relative to the level NOT ending
 PlayerTankHit	
 MoreThanFourTanksRemainingStill    
+
 	;--save and restore Y in this routine
 	pla
 	tay
-
+AlreadyKilledThisTankThisFrame
 	rts                         ;+12    72
                                 ;   +59    131      longest path for BulletHitTank (player bullets)
                                 ;   +35    107      longest path for BulletHitTank (enemy bullets)
+                                
+                                
+                                
 ;****************************************************************************
     SUBROUTINE
 StartSoundSubroutineBank2
@@ -7491,7 +7541,8 @@ PlayerTankUp4b
         .byte #%11011011;--1
         .byte 0		
         
-        
+TanksKilled
+    .byte PLAYERKILLED, TANK1KILLED, TANK2KILLED, TANK3KILLED
         
 		PAGEALIGN 4
 	
@@ -7593,12 +7644,13 @@ P1CollisionTable
 M1CollisionTable
 	.byte 2, 3	
 P0CollisionTable
-	.byte 3;, 0     --uses zero in next table BE CAREFUL!!!
+	.byte 3, 0     ;--uses zero in next table BE CAREFUL!!!
 
 
 
 
     ALIGNGFXDATA 3
+    echo "If more than 0 bytes free at ALIGNGFXDATA 3 then check prior table"
 TankGfxHorizontal
 TankRightAnimated1
         .byte 0
