@@ -240,8 +240,8 @@ BULLETFRACTIONALSPEED    00fd
 BulletHitBrickSubroutine 3991              (R )
 BulletHitTank            3a89              (R )
 BULLETHORIZONTALSPEED    0004              (R )
-BulletLeft               1d56              (R )
 BULLETLEFT               0001              (R )
+BulletLeft               1d56              (R )
 BulletLeftBank2          3ec8              (R )
 BulletMovingLeft         39c9              (R )
 BulletNotDown            1c77              (R )
@@ -252,15 +252,15 @@ BulletOffScreen          1ca3              (R )
 BulletOffScreen2         3866                  
 BulletOnLeftLastRow      39b6              (R )
 BulletOnScreen           1cae              (R )
-BULLETRIGHT              0000              (R )
 BulletRight              1d5a              (R )
+BULLETRIGHT              0000              (R )
 BulletRightBank2         3ecc                  
 BULLETSOUND              0001              (R )
 BULLETSOUNDFREQ          000d              (R )
 BULLETSOUNDLENGTH        000d              (R )
 BULLETSOUNDTONE          0003              (R )
-BULLETUP                 0003              (R )
 BulletUp                 1d4e              (R )
+BULLETUP                 0003              (R )
 BulletUpBank2            3ec0                  
 BULLETVERTICALSPEED      0003              (R )
 BulletX                  009e              (R )
@@ -736,6 +736,7 @@ NotWaitingBringPlayerTankOnScreen 15aa              (R )
 NoUp                     19f2              (R )
 NoUpdateToPowerUpCountdown 3aa3              (R )
 NoVerticalTankMovement   13b6              (R )
+NTSC                     0000              (R )
 NumberOfBitsSet          1de0              (R )
 NumberOfBitsSetBank2     3fb0                  
 NUSIZ0                   0004              (R )
@@ -757,6 +758,7 @@ P0M0Color                32c7              (R )
 P1CollisionTable         3d47              (R )
 P1DIFF                   0080                  
 P1M1Color                32c9              (R )
+PAL                      0001              (R )
 PATTERNEND               00ff                  
 PERCUSSIONCUTOFF         0003              (R )
 PercussionDistortionTable 1f24                  
@@ -1036,6 +1038,7 @@ Switch1                  330a              (R )
 Switch1b                 3383              (R )
 SwitchMovementX          1ddb                  
 SwitchMovementY          1ddc                  
+SYSTEM                   0000              (R )
 T1024T                   0297                  
 TAN                      00e0                  
 TANGREEN                 00d0                  
@@ -1059,8 +1062,8 @@ TankDeadStatus           3f86              (R )
 TankDeadStatusBank0      1f45                  
 TANKDEADWAIT             0002              (R )
 TANKDEADWAITPLAYER       0008              (R )
-TankDirection            1dd5              (R )
 TANKDIRECTION            00f0              (R )
+TankDirection            1dd5              (R )
 TANKDOWN                 0020              (R )
 TankDownAnimated1        3c85                  
 TankDownAnimated1b       3c8c                  
@@ -1102,8 +1105,8 @@ TankNotOffLeftEdge       155f              (R )
 TankNotOffRightEdge      1567              (R )
 TankNotOnScreenCannotDie 37a5              (R )
 TankNotTurning           198a              (R )
-TankOffScreen            152e              (R )
 TANKOFFSCREEN            007f              (R )
+TankOffScreen            152e              (R )
 TankOffScreenCannotBeKilled 3866              (R )
 TankOffscreenCannotShoot 146d              (R )
 TANKONSCREENLEFT         0010              (R )

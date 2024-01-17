@@ -16,6 +16,9 @@ stdout.txt
 minotaur.asm
 minotaur.bin
 minotaur.sym
+Minotaur.asm
+Minotaur.bin
+Minotaur.sym
 
 # Atari Dev Studio bin directory
 bin/

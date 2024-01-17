@@ -260,9 +260,19 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
         
 ;-------------------------Constants Below---------------------------------
 
+; TV System
+PAL         = 1
+NTSC        = 0
+SYSTEM      = NTSC
+
+    IF SYSTEM = PAL
 ;--scanline count constants
-VBLANK_TIMER = 35       ;--I think this is fine
-OVERSCAN_TIMER = 34     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+VBLANK_TIMER = 76
+OVERSCAN_TIMER = 52
+    ELSE
+VBLANK_TIMER = 33       ;--I think this is fine
+OVERSCAN_TIMER = 36     ;--I think this is fine also, with the skipping the sound subroutine if we don't have time (see below)
+    ENDIF
 
 SOUNDTIMEBUFFER     =   (8*76)/64
 ;--scanline count constants end
@@ -646,13 +656,31 @@ TANKSPEED12	=	12
 TANKSPEED13	=	13
 TANKSPEED14	=	14
 TANKSPEED15	=	15
+    IF SYSTEM = PAL
+;-------------------------COLOR CONSTANTS (PAL)--------------------------
+GRAY		=	$00
+GOLD		=	$20
+ORANGE		=	$40
+BURNTORANGE	=	$60
+RED		    =	$60
+PURPLE		=	$A0
+PURPLEBLUE	=	$60
+BLUE		=	$C0
+BLUE2		=	$B0
+LIGHTBLUE	=	$90
+TURQUOISE	=	$30
+GREEN		=	$50
+BROWNGREEN	=	$70
+TANGREEN	=	$70
+TAN		    =	$20
+BROWN		=	$40
+    ELSE
 ;-------------------------COLOR CONSTANTS (NTSC)--------------------------
-
 GRAY		=	$00
 GOLD		=	$10
 ORANGE		=	$20
 BURNTORANGE	=	$30
-RED		=	$40
+RED		    =	$40
 PURPLE		=	$50
 PURPLEBLUE	=	$60
 BLUE		=	$70
@@ -662,9 +690,9 @@ TURQUOISE	=	$A0
 GREEN		=	$B0
 BROWNGREEN	=	$C0
 TANGREEN	=	$D0
-TAN		=	$E0
+TAN		    =	$E0
 BROWN		=	$F0
-
+    ENDIF
 ;--------------------------TIA CONSTANTS----------------------------------
 
 	;--NUSIZx CONSTANTS
