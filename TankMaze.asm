@@ -5740,8 +5740,33 @@ ClearSideEntryPointsLoop
 	bpl ClearSideEntryPointsLoop
 
 	
-	;--probably need to add something here to prevent tanks from being stuck in top L/R corners
-	
+    ;--make sure tanks aren't trapped in the top row, either on the right or the left
+    ;--left.  If left five blocks are filled in in the second row from the top, open the left-most block
+CheckForBlockedAtTopLeft    
+    lda PF1Left+MAZEROWS-3
+    cmp #$FF
+    bne TopLeftNotBlocked
+    lda PF2Left+MAZEROWS-3
+    and #%00000011
+    beq TopLeftNotBlocked
+    lda PF1Left+MAZEROWS-3
+    and #%00111111
+    sta PF1Left+MAZEROWS-3
+    
+TopLeftNotBlocked
+
+    lda PF1Right+MAZEROWS-3
+    cmp #$FF
+    bne TopRightNotBlocked
+    lda PF2Right+MAZEROWS-3
+    and #%00000011
+    beq TopRightNotBlocked
+    lda PF1Right+MAZEROWS-3
+    and #%00111111
+    sta PF1Right+MAZEROWS-3
+TopRightNotBlocked
+
+
 	;no longer necessary since PF1 completely cleared on top rows
 	;--if top corner entry points are enclosed, add escape routes downward
 ; 	lda PF1Left+MAZEROWS-2 ;top left
