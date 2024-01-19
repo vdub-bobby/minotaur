@@ -1967,7 +1967,7 @@ TankNotInPlay
 	lda TankStatus,X
 	and #TANKDIRECTION
 	cmp #TANKUP             ;tank up only means explosion displaying on screen
-	bne  TankOffScreen
+	bne TankOffScreen
 
 	;--tank is onscreen but dead and sitting there.
 	;   Decrement the wait, once it is done then move it offscreen
@@ -2048,6 +2048,7 @@ SetInitialEnemyTankSpeed
 	;--set tank fractional so it moves immediately and doesn't turn before it gets onscreen
  	lda #255
  	sta TankFractional,X
+ 	bne TankOnscreenMoveIt          ;branch always.  so it moves on screen immediately
 DoNotBringTankOnscreenYet
 	rts
 
@@ -6920,7 +6921,7 @@ KillAllTanksBonus
 .KillAllTanksLoop
     lda TankStatus,X
     lsr
-    bcc .TankAlreadyDeadCannotKillAgain ;+8/9   10/11
+    bcc .TankAlreadyDeadCannotKillAgain ;+8/9   10/11   ....we really should see if the tank is on screen also.
     jsr PlayerHitTank                   ;+78    88      assuming that level is not ended, if level is ended this takes a bit longer.
     ;--also give score bonus (of 1000?)
     lda #>POWERUPSCOREBONUS

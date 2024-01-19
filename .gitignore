@@ -19,6 +19,7 @@ minotaur.sym
 Minotaur.asm
 Minotaur.bin
 Minotaur.sym
+tankmaze_tester.asm
 
 # Atari Dev Studio bin directory
 bin/
