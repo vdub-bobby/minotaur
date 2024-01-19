@@ -77,9 +77,10 @@
 	Highest priority:
     Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-    Final color, gfx, sound tweaking
+    Final color, gfx, sound fx, music tweaking
+	PAL60 version
 
-    DONE: Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)    
+	DONE: Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)    
     DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
     DONE: Update standard/random maze indicator
     DONE: Allow use of joystick to change options at title screen
@@ -89,10 +90,9 @@
 	
     Secondary priority or duplicate of above:
 	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
-	PAL60 version
 	DONE Turn powerups off with difficulty switch (or use select?).  Working, but look for a bit we can use to store this during a game so you can't turn it on and off during gameplay.  
 	    and then change color of score (or?) to indicate.
-	IN PROGRESS but this is very close or maybe even done.  Difficulty ramping.  Two things:
+	DONE but this is very close or maybe even done.  Difficulty ramping.  Two things:
 	    1. Increase initial difficulty - potentially increase firing rate for level 1
 	    2. Tweak difficulty ramping.  Currently -
 	        tanks reach max speed at level 32 (and 1 or 2 tanks are faster every 4 levels)
@@ -102,7 +102,7 @@
 	        tanks reach maximum fire rate at level 21
 	DONE Some kind of indicator that player tank is respawning (countdown something or other?)
 	DONE: Last tank shot in a level should not turn into a powerup (should always explode).
-	IN PROGRESS: 
+	DONE: 
 	    IN PROGRESS Harmonized music at title screen.  - the functionality is built, need to finish composing music
 	    NOT SURE IF NECESSARY And longer?  Probably have a free byte somewhere we can use at the title screen 
 	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
@@ -140,7 +140,7 @@
 	    Shooting powerup - points?
 	    DONE Bricks are worth 5 points during level, all remaining bricks are worth 10 pts each at end of level
 	    DONE Level end worth 100xlevel
-    MOSTLY DONE fix scanline count
+    DONE fix scanline count
 	G'NORE Logic for when levels wrap .... not worried about this.
     MOSTLY DONE Tank shooting algorithm needs to be improved drastically, especially obvious at higher levels.
     DONE Tank movement algorithm could use tweaking, tanks still run into each other too often.
