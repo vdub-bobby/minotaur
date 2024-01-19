@@ -642,10 +642,10 @@ enemy tank 2    TANKCOLOR2 (M1)     TANKCOLOR4 (P1)
 enemy tank 3    TANKCOLOR1 (P0)     TANKCOLOR4 (M1)
 */
 
-TANKCOLOR1          =    GOLD|$6        
-TANKCOLOR2          =    BLUE2|$A
-TANKCOLOR3          =    RED|$4
-TANKCOLOR4          =    GREEN|$4
+TANKCOLOR1          =    GOLD|$8       
+TANKCOLOR2          =    GREEN|$8
+TANKCOLOR3          =    BURNTORANGE|$A
+TANKCOLOR4          =    LIGHTBLUE|$C
 
 ;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	90;100
