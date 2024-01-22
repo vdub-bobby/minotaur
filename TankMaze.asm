@@ -604,6 +604,16 @@ POWERUPSDISABLED    =   %00000001
 
 ;--end GameStatus2 flags
 
+;--GameStatus3 flags
+
+CONSECUTIVEKILLBITS =   %00011111
+
+MAXIMUMCONSECUTIVEKILLS =   20
+
+
+;--end GameStatus3 flags
+
+
 
 BALLOFFSCREEN	=	0
 
@@ -809,6 +819,7 @@ MazeNumber ds 1
 MazeGenerationPass ds 1
 GameStatus ds 1
 GameStatus2 ds 1
+GameStatus3 ds 1
 Score ds 3
 TanksRemaining ds 1     ;this holds a value from 0 to 20.  Wondering if we can use the top 3 bits for something else?
 
@@ -826,7 +837,7 @@ TankFractional ds 4
 BulletX ds 4
 BulletY ds 4
 BulletDirection ds 1
-BulletFractional ds 1
+; BulletFractional ds 1
 
 PlayerX ds 2
 MissileX ds 2
@@ -1787,11 +1798,13 @@ FireEnemyBulletNow
     and #LASTTANKTHATFIRED
     cmp Temp
     bne IsNotSameTankGoAheadAndShoot
+    ;--if same tank, clear this.
     lda MazeGenerationPass
     and #~LASTTANKTHATFIRED
     sta MazeGenerationPass
     jmp SameTankCannotShootTwiceInARow
 IsNotSameTankGoAheadAndShoot
+    ;store tank that is shooting
     lda MazeGenerationPass
     and #~LASTTANKTHATFIRED
     ora Temp
@@ -6688,36 +6701,44 @@ GetInitialTankCountSubroutine
 ScoreForKillingTank
     txa
     pha ;save X
-    lda MazeGenerationPass      ;used for powerups and etc during level
-    and #PLAYERDEATHCOUNTBITS
-    bne .PlayerDiedUsePOWERUPCOUNTDOWN      ;       12/13
-    ;--if player hasn't died, use tanks killed since start of level
-    jsr GetInitialTankCountSubroutine       ;+21/22 33/34   returns with initial count in A
-    sec
-    sbc TanksRemaining
-    bcs .FigureOutScoreBonus                ;+8     41/42   branch always, the subtraction above should never result in a negative number
-.PlayerDiedUsePOWERUPCOUNTDOWN              ;       13
-    ;--give number of tanks killed since last death x CONSECUTIVEKILLBONUS
-    lda MazeGenerationPass
-    and #POWERUPACTIVATEDBITS
-    beq .NotAtMaximumAfterDeathBonus        ;+7/8   20/21
-    lda #7
-    bne .FigureOutScoreBonus                ;+5     25      branch always
-.NotAtMaximumAfterDeathBonus                ;       21      when branching here
-    lda MazeGenerationPass    
-    and #POWERUPCOUNTDOWNBITS
-    sta Temp
-    lda #POWERUPCOUNTDOWNMAX
-    sec
-    sbc Temp   
-    lsr
-    lsr                                     ;+19    40
-.FigureOutScoreBonus                        ;       25/41/42    when branching here     
+    
+    lda GameStatus3
+    and #CONSECUTIVEKILLBITS
+    
+    
+;     lda MazeGenerationPass      ;used for powerups and etc during level
+;     and #PLAYERDEATHCOUNTBITS
+;     bne .PlayerDiedUsePOWERUPCOUNTDOWN      ;       12/13
+;     ;--if player hasn't died, use tanks killed since start of level
+;     jsr GetInitialTankCountSubroutine       ;+21/22 33/34   returns with initial count in A
+;     sec
+;     sbc TanksRemaining
+;     bcs .FigureOutScoreBonus                ;+8     41/42   branch always, the subtraction above should never result in a negative number
+; .PlayerDiedUsePOWERUPCOUNTDOWN              ;       13
+;     ;--give number of tanks killed since last death x CONSECUTIVEKILLBONUS
+;     ;--if player died, we use # of tanks killed since death.  
+;     ;   this count won't be accurate if the player has an active power-up 
+;     ;   (since the count resets to zero) so we use the maximum after-death bonus in that case (7*powerup bonus)
+;     lda MazeGenerationPass
+;     and #POWERUPACTIVATEDBITS
+;     beq .NotAtMaximumAfterDeathBonus        ;+7/8   20/21
+;     lda #7
+;     bne .FigureOutScoreBonus                ;+5     25      branch always
+; .NotAtMaximumAfterDeathBonus                ;       21      when branching here
+;     lda MazeGenerationPass    
+;     and #POWERUPCOUNTDOWNBITS
+;     sta Temp
+;     lda #POWERUPCOUNTDOWNMAX
+;     sec
+;     sbc Temp   
+;     lsr
+;     lsr                                     ;+19    40
+; .FigureOutScoreBonus                        ;       25/41/42    when branching here     
     asl     ;multiply by two because indexing into table of words  
     tax
     sed                                     ;                   set decimal mode, is cleared by subroutine below!
     lda #<KILLTANKSCORE
-;     clc                                   ;                   carry cleared by ASL above, A always holds 0 through 20 before ASL
+;    clc                                   ;                   carry cleared by ASL above, A always holds 0 through 20 before ASL
     adc ConsecutiveKillBonusTable,X
     sta Temp+1
     lda #>KILLTANKSCORE
@@ -6970,8 +6991,20 @@ BulletHitTank
     and #~POWERUPCOUNTDOWNBITS
     ora Temp
     sta MazeGenerationPass              ;+11    59  maximum cycle-count path for player bullets
-
 NoUpdateToPowerUpCountdown              
+    ;--also need to increase the tank kill count
+    lda GameStatus3
+    and #CONSECUTIVEKILLBITS
+    cmp #MAXIMUMCONSECUTIVEKILLS
+    beq NoUpdateToConsecutiveKillCount
+    clc
+    adc #1
+    sta Temp
+    lda GameStatus3
+    and #~CONSECUTIVEKILLBITS
+    ora Temp
+    sta GameStatus3
+NoUpdateToConsecutiveKillCount
 EnemyTankBulletsNoUpdateToPowerUpCountdown	;       35 when branching here, for enemy tank bullets
 	
 PlayerHitTank       ;cycle counts below are relative to this point
@@ -7004,6 +7037,10 @@ PlayerHitTank       ;cycle counts below are relative to this point
 	and #~(POWERUPACTIVATEDBITS|POWERUPCOUNTDOWNBITS)
 	ora #POWERUPCOUNTDOWNRESET
 	sta MazeGenerationPass
+	;--also reset the consecutive kill count
+	lda GameStatus3
+	and #~CONSECUTIVEKILLBITS
+	sta GameStatus3
 	
 	
 	jmp PlayerTankHit               ;+13    64
