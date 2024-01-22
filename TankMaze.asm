@@ -6227,6 +6227,8 @@ EnemyTankDied                           ;       201 worst case for player tank r
 
 TankAlreadyDeadCannotDie
 TankNotOnScreenCannotDie    
+
+
 NoTankCollision
 PlayerTankDead
 DidNotHitAnythingLive
@@ -6371,7 +6373,10 @@ KillAllTanksInLoop
     cmp Temp+1
     bcs NotInsideBlastRadius    ;+5/6   33/34
     ;--it is KILL KILL KILL
-    jsr PlayerHitTank           ;+78    111       can hit this every time if all three non-powerup tanks are within the blast radius
+;     jsr PlayerHitTank           ;+78    111       can hit this every time if all three non-powerup tanks are within the blast radius
+        ;should we be calling KillTankViaPowerUp?  and also calling ScoreForKillingTank?
+    jsr KilledTankViaPowerUp    ;+140ish            this will work for both enemy and player tanks
+    jsr ScoreForKillingTank     ;+a bunch
 DoNotKillPowerUp
 NotInsideBlastRadius
 DoNotKillTankAlreadyDead
