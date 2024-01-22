@@ -6177,6 +6177,11 @@ TankHitLiveTank                             ;       cycle counts below are relat
     ;this is code that handles when the player tank runs into a powerup
     ;--first respawn tank to get powerup off the screen
     jsr TankRespawnRoutine                  ;+98        125         this uses X as index into tank.  and this blows away Y
+    ;--always give powerup bonus when collecting power up.
+    lda #>POWERUPSCOREBONUS
+    sta Temp
+    lda #<POWERUPSCOREBONUS
+    jsr IncreaseScoreSubroutine
     ;--second actually activate powerup
     lda MazeGenerationPass  ;used for powerups during levels
     and #POWERUPACTIVATEDBITS
@@ -6229,7 +6234,9 @@ NonPlayerTankHitPowerUp
     ;--looping up so player tank collisions are processed first
     iny
     cpy #4
-    bne TankCollisionLoop               ;+6/7   7 on first 3 loops, 6 on last (27 cycles)
+    beq DoneWithTankCollisionLoop
+    jmp TankCollisionLoop               ;+6/7   7 on first 3 loops, 6 on last (27 cycles)
+DoneWithTankCollisionLoop    
     ;worst case scenario for above loop:  two enemy tanks collide and on same frame player tank runs into powerup icon when he already has first powerup, so also blows up the other tanks. 
     ;   this would take approx 852 cycles.
     
@@ -6399,7 +6406,7 @@ TankIsOnScreenKillIt                                ;       117
 	bcs NoPointsForEnemyOwnGoals                    ;+4/5   121/122
 	txa ;set flags based on X
 	beq NoPointsForGettingShot	                    ;+4/5   125/126   
-	jsr ScoreForKillingTank                         ;+128   253
+	jsr ScoreForKillingTank                         ;+96   253
 	
 
 NoPointsForGettingShot		                        ;           126 when branching here
@@ -6698,57 +6705,30 @@ GetInitialTankCountSubroutine
 ;****************************************************************************
 
     SUBROUTINE    
-ScoreForKillingTank
+ScoreForKillingTank                         ;+6      6  6 to JSR here
     txa
     pha ;save X
     
     lda GameStatus3
-    and #CONSECUTIVEKILLBITS
+    and #CONSECUTIVEKILLBITS                ;+10    16
     
     
-;     lda MazeGenerationPass      ;used for powerups and etc during level
-;     and #PLAYERDEATHCOUNTBITS
-;     bne .PlayerDiedUsePOWERUPCOUNTDOWN      ;       12/13
-;     ;--if player hasn't died, use tanks killed since start of level
-;     jsr GetInitialTankCountSubroutine       ;+21/22 33/34   returns with initial count in A
-;     sec
-;     sbc TanksRemaining
-;     bcs .FigureOutScoreBonus                ;+8     41/42   branch always, the subtraction above should never result in a negative number
-; .PlayerDiedUsePOWERUPCOUNTDOWN              ;       13
-;     ;--give number of tanks killed since last death x CONSECUTIVEKILLBONUS
-;     ;--if player died, we use # of tanks killed since death.  
-;     ;   this count won't be accurate if the player has an active power-up 
-;     ;   (since the count resets to zero) so we use the maximum after-death bonus in that case (7*powerup bonus)
-;     lda MazeGenerationPass
-;     and #POWERUPACTIVATEDBITS
-;     beq .NotAtMaximumAfterDeathBonus        ;+7/8   20/21
-;     lda #7
-;     bne .FigureOutScoreBonus                ;+5     25      branch always
-; .NotAtMaximumAfterDeathBonus                ;       21      when branching here
-;     lda MazeGenerationPass    
-;     and #POWERUPCOUNTDOWNBITS
-;     sta Temp
-;     lda #POWERUPCOUNTDOWNMAX
-;     sec
-;     sbc Temp   
-;     lsr
-;     lsr                                     ;+19    40
-; .FigureOutScoreBonus                        ;       25/41/42    when branching here     
+ 
     asl     ;multiply by two because indexing into table of words  
     tax
     sed                                     ;                   set decimal mode, is cleared by subroutine below!
-    lda #<KILLTANKSCORE
+    lda #<KILLTANKSCORE                     ;+8     24
 ;    clc                                   ;                   carry cleared by ASL above, A always holds 0 through 20 before ASL
     adc ConsecutiveKillBonusTable,X
-    sta Temp+1
+    sta Temp+1                              ;+7     31
     lda #>KILLTANKSCORE
     adc ConsecutiveKillBonusTable+1,X
-    sta Temp
-    lda Temp+1                              ;+27    52/68/69
-    jsr IncreaseScoreSubroutine             ;+41    93/109/110
+    sta Temp                                ;+9     40
+    lda Temp+1                              ;+3     43
+    jsr IncreaseScoreSubroutine             ;+41    84
 	pla
 	tax ;--restore X
-    rts                                     ;+12    105/121/122 takes about 1.5 scanlines maximum
+    rts                                     ;+12    96 takes about 1.33 scanlines maximum
 
    
     
@@ -6937,25 +6917,22 @@ SetEnemyRespawnPosition             ;       62 or 66 cycles here
     
     SUBROUTINE   
     ;--max number of tanks that can be killed is two
+    ;--cycle counts below are off, K
 KillAllTanksBonus
     ldx #3                              ;+2      2
 .KillAllTanksLoop
     lda TankStatus,X
     lsr
     bcc .TankAlreadyDeadCannotKillAgain ;+8/9   10/11   ....we really should see if the tank is on screen also.
-    jsr PlayerHitTank                   ;+78    88      assuming that level is not ended, if level is ended this takes a bit longer.
-    ;--also give score bonus (of 1000?)
-    lda #>POWERUPSCOREBONUS
-    sta Temp
-    lda #<POWERUPSCOREBONUS             ;+7     95
-    jsr IncreaseScoreSubroutine         ;+41    136
+    jsr KilledTankViaPowerUp            ;+141   151       assuming that level is not ended, if level is ended this takes a bit longer.
+    jsr ScoreForKillingTank             ;+96    247
 .TankAlreadyDeadCannotKillAgain
     dex
-    bne .KillAllTanksLoop               ;+4/5   140/141
-    ;--so we loop through 3 times.  worst case: twice we blow up a tank (141 cycles) and once we don't (11 cycles).  minus 1 for the last time through the loop
-                                        ;+292   294     worst case scenario
+    bne .KillAllTanksLoop               ;+4/5   252
+    ;--so we loop through 3 times.  worst case: twice we blow up a tank (252 cycles) and once we don't (11 cycles).  minus 1 for the last time through the loop
+                                        ;+515           worst case scenario
     
-    rts                                 ;+6     300     worst case scenario
+    rts                                 ;+6     521     worst case scenario (7 scanlines ooooooooooooof)
 
  
 ;****************************************************************************
@@ -6980,7 +6957,8 @@ BulletHitTank
     ;--first, reduce powerup tank kill countdown only if player killed the tank
     cpy #2
     bcs EnemyTankBulletsNoUpdateToPowerUpCountdown      ;+4/5   34/35   player bullets are indexed 0 & 1
-	;--player bullets:
+KilledTankViaPowerUp    
+	;--player bullets.  update power-up countdown.
     lda MazeGenerationPass  ;used for powerup stuff during levels
     and #POWERUPCOUNTDOWNBITS
     beq NoUpdateToPowerUpCountdown      ;+7/8   41/42
@@ -6990,7 +6968,7 @@ BulletHitTank
     lda MazeGenerationPass
     and #~POWERUPCOUNTDOWNBITS
     ora Temp
-    sta MazeGenerationPass              ;+11    59  maximum cycle-count path for player bullets
+    sta MazeGenerationPass              ;+11    59  
 NoUpdateToPowerUpCountdown              
     ;--also need to increase the tank kill count
     lda GameStatus3
@@ -7003,7 +6981,8 @@ NoUpdateToPowerUpCountdown
     lda GameStatus3
     and #~CONSECUTIVEKILLBITS
     ora Temp
-    sta GameStatus3
+    sta GameStatus3                     ;+27    86  maximum cycle-count path for player bullets
+                                        ;       69 maximum cycle count path for "KilledTankViaPowerUp"
 NoUpdateToConsecutiveKillCount
 EnemyTankBulletsNoUpdateToPowerUpCountdown	;       35 when branching here, for enemy tank bullets
 	
@@ -7083,8 +7062,9 @@ MoreThanFourTanksRemainingStill
 	tay
 AlreadyKilledThisTankThisFrame
 	rts                         ;+12    72
-                                ;   +59    131      longest path for BulletHitTank (player bullets)
-                                ;   +35    107      longest path for BulletHitTank (enemy bullets)
+                                ;   +59          longest path for BulletHitTank (player bullets)
+                                ;   +35          longest path for BulletHitTank (enemy bullets)
+                                ;   +69 141      longest path for KilledTankViaPowerUp
                                 
                                 
                                 
