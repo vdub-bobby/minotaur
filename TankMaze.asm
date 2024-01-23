@@ -5183,24 +5183,24 @@ Wait1b
 	nop
 	bpl BackFromSwitch1b
 	
-KernelLastRow				;		31		branch here crosses page boundary
+KernelLastRow				;		30		branch here crosses page boundary
 	;lda #$80
 	;sta PF2
-	SLEEP 5
+	SLEEP 4
 	;line 1 of last row, this row has BASE (not wall)
-KernelLastRowLoop			;		36
+KernelLastRowLoop			;		35
 	lda Temp+1
-	sta COLUPF				;+6		42
+	sta COLUPF				;+6		41
 	;draw player 0
 	cpy Player0Top				
 	beq Switch0b
 	bpl Wait0b
 	lda (Player0Ptr),Y
-	sta GRP0				;+15	57
+	sta GRP0				;+15	56
 BackFromSwitch0b
 	
 	lda Temp+7;#WALLCOLOR
-	sta COLUPF				;+5		62
+	sta COLUPF				;+6		62
 	
 
 	;draw player 1
@@ -5225,19 +5225,19 @@ DoDraw10b
 	lda #TANKHEIGHT-2
 	dcp MissileYTemp+1
 	sbc #TANKHEIGHT-4
-	sta ENAM1				;+12	28
+	sta ENAM1				;+12	28      ;--one cycle too late
 	
 	
 	lda LastRowL
-	sta PF2					;+6		34
+	sta PF2					;+6		34      
 	
 	SLEEP 5					;		40
 
-	
+	tsx                     ;--move this up to push the PF2 write a little later
+
 	lda LastRowR
-	sta PF2					;+6		46
+	sta PF2					;+6		46      ;--can't be any sooner than cycle 45
 	
-	tsx
 	cpy BallY
 	php
 	txs						;+10	56
@@ -5271,7 +5271,7 @@ DoDraw11b
     beq DoNotDrawBase   ;7 if branch not taken.  8 if taken.
 	
 	lda #$80
-	sta PF2				;+5		31
+	sta PF2				;+5		31      
 	dey
 	bne KernelLastRowLoop		;+5		36
 	beq DoneWithKernelLastRowLoop   ;is this necessary?
