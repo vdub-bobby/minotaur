@@ -75,11 +75,11 @@
 
 	To do:
 	Highest priority:
-    Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-    Final color, gfx, sound fx, music tweaking
-	PAL60 version
+	PAL60 version.   Need colors.
 
+    DONE: Final color, gfx, sound fx, music tweaking
+    DONE: Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
 	DONE: Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)    
     DONE: With changes to how bullet movement and collisions are handled, have reintroduced jitter/rolls.  Need to optimize to eliminate.
     DONE: Update standard/random maze indicator
