@@ -249,8 +249,8 @@ BulletOffScreen          1ca5              (R )
 BulletOffScreen2         38a3                  
 BulletOnLeftLastRow      39d2              (R )
 BulletOnScreen           1cb0              (R )
-BulletRight              1d5a              (R )
 BULLETRIGHT              0000              (R )
+BulletRight              1d5a              (R )
 BulletRightBank2         3ecc                  
 BULLETSOUND              0001              (R )
 BULLETSOUNDFREQ          000d              (R )
@@ -487,6 +487,7 @@ FireEnemyBulletNow       1435              (R )
 FireEnemyBulletRoutine   13ba              (R )
 FiringRight              1a5b              (R )
 FIRSTCOLUMNX             0010              (R )
+FIRSTDEATHDELAY          0000              (R )
 Five                     3d19                  
 FlashWallColor           31e1              (R )
 FoundAbsoluteXDifference 168f              (R )
@@ -499,6 +500,7 @@ FoundDeadTankNowKill     3819              (R )
 FoundGoodDirection       16fe              (R )
 FoundPFWithBricks        1199              (R )
 Four                     3d20              (R )
+FOURTHDEATHDELAY         000e              (R )
 FrameCounter             0080              (R )
 Frequency                1d2a              (R )
 FREQUENCY_BITS           00f0                  
@@ -763,7 +765,7 @@ P1CollisionTable         3d47              (R )
 P1DIFF                   0080                  
 P1M1Color                32c9              (R )
 PAL                      0001              (R )
-PAL60                    0002                  
+PAL60                    0002              (R )
 PATTERNEND               00ff                  
 PERCUSSIONCUTOFF         0003              (R )
 PercussionDistortionTable 1f24                  
@@ -953,7 +955,6 @@ SameTankCannotShootTwiceInARow 146d              (R )
 SAWSOUND                 0001                  
 Score                    0089              (R )
 SCORECOLOR_POWERUPSDISABLED 000c              (R )
-SCORECOLOR_POWERUPSENABLED 00c4                  
 ScoreForKillingTank      398e              (R )
 ScoreKernelLoop          31aa              (R )
 SCOREPF                  0002                  
@@ -962,6 +963,8 @@ SCORESOUND               0008              (R )
 SCORESOUNDFREQ           0014              (R )
 SCORESOUNDLENGTH         0005              (R )
 SCORESOUNDTONE           0004              (R )
+SECAM                    0003              (R )
+SECONDDEATHDELAY         0004              (R )
 SELECT                   0002                  
 SELECTPressed            12b7              (R )
 SetChannel1Volume        173b              (R )
@@ -1045,6 +1048,7 @@ Switch1b                 3383              (R )
 SwitchMovementX          1ddb                  
 SwitchMovementY          1ddc                  
 SYSTEM                   0000              (R )
+SYSTEMSPEED              003c              (R )
 T1024T                   0297                  
 TAN                      00e0                  
 TANGREEN                 00d0                  
@@ -1114,8 +1118,8 @@ TankNotOffLeftEdge       155f              (R )
 TankNotOffRightEdge      1567              (R )
 TankNotOnScreenCannotDie 37d7              (R )
 TankNotTurning           198c              (R )
-TANKOFFSCREEN            007f              (R )
 TankOffScreen            152e              (R )
+TANKOFFSCREEN            007f              (R )
 TankOffScreenCannotBeKilled 38a3              (R )
 TankOffscreenCannotShoot 146d              (R )
 TANKONSCREENLEFT         0010              (R )
@@ -1162,6 +1166,7 @@ TANKSPEED6               0006
 TANKSPEED7               0007                  
 TANKSPEED8               0008                  
 TANKSPEED9               0009                  
+TANKSPEEDADDER           001f              (R )
 TanksRemaining           008c              (R )
 TANKSREMAININGCOLOR      00aa              (R )
 TanksRemainingGfx        3df6              (R )
@@ -1187,6 +1192,7 @@ TankX                    008f              (R )
 TankY                    0093              (R )
 Temp                     00ee              (R )
 ThereAreSomeAllowedDirections 163e              (R )
+THIRDDEATHDELAY          0008              (R )
 Three                    3d13                  
 THREECOPIESCLOSE         0003              (R )
 THREECOPIESMED           0006                  

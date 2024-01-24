@@ -198,7 +198,7 @@ BankSwitchAltRoutine1    1fee              (R )
 BankSwitchAltRoutine2    3fee                  
 BankSwitchSubroutine1    1fe0              (R )
 BankSwitchSubroutine2    3fe0              (R )
-BASECOLOR                0010              (R )
+BASECOLOR                0020              (R )
 BASSSOUND                0006                  
 BeatPattern              18dc              (R )
 BeatPatternTable         1f02              (R )
@@ -207,8 +207,8 @@ BlinkyRoutine            16d8              (R )
 BLINKYTANK               0003              (R )
 BLOCKHEIGHT              0007              (R )
 BlockRowTable            3f08              (R )
-BLUE                     0070                  
-BLUE2                    0080                  
+BLUE                     00c0                  
+BLUE2                    00d0                  
 BottomHUDSpritePositions 32c9              (R )
 BottomKernelLoopDone     34f2                  
 BottomKernelLoopInner    34c2              (R )
@@ -218,8 +218,8 @@ BRICKSOUND               0000              (R )
 BRICKSOUNDFREQ           0014              (R )
 BRICKSOUNDLENGTH         001a              (R )
 BRICKSOUNDTONE           0008              (R )
-BROWN                    00f0                  
-BROWNGREEN               00c0                  
+BROWN                    0020                  
+BROWNGREEN               0050                  
 BULLETCLEAR              0003                  
 BulletCollisionM0        37f1              (R )
 BulletCollisionM1        37f7              (R )
@@ -264,7 +264,7 @@ BulletUpBank2            3ec0
 BULLETVERTICALSPEED      0003              (R )
 BulletX                  009f              (R )
 BulletY                  00a3              (R )
-BURNTORANGE              0030                  
+BURNTORANGE              0040                  
 BUZZSOUND                000f                  
 BWCOLOR                  0008                  
 C5                       00b0              (R )
@@ -540,9 +540,9 @@ GetNewNote               1810              (R )
 GetNewPercussion         186f              (R )
 GetPercussionSound       1893              (R )
 GoImmediatelyToCompleteTitleScreen 1327              (R )
-GOLD                     0010                  
+GOLD                     0020                  
 GRAY                     0000                  
-GREEN                    00b0                  
+GREEN                    0070                  
 GRP0                     001b              (R )
 GRP1                     001c              (R )
 HARDSTARTINGLEVEL        0002              (R )
@@ -616,7 +616,7 @@ LevelNotComplete         3b09              (R )
 LevelStartFanfarePattern 1e3b              (R )
 LevelStartMusicChannel0  178c              (R )
 LevelStartSong           1eeb              (R )
-LIGHTBLUE                0090                  
+LIGHTBLUE                00b0                  
 LoadDrumPattern          18e6              (R )
 LONGEXPLOSIONFREQ        0012              (R )
 LONGEXPLOSIONLENGTH      007f              (R )
@@ -769,7 +769,7 @@ P1CollisionTable         32f7              (R )
 P1DIFF                   0080                  
 P1M1Color                32c7                  
 PAL                      0001              (R )
-PAL60                    0002                  
+PAL60                    0002              (R )
 PATTERNEND               00ff                  
 PERCUSSIONCUTOFF         0003              (R )
 PercussionDistortionTable 1f24                  
@@ -898,8 +898,8 @@ PreventReverses          1cb3              (R )
 PreWaitForVblankEnd      3177                  
 PRIORITYPF               0004              (R )
 ProcessDirections        1982              (R )
-PURPLE                   0050                  
-PURPLEBLUE               0060                  
+PURPLE                   0080                  
+PURPLEBLUE               00a0                  
 PutTanksOnTitleScreenLoop 1262              (R )
 PutTanksOnTitleScreenNotYet 128b              (R )
 PutTitleGraphicsInPlayfieldLoop 3b24              (R )
@@ -914,7 +914,7 @@ RandomNumber             0082              (R )
 RandomNumberSaved        0083              (R )
 ReadConsoleSwitchesSubroutine 12a8              (R )
 ReadControllersSubroutine 193b              (R )
-RED                      0040                  
+RED                      0060                  
 REFLECTEDPF              0001              (R )
 REFP0                    000b              (R )
 REFP1                    000c              (R )
@@ -958,8 +958,8 @@ RSYNC                    0003
 SameTankCannotShootTwiceInARow 1495              (R )
 SAWSOUND                 0001                  
 Score                    0089              (R )
-SCORECOLOR_POWERUPSDISABLED 000c              (R )
-SCORECOLOR_POWERUPSENABLED 00c4                  
+SCORECOLOR_POWERUPSDISABLED 000e              (R )
+SCORECOLOR_POWERUPSENABLED 0054                  
 ScoreForKillingTank      396d              (R )
 ScoreKernelLoop          31aa              (R )
 SCOREPF                  0002                  
@@ -1050,10 +1050,10 @@ Switch1                  330a              (R )
 Switch1b                 3383              (R )
 SwitchMovementX          1ddb                  
 SwitchMovementY          1ddc                  
-SYSTEM                   0000              (R )
+SYSTEM                   0002              (R )
 T1024T                   0297                  
-TAN                      00e0                  
-TANGREEN                 00d0                  
+TAN                      0020                  
+TANGREEN                 0030                  
 TANK1KILLED              0040              (R )
 Tank1OffScreen           1559              (R )
 TANK2KILLED              0020              (R )
@@ -1070,10 +1070,10 @@ TankCollisionBitsOdd     3ed4              (R )
 TankCollisionLoop        3749              (R )
 TankCollisionRotationTables 3ed0              (R )
 TankColor                0088              (R )
-TANKCOLOR1               0018              (R )
-TANKCOLOR2               00b8              (R )
-TANKCOLOR3               003a              (R )
-TANKCOLOR4               009c              (R )
+TANKCOLOR1               0028              (R )
+TANKCOLOR2               0078              (R )
+TANKCOLOR3               004a              (R )
+TANKCOLOR4               00ba              (R )
 TankDeadStatus           3f86              (R )
 TankDeadStatusBank0      1f45                  
 TANKDEADWAIT             0002              (R )
@@ -1170,7 +1170,7 @@ TANKSPEED7               0007
 TANKSPEED8               0008                  
 TANKSPEED9               0009                  
 TanksRemaining           008c              (R )
-TANKSREMAININGCOLOR      00aa              (R )
+TANKSREMAININGCOLOR      009a              (R )
 TanksRemainingGfx        3bd1              (R )
 TanksRemainingPF1Mask    328b              (R )
 TanksRemainingPF2Mask    3296              (R )
@@ -1228,7 +1228,7 @@ TurnDownward             19e9              (R )
 TurnLeftward             19d3              (R )
 TurnRightward            19bd              (R )
 TurnUpward               1a01              (R )
-TURQUOISE                00a0                  
+TURQUOISE                0090                  
 Two                      3d0d                  
 TWOCOPIESCLOSE           0001                  
 TWOCOPIESMED             0002                  
@@ -1267,7 +1267,7 @@ WaitForPlayerExplosion   1597              (R )
 WaitForVblankEnd         3178              (R )
 WaitToDrawTitleScreen    128b              (R )
 WaitToUpdateRespawnCounter 15aa              (R )
-WALLCOLOR                0048              (R )
+WALLCOLOR                0046              (R )
 WALLDESTRUCTIONSCORE     0005              (R )
 WALLDONEFLASHING         0080              (R )
 WallFlashingColor        31e8              (R )

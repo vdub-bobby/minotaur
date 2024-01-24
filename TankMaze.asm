@@ -264,10 +264,17 @@ POWERUPTESTING  =   0   ;if this is set, the powerup countdown default and reset
 PAL         = 1
 NTSC        = 0
 PAL60       = 2
+SECAM       = 3
 
 SYSTEM      = NTSC
 
-    IF SYSTEM = PAL
+    IF SYSTEM = NTSC || SYSTEM = PAL60
+SYSTEMSPEED =   60
+    ELSE
+SYSTEMSPEED =   50
+    ENDIF
+
+    IF SYSTEMSPEED = 50
 ;--scanline count constants
 VBLANK_TIMER = 76
 OVERSCAN_TIMER = 52
@@ -327,15 +334,33 @@ TANKDOWN		=	J0DOWN          ;%00100000
 TANKUP			=	J0UP            ;%00010000
 
 
-TANKDEADWAIT   =   2
+
+
+    IF SYSTEMSPEED = 60
+FIRSTDEATHDELAY     =   0
+SECONDDEATHDELAY    =   4
+THIRDDEATHDELAY     =   8
+FOURTHDEATHDELAY    =   14
+PLAYERRESPAWNDELAY =    14
+PLAYERINITIALDELAY  =   0
+TANKDEADWAIT        =   2
 TANKDEADWAITPLAYER  =   8
 
-PLAYERRESPAWNDELAY = 14
+    ELSE
+FIRSTDEATHDELAY     =   0
+SECONDDEATHDELAY    =   4
+THIRDDEATHDELAY     =   6
+FOURTHDEATHDELAY    =   12
+PLAYERRESPAWNDELAY =    12
 PLAYERINITIALDELAY  =   0
+TANKDEADWAIT        =   2
+TANKDEADWAITPLAYER  =   6
+
+    ENDIF    
 
 MAXTANKSREMAINING   =   20
 
-
+    ;this isn't actually used any longer
 LEVELENDTANKSPEEDBOOST  =   4   ;when <= 3 tanks remaining, all on-screen tanks have speed boost applied immediately.
 
 TANKONSCREENLEFT    =   16
@@ -353,12 +378,17 @@ VERTICALBLASTDISTANCE = (TANKHEIGHT+TANKHEIGHT)
 WALLDONEFLASHING = %10000000
 GAMEOVERWAITBITS = %01111111
 
+    IF SYSTEMSPEED = 60
 GAMEOVERWAIT    =   65 ;number of frames/4, can only use bottom 7 bits (0-127)
+    ELSE
+GAMEOVERWAIT    =   54 ;number of frames/4, can only use bottom 7 bits (0-127)
+    ENDIF
 GAMEOVERSOUND   =   BUZZSOUND
 GAMEOVERVOLUME  =   7
 GAMEOVERSTARTFREQ   =   5
     
 ;--some constants used by the tank AI routine
+    ;should I change this value for 50 Hz (PAL/SECAM)?   It only would change the ratio of the two AI routines.
 TANKAISWITCH	=	64              ;--when TankMovementCounter (updated every 4 frames) is less than this number, the enemy tanks go into "scatter" mode and head for static locations
                                     ;set to zero for no scatter mode (tanks will still reverse direction when TankMovementCounter hits zero)
 CLYDEDISTANCE   =   30              ;8 tiles in Pac-Man, equivalent in Minotaur is 4 tiles.  In pixels (with tile-width approx 7.5 pixels) is 30 (note that distance from player is calculated using manhattan distance (delta X + delta Y)
@@ -370,9 +400,15 @@ PINKYTANK   =   1
 ;clyde tank is whichever isn't specified above    
     
 ;delay uses TANKRESPAWNWAIT bits (%00001110) so these values have to be even numbers between 2 and 14
+    IF SYSTEMSPEED = 60
 ENEMYTANK1DELAY	=	14       ;# of frames of delay is x 4
 ENEMYTANK2DELAY	=	8
 ENEMYTANK3DELAY	=	2
+    ELSE
+ENEMYTANK1DELAY	=	12       ;# of frames of delay is x 4
+ENEMYTANK2DELAY	=	6
+ENEMYTANK3DELAY	=	2
+    ENDIF
 ;--tank speed constants
 ;--the way these are used:
 ;   tank speed is in lower nibble (these bits: %00001110)
@@ -383,15 +419,22 @@ ENEMYTANK3DELAY	=	2
 ;   and the Tank will basically move 1 pixel per update.  Which brings us to...
 ;   Player tank is moved every frame, but enemy tanks are moved every four frames.
 ;   Which means approximate speed ranges are as follows:
-;               Player tank         Enemy tanks
-;   TANKSPEED0  1 px / 8 frames     1 px / 32 frames
-;   TANKSPEED2  1 px / 4 frames     1 px / 16 frames
-;   TANKSPEED4  1 px / 2.7 frames   1 px / 10.7 frames
-;   TANKSPEED6  1 px / 2 frames     1 px / 8 frames
-;   TANKSPEED8  1 px / 1.6 frames   1 px / 6.4 frames
-;   TANKSPEED14 1 px / 1 frame      1 px / 4 frames
-PLAYERTANKSPEED	    =   TANKSPEED2|1     
-
+;               ------------------------------NTSC (60Hz)---------------------- -------------PAL (50Hz)------------------------
+;               Player tank                     Enemy tanks                     Player tank         Enemy tanks
+;               frames/pixel    pixel/sec       frames/pixel    pixel/sec       pixel/sec           pixel/sec
+;   TANKSPEED0  9               7.5             32              1.9             6.3                 1.6
+;   TANKSPEED2  4               15              16              3.8             12.5                3.1 
+;   TANKSPEED4  2.7             22.2            10.7            5.6             18.5                4.7 
+;   TANKSPEED6  2               30              8               7.5             25                  6.3
+;   TANKSPEED8  1.6             37.5            6.4             9.4             31.3                7.8
+;   TANKSPEED14 1               60              4               15              50                  12.5
+    IF SYSTEMSPEED = 60
+PLAYERTANKSPEED	    =   TANKSPEED2|1    
+TANKSPEEDADDER      =   $1F 
+    ELSE
+PLAYERTANKSPEED	    =   TANKSPEED4|1   
+TANKSPEEDADDER      =   $0D
+    ENDIF
 ;--so actual level-starting speeds are what is below + (the level # / 4) - the tank number (0-indexed).  truncated to an even number.
 ;       or: ([base speed] + [level #] - [tank number - 1]) && $FE
 ;       for example, at level 1 the initial tank speeds are as follows:
@@ -400,10 +443,15 @@ PLAYERTANKSPEED	    =   TANKSPEED2|1
 ;           Tank 3 = 6  +  (1 / 4) - 2 && $FE =  4 && $FE =  4
 ;       the effect is to widen the gap between tank 1 and 3 (from 4 to 6)
 ;       Tank 2 will alternate between being closer to tank 1 and tank 2 depending on whether the level # is odd or even.
+    IF SYSTEMSPEED = 60
 ENEMYTANKBASESPEED0 =   TANKSPEED8
 ENEMYTANKBASESPEED1 = 	TANKSPEED7
 ENEMYTANKBASESPEED2 =   TANKSPEED7      ;I know odd numbers don't work, but it affects when they switch from one speed to the next
-
+    ELSE
+ENEMYTANKBASESPEED0 =   TANKSPEED10
+ENEMYTANKBASESPEED1 = 	TANKSPEED9
+ENEMYTANKBASESPEED2 =   TANKSPEED9      ;I know odd numbers don't work, but it affects when they switch from one speed to the next
+    ENDIF
 SHOOTATBASELEFTCOLUMNBOUNDARY   =   72                  ; this is left-most pixel tank can be in when it will fire vertically at the base
 SHOOTATBASERIGHTCOLUMNBOUNDARY  =   81                  ; this is the right-most pixel (+1) tank can be in when it will fire vertically at the base
 SHOOTATBASEUPPERBOUNDARY        =   (6*ROWHEIGHT)+1+1   ; this is the highest the enemy tank can be (+1) when it will fire vertically at the base
@@ -472,44 +520,61 @@ INVINCIBLETANKSOUND     =   11
 PLAYERTANKVOLUME	=	8
 
 
+    IF SYSTEM = NTSC || SYSTEM = PAL60
+PLAYERTANKENGINELENGTH      =   4
+BULLETSOUNDLENGTH	        =	12+1
+ENEMYBULLETSOUNDLENGTH      =   BULLETSOUNDLENGTH
+BRICKSOUNDLENGTH	        =	25+1
+ENEMYTANKSOUNDLENGTH	    =	50+1
+SHORTBRICKSOUNDLENGTH	    =	7+1
+LONGEXPLOSIONLENGTH	        =	127
+WALLSOUNDLENGTH             =   8+1
+SCORESOUNDLENGTH            =   4+1
+POWERUPEXPLOSIONSOUNDLENGTH =   63
+SPEEDBOOSTSOUNDLENGTH       =   20
+INVINCIBLETANKSOUNDLENGTH   =   9
+    ELSE
+PLAYERTANKENGINELENGTH      =   4
+BULLETSOUNDLENGTH	        =	11
+ENEMYBULLETSOUNDLENGTH      =   BULLETSOUNDLENGTH
+BRICKSOUNDLENGTH	        =	22
+ENEMYTANKSOUNDLENGTH	    =	42
+SHORTBRICKSOUNDLENGTH	    =	7
+LONGEXPLOSIONLENGTH	        =	105
+WALLSOUNDLENGTH             =   7
+SCORESOUNDLENGTH            =   4
+POWERUPEXPLOSIONSOUNDLENGTH =   52
+SPEEDBOOSTSOUNDLENGTH       =   17
+INVINCIBLETANKSOUNDLENGTH   =   7
+    ENDIF
+
+    
 PLAYERTANKENGINEFREQ	=	8;31
 PLAYERTANKENGINETONE	=	2;ENGINESOUND
 PLAYERTANKENGINEVOLUME	=	3
-PLAYERTANKENGINELENGTH  =   3+1
-
+    
 BULLETSOUNDTONE		=	ENGINESOUND
 BULLETSOUNDFREQ		=	13
-BULLETSOUNDLENGTH	=	12+1
 ENEMYBULLETSOUNDTONE    =   BULLETSOUNDTONE
 ENEMYBULLETSOUNDFREQ    =   17
-ENEMYBULLETSOUNDLENGTH  =   BULLETSOUNDLENGTH
 BRICKSOUNDTONE		=	NOISESOUND
 BRICKSOUNDFREQ		=	20
-BRICKSOUNDLENGTH	=	25+1
 ENEMYTANKSOUNDTONE	=	NOISESOUND
 ENEMYTANKSOUNDFREQ	=	30
-ENEMYTANKSOUNDLENGTH	=	50+1
 SHORTBRICKSOUNDTONE	=	BRICKSOUNDTONE
 SHORTBRICKSOUNDFREQ	=	BRICKSOUNDFREQ
-SHORTBRICKSOUNDLENGTH	=	7+1
 LONGEXPLOSIONTONE	=	ENEMYTANKSOUNDTONE
 LONGEXPLOSIONFREQ	=	18
-LONGEXPLOSIONLENGTH	=	127
 WALLSOUNDTONE       =   BUZZSOUND;SQUARESOUND
 WALLSOUNDFREQ       =   10;8
-WALLSOUNDLENGTH     =   8+1
 SCORESOUNDTONE      =   SQUARESOUND
 SCORESOUNDFREQ      =   20
-SCORESOUNDLENGTH    =   4+1
 POWERUPEXPLOSIONSOUNDTONE   =   NOISESOUND   
 POWERUPEXPLOSIONSOUNDFREQ   =   15
-POWERUPEXPLOSIONSOUNDLENGTH =   63
 SPEEDBOOSTSOUNDTONE     =   PITFALLSOUND		
 SPEEDBOOSTSOUNDFREQ     =   30
-SPEEDBOOSTSOUNDLENGTH   =   20
 INVINCIBLETANKSOUNDTONE     =   SQUARESOUND
 INVINCIBLETANKSOUNDFREQ     =   15
-INVINCIBLETANKSOUNDLENGTH   =   9
 
 ;--music constants
 
@@ -630,19 +695,17 @@ CONSOLEDEBOUNCEFLAG	    =	%01000000
 JOYSTICKDEBOUNCEFLAG    =   %00100000
 ENEMYDEBOUNCEBITS       =   %00011111
 
+    IF SYSTEMSPEED = 60
 BULLETHORIZONTALSPEED   =   4
 BULLETVERTICALSPEED = 3	
+    ELSE
+BULLETHORIZONTALSPEED   =   5
+BULLETVERTICALSPEED = 4
+    ENDIF
 	
 ;--note that bullet speeds are no longer fractional, so these constants aren't used AND ALSO the ZP RAM location BulletFractional also isn't used.
 BULLETFRACTIONALPERCENT =   99   
 BULLETFRACTIONALSPEED   =   256*BULLETFRACTIONALPERCENT/100  ;slowing bullets down so the collision detection works better
-
-BASECOLOR		            =		GOLD
-SCORECOLOR_POWERUPSDISABLED =       GRAY|$C
-SCORECOLOR_POWERUPSENABLED  =       BROWNGREEN|$4
-WALLCOLOR			        =		RED|$8
-TANKSREMAININGCOLOR         =   TURQUOISE|$A
-
 
 
 /*              even frame          odd frame
@@ -651,11 +714,41 @@ enemy tank 1    TANKCOLOR2 (P1)     TANKCOLOR3 (M0)
 enemy tank 2    TANKCOLOR2 (M1)     TANKCOLOR4 (P1)
 enemy tank 3    TANKCOLOR1 (P0)     TANKCOLOR4 (M1)
 */
-
+    IF SYSTEM = NTSC
+BASECOLOR		            =		GOLD
+SCORECOLOR_POWERUPSDISABLED =       GRAY|$C
+WALLCOLOR			        =		RED|$8
+TANKSREMAININGCOLOR         =       TURQUOISE|$A
+    
 TANKCOLOR1          =    GOLD|$8       
 TANKCOLOR2          =    GREEN|$8
 TANKCOLOR3          =    BURNTORANGE|$A
 TANKCOLOR4          =    LIGHTBLUE|$C
+    ENDIF
+    
+    IF SYSTEM = PAL || SYSTEM = PAL60
+BASECOLOR		            =		GOLD
+SCORECOLOR_POWERUPSDISABLED =       GRAY|$E
+WALLCOLOR			        =		RED|$8
+TANKSREMAININGCOLOR         =       TURQUOISE|$A
+
+TANKCOLOR1          =    GOLD|$8       
+TANKCOLOR2          =    GREEN|$8
+TANKCOLOR3          =    BURNTORANGE|$A
+TANKCOLOR4          =    LIGHTBLUE|$A
+    ENDIF
+    
+    IF SYSTEM = SECAM
+BASECOLOR		            =		BLACK
+SCORECOLOR_POWERUPSDISABLED =       WHITE
+WALLCOLOR			        =		RED
+TANKSREMAININGCOLOR         =       CYAN
+
+TANKCOLOR1          =    YELLOW    
+TANKCOLOR2          =    GREEN
+TANKCOLOR3          =    RED
+TANKCOLOR4          =    BLUE
+    ENDIF
 
 ;--used by maze generation algorithm
 MAZEPATHCUTOFF	=	90;100
@@ -694,27 +787,40 @@ BROWNGREEN	=	$C0
 TANGREEN	=	$D0
 TAN		    =	$E0
 BROWN		=	$F0
-
-    ELSE
+    ENDIF
+    IF SYSTEM = PAL || SYSTEM = PAL60
 
 
 ;-------------------------COLOR CONSTANTS (PAL)--------------------------
 GRAY		=	$00
 GOLD		=	$20
-ORANGE		=	$40
-BURNTORANGE	=	$60
+ORANGE		=	$20
+BURNTORANGE	=	$40
 RED		    =	$60
-PURPLE		=	$A0
-PURPLEBLUE	=	$60
+PURPLE		=	$80
+PURPLEBLUE	=	$A0
 BLUE		=	$C0
-BLUE2		=	$B0
-LIGHTBLUE	=	$90
-TURQUOISE	=	$30
-GREEN		=	$50
-BROWNGREEN	=	$70
-TANGREEN	=	$70
+BLUE2		=	$D0
+LIGHTBLUE	=	$B0
+TURQUOISE	=	$90
+GREEN		=	$70
+BROWNGREEN	=	$50
+TANGREEN	=	$30
 TAN		    =	$20
-BROWN		=	$40
+BROWN		=	$20
+    ENDIF
+    IF SYSTEM = SECAM
+
+;-------------------------COLOR CONSTANTS (SECAM)--------------------------
+BLACK   =   $00
+BLUE    =   $02
+RED     =   $04
+MAGENTA =   $06
+GREEN   =   $08
+CYAN    =   $0A
+YELLOW  =   $0C
+WHITE   =   $0F
+
     ENDIF
 ;--------------------------TIA CONSTANTS----------------------------------
 
@@ -2219,7 +2325,7 @@ EnemyTankDirectionRoutine
 	asl
 	asl
 	asl
-	ora #$1F
+	ora #TANKSPEEDADDER
 	clc
 	adc TankFractional,X
 ;     jsr TankFractionalAddition	
@@ -3714,7 +3820,7 @@ TankFractionalAddition
 	asl
 	asl
 	asl
-	ora #$1F
+	ora #TANKSPEEDADDER
     clc
     adc TankFractional,X
 	sta TankFractional,X
@@ -8063,9 +8169,8 @@ QuestionMarkImageb
 
         
 PlayerStartingStatus
-    .byte TANKRIGHT|0, TANKRIGHT|4, TANKRIGHT|8, TANKRIGHT|14
+    .byte TANKRIGHT|FIRSTDEATHDELAY, TANKRIGHT|SECONDDEATHDELAY, TANKRIGHT|THIRDDEATHDELAY, TANKRIGHT|FOURTHDEATHDELAY
 
-    
 PFPointer
 	.word PF1Left, PF2Left, PF2Right, PF1Right
     
