@@ -77,8 +77,9 @@
 	Highest priority:
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
     Lengthen title screen music?
-    Give score bonus for starting at level 10?
-    
+
+
+    DECIDED NOT TO DO THIS: Give score bonus for starting at level 10?
     DONE: PAL60 version.   Need colors.
     DONE: Final color, gfx, sound fx, music tweaking
     DONE: Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
@@ -91,7 +92,7 @@
     DONE: Saw one time an enemy tank got stuck and program entered an endless loop (i.e., hard crash).  !!
 	
     Secondary priority or duplicate of above:
-	IN PROGRESS: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
+	DONE: Graphics/colors (including changing colors (of tanks?  walls?) for different levels)
 	DONE Turn powerups off with difficulty switch (or use select?).  Working, but look for a bit we can use to store this during a game so you can't turn it on and off during gameplay.  
 	    and then change color of score (or?) to indicate.
 	DONE but this is very close or maybe even done.  Difficulty ramping.  Two things:
@@ -107,7 +108,7 @@
 	DONE: 
 	    IN PROGRESS Harmonized music at title screen.  - the functionality is built, need to finish composing music
 	    NOT SURE IF NECESSARY And longer?  Probably have a free byte somewhere we can use at the title screen 
-	Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
+	DECIDED NOT TO DO THIS: Change level-end score-for-bricks routine to remove bricks in a more aesthetic pattern?
     Attract mode?
 	Other...?
 	sound tweaking/improvements
@@ -3915,7 +3916,6 @@ CheckBulletIsOffScreenVertical
 	cmp #(MAZEAREAHEIGHT)+4
 	bcc BulletOnScreen	
 BulletOffScreen
-;     jsr MoveBulletOffScreenSubroutine
     lda #BALLOFFSCREEN
     sta BulletX,X
     sta BulletY,X
@@ -5661,19 +5661,13 @@ SetMazeSeed
 	sta RandomNumber	
 RandomMazeSeed	
 
-
-
-	
-	
-	
 	;--and that's it for the first pass
 	jmp DoneWithFirstPass
 	
 NotFirstPass
 	lda RandomNumberSaved
 	sta RandomNumber
-
-
+	
 	lda #>PF1Left
 	sta MiscPtr+1
 
@@ -5688,6 +5682,9 @@ NotFirstPass
 	dey
 	bpl GenerateMazePasses
 	jmp LastPassThroughMazeGeneration
+
+	
+	
 GenerateMazePasses
 	tya
 	asl
@@ -5695,6 +5692,40 @@ GenerateMazePasses
 	adc #1
 	tay
 
+	
+	lda MazeNumber
+	and #$0F
+	cmp #$05
+	bne RegularMazeRoutine
+	lda GameStatus2
+	and #RANDOMMAZES
+	bne RegularMazeRoutine
+	;--alternate maze routine for selected mazes
+	tya
+	tax     ;use X here because we don't need it for another use and the writes are to ZP so the code size is smaller
+	lda #%00110011
+	sta PF1Right-1,X
+	sta PF1Left-1,X
+	lda #%11001100
+	sta PF2Left-1,X
+	sta PF2Right-1,X
+	lda #0
+	sta PF1Right,X
+	sta PF1Left,X
+	cpx #MAZEROWS-4
+	beq PartiallyClearCenterOfRow
+	cpx #MAZEROWS-8
+	bne FullyClearCenterOfRow
+PartiallyClearCenterOfRow	
+    lda #%11000000
+FullyClearCenterOfRow
+	sta PF2Right,X
+	sta PF2Left,X
+	jmp DoneWithRow
+RegularMazeRoutine
+	
+	
+	
 	jsr UpdateRandomNumberBank2
 	and #1
 	eor #15
@@ -6931,7 +6962,9 @@ BulletMovingLeft                            ;       93/98   will count from maxi
 	tax                                     ;+6     176
 RemovedWallBlock                            ;       86/87   from branches above or 176 if dropping directly through.  Will count from maximum
 	;--bullet has hit block, remove bullet from screen:
-	jsr MoveBulletOffScreenSubroutine       ;+22    198     should probably inline if we have ROM space to save time
+    lda #BALLOFFSCREEN                      ;               this value is zero
+    sta BulletX,X
+    sta BulletY,X
 	;--play brick explosion sound
 	ldy #BRICKSOUND                         ;+2     200
 	jsr StartSoundSubroutineBank2           ;+40    240
@@ -7214,14 +7247,15 @@ DrawTitleScreenSubroutine
 PutTitleGraphicsInPlayfieldLoop
 	txa
 	and #3
-	asl
 	tay
 	lda PFPointer,Y
 	sta MiscPtr
-	lda PFPointer+1,Y
+    lda #0      ;PF is in RAM; i.e., zero page
 	sta MiscPtr+1
 	
 	txa
+; 	asl             ;is this necessary?
+; 	tay             ;is this necessary
 	cmp #((TitleGraphicsEnd-TitleGraphics-1)/2)+(TitleGraphicsEnd-TitleGraphics-1)/4)-1
 	bcc DrawTitleScreenModerately
 	;--else slower
@@ -7309,11 +7343,11 @@ PositionASpriteSubroutineBank2NoHMCLR
 	
 ;****************************************************************************
 
-MoveBulletOffScreenSubroutine
-    lda #BALLOFFSCREEN
-    sta BulletX,X
-    sta BulletY,X
-    rts                 ;+16    16      plus 6 for JSR
+; MoveBulletOffScreenSubroutine
+;     lda #BALLOFFSCREEN
+;     sta BulletX,X
+;     sta BulletY,X
+;     rts                 ;+16    16      plus 6 for JSR
 
 ;****************************************************************************
 	
@@ -7382,14 +7416,7 @@ MorphImage1b
 
 
 
-RandomMazeFrame
-    .word StandardMazeImage+TANKHEIGHT, MorphImage1+TANKHEIGHT
-    .word MorphImage2+TANKHEIGHT, QuestionMarkImage+TANKHEIGHT
-	.word QuestionMarkImage+TANKHEIGHT, MorphImage2+TANKHEIGHT
-	.word MorphImage1+TANKHEIGHT, StandardMazeImage+TANKHEIGHT
 
-DigitDataLo
-	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine, <BlankDigit
 	
     PAGEALIGN 3
     
@@ -7705,7 +7732,12 @@ PlayerTankUp4b
         
 TanksKilled
     .byte PLAYERKILLED, TANK1KILLED, TANK2KILLED, TANK3KILLED
-        
+
+PFPointer
+	.byte <PF1Left, <PF2Left, <PF2Right, <PF1Right
+    
+    
+            
 		PAGEALIGN 4
 	
 DigitData
@@ -7806,7 +7838,7 @@ P1CollisionTable
 M1CollisionTable
 	.byte 2, 3	
 P0CollisionTable
-	.byte 3, 0     ;--uses zero in next table BE CAREFUL!!!
+	.byte 3, 0     
 
 
 
@@ -8049,11 +8081,6 @@ TitleGraphics
 TitleGraphicsEnd				
 	
 
-PFRegisterLookupBank2
-	.byte 0, 0, 0, 0
-	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
-	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
-	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
 
 	
 	
@@ -8067,6 +8094,11 @@ RotationOdd
 	.byte 0	;and first 3 bytes of next table
 RotationEven
 	.byte 2, 1, 3, 0
+PFRegisterLookupBank2 = * - 1   ;uses zero from previous table
+	.byte /*0, */0, 0, 0
+	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
+	.byte (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2, (MAZEROWS-1)*2
+	.byte (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3, (MAZEROWS-1)*3
 
     ALIGNGFXDATA 4
        
@@ -8179,12 +8211,9 @@ QuestionMarkImageb
 PlayerStartingStatus
     .byte TANKRIGHT|FIRSTDEATHDELAY, TANKRIGHT|SECONDDEATHDELAY, TANKRIGHT|THIRDDEATHDELAY, TANKRIGHT|FOURTHDEATHDELAY
 
-PFPointer
-	.word PF1Left, PF2Left, PF2Right, PF1Right
     
 DigitDataMissileLo
 	.byte <MissileZero, <MissileOne, <MissileTwo, <MissileThree
-	
 	.byte <MissileFour, <MissileFive, <MissileSix, <MissileSeven
 	.byte <MissileEight, <MissileNine
 		
@@ -8199,8 +8228,8 @@ RotationTables
 
 	
 BulletDirectionMask
-	.byte %11, %11<<2, %11<<4, %11<<6
-
+; 	.byte %11, %11<<2, %11<<4, %11<<6       ;--these values are the same as BulletUpBank2
+; 
 BulletDirectionClearBank2
 BulletUpBank2
 	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
@@ -8229,8 +8258,6 @@ PFClearLookup
 	.byte $3F, $CF, $F3, $FC
 	.byte $FC, $F3, $CF, $3F
    
-StartingTankStatus
-	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
 	 
 ;--these tables are offset into RespawnTankXPosition and RespawnTankYPosition	
 ;--tank 1 respawns farthest from player
@@ -8241,14 +8268,18 @@ StartingTankStatus
 TankRespawnPlayerRight = * - 1
     .byte 0, 6, 6
 TankRespawnPlayerLeft = * - 2       ;uses 6 from previous table
-    .byte /*8, */0, 0
+    .byte /*6, */0, 0
 ; for top/bottom: 0 = top, 12 = bottom    
 TankRespawnPlayerTop = * - 1
     .byte 12, 12, 0
 TankRespawnPlayerBottom = * - 2     ;uses 0 from previous table
     .byte /*0, */0, 12
 
+DigitDataLo
+	.byte <Zero,<One,<Two,<Three,<Four,<Five,<Six,<Seven,<Eight,<Nine, <BlankDigit
+
     
+        
 ;****************************************************************************
 
 MoveBulletOffScreenSubroutine2
@@ -8332,11 +8363,6 @@ AllowCarveDownTable ;can't carve downward in the outer two columns
     .byte 1, 1, 1, 1
     .byte 1, 1, 1, 1
     .byte 1, 1, 0, 0	
-; RemoveBrickRowShift = * - 2
-;     .byte /*0,0,*/-1,0
-;     .byte -1,0,0,0	
-    
-    
 RespawnCountdownGraphic = * - 1
     .byte /*$00, */$80, $C0, $E0
     .byte $F0, $F8, $FC, $FE
@@ -8347,34 +8373,45 @@ EntryPointRowOffsetTable
     .byte ENEMYSTARTINGYHIGHROW - 2, ENEMYSTARTINGYHIGHMIDROW - 2, ENEMYSTARTINGYMIDHIGHROW - 2
     .byte ENEMYSTARTINGYMIDROW - 2, ENEMYSTARTINGYMIDLOWROW - 2, ENEMYSTARTINGYLOWROW - 2
     
-    
+RandomMazeFrame
+    .word StandardMazeImage+TANKHEIGHT, MorphImage1+TANKHEIGHT
+    .word MorphImage2+TANKHEIGHT, QuestionMarkImage+TANKHEIGHT
+	.word QuestionMarkImage+TANKHEIGHT, MorphImage2+TANKHEIGHT
+	.word MorphImage1+TANKHEIGHT, StandardMazeImage+TANKHEIGHT
+
+StartingTankStatus
+	.byte TANKRIGHT|PLAYERRESPAWNDELAY, ENEMYTANK1DELAY, ENEMYTANK2DELAY, ENEMYTANK3DELAY
+
+	
 ;****************************************************************************	
 
-    echo "----", ($3FE0-*), " bytes left (ROM) at end of Bank 2"
+    echo "----", ($3FF1-*), " bytes left (ROM) at end of Bank 2"
 
-   	org $2FE0
-	rorg $3FE0
+   	org $2FF1
+	rorg $3FF1
 	
 	
 BankSwitchSubroutine2 
-	plp             ;+4
-	tsx             ;+2
-	dec $01,X       ;+6
-	lda ($01,X)     ;+6
-	sta MiscPtr     ;+3
-	inc $01,X       ;+6
-	lda ($01,X)     ;+6
-	sta MiscPtr+1   ;+3
-; 	lsr             
-; 	lsr
-; 	lsr
-; 	lsr
-; 	lsr             ;+10
-; 	tax             ;+2
-; 	nop $1FF8,X     ;+4
-BankSwitchAltRoutine2
-    nop $1FF8
-
+    ;--stuff below is not needed because we never jump TO a subroutine in the other bank from this bank, 
+    ;   we only return FROM a subroutine in this bank to the other bank
+; 	plp             ;+4
+; 	tsx             ;+2
+; 	dec $01,X       ;+6
+; 	lda ($01,X)     ;+6
+; 	sta MiscPtr     ;+3
+; 	inc $01,X       ;+6
+; 	lda ($01,X)     ;+6
+; 	sta MiscPtr+1   ;+3
+; ; 	lsr             
+; ; 	lsr
+; ; 	lsr
+; ; 	lsr
+; ; 	lsr             ;+10
+; ; 	tax             ;+2
+; ; 	nop $1FF8,X     ;+4
+; BankSwitchAltRoutine2
+;     nop $1FF8
+; 
 	jmp (MiscPtr)   ;+5     57
 	
 ReturnFromBSSubroutine2
