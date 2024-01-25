@@ -76,8 +76,10 @@
 	To do:
 	Highest priority:
     MAYBE? Restart title screen animation after song plays (unless SELECT pressed in last few seconds... or?)
-	PAL60 version.   Need colors.
-
+    Lengthen title screen music?
+    Give score bonus for starting at level 10?
+    
+    DONE: PAL60 version.   Need colors.
     DONE: Final color, gfx, sound fx, music tweaking
     DONE: Work on transitions when pressing SELECT/RESET and tighten up and make seamless (especially sound transitions)
 	DONE: Add sound for when bullet hits tank that is not on screen (high-pitched *tink*?)    
@@ -724,9 +726,9 @@ TANKCOLOR1          =    GOLD|$8
 TANKCOLOR2          =    GREEN|$8
 TANKCOLOR3          =    BURNTORANGE|$A
 TANKCOLOR4          =    LIGHTBLUE|$C
-    ENDIF
+    ELSE
     
-    IF SYSTEM = PAL || SYSTEM = PAL60
+        IF SYSTEM = PAL || SYSTEM = PAL60
 BASECOLOR		            =		GOLD
 SCORECOLOR_POWERUPSDISABLED =       GRAY|$E
 WALLCOLOR			        =		RED|$8
@@ -736,9 +738,8 @@ TANKCOLOR1          =    GOLD|$8
 TANKCOLOR2          =    GREEN|$8
 TANKCOLOR3          =    BURNTORANGE|$A
 TANKCOLOR4          =    LIGHTBLUE|$A
-    ENDIF
     
-    IF SYSTEM = SECAM
+        ELSE    ;SECAM
 BASECOLOR		            =		BLACK
 SCORECOLOR_POWERUPSDISABLED =       WHITE
 WALLCOLOR			        =		RED
@@ -748,6 +749,7 @@ TANKCOLOR1          =    YELLOW
 TANKCOLOR2          =    GREEN
 TANKCOLOR3          =    RED
 TANKCOLOR4          =    BLUE
+        ENDIF
     ENDIF
 
 ;--used by maze generation algorithm
@@ -787,8 +789,8 @@ BROWNGREEN	=	$C0
 TANGREEN	=	$D0
 TAN		    =	$E0
 BROWN		=	$F0
-    ENDIF
-    IF SYSTEM = PAL || SYSTEM = PAL60
+    ELSE
+        IF SYSTEM = PAL || SYSTEM = PAL60
 
 
 ;-------------------------COLOR CONSTANTS (PAL)--------------------------
@@ -808,9 +810,7 @@ BROWNGREEN	=	$50
 TANGREEN	=	$30
 TAN		    =	$20
 BROWN		=	$20
-    ENDIF
-    IF SYSTEM = SECAM
-
+        ELSE    ;secam
 ;-------------------------COLOR CONSTANTS (SECAM)--------------------------
 BLACK   =   $00
 BLUE    =   $02
@@ -820,6 +820,7 @@ GREEN   =   $08
 CYAN    =   $0A
 YELLOW  =   $0C
 WHITE   =   $0F
+        ENDIF
 
     ENDIF
 ;--------------------------TIA CONSTANTS----------------------------------
@@ -1620,6 +1621,11 @@ StartNewLevel
 	and #~(TITLESCREEN|LEVELCOMPLETE)	;--turn off title screen and turn off "level complete" 
 	sta GameStatus
 	
+	;--reset consecutive kill count to zero
+	lda GameStatus3
+	and #~CONSECUTIVEKILLBITS
+	sta GameStatus3
+	
 MoveAllTanksOffScreenSubroutine     ;called from gameover routine
 	;--move tanks off screen, immobilize 
 	ldx #3
@@ -1631,6 +1637,8 @@ MoveTanksOffscreenLoop
  	sty TankStatus,X   
 	dex
 	bpl MoveTanksOffscreenLoop
+	
+	
 	
 	stx MazeGenerationPass
 AlreadyStartingNewLevel	
