@@ -4,6 +4,9 @@
 ### list files
 *.lst
 
+### symbol files
+*.sym
+
 ### images
 *.png
 *.gif
@@ -15,11 +18,12 @@ stdout.txt
 
 minotaur.asm
 minotaur.bin
-minotaur.sym
 Minotaur.asm
 Minotaur.bin
-Minotaur.sym
-tankmaze_tester.asm
+
+### all tankmaze_tester files
+
+tankmaze_tester.*
 
 # Atari Dev Studio bin directory
 bin/
