@@ -269,7 +269,7 @@ NTSC        = 0
 PAL60       = 2
 SECAM       = 3
 
-SYSTEM      = NTSC
+SYSTEM      = PAL60
 
     IF SYSTEM = NTSC || SYSTEM = PAL60
 SYSTEMSPEED =   60
