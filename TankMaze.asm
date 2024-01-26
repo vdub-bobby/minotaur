@@ -4059,14 +4059,15 @@ PowerUpFrequencyTable
 
 		
 EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bullet firing
+;   (in other words: when value = 0, a bullet fires every 4 frames.  When value = 30, a bullet fires every 124 frames)
 ;a tank's initial speed changes on level plus 1 #s evenly divisible by 4  (i.e., 5, 9, 13, etc)
-;so let's not change bullet debounce on those levels, but DO change it on the other levels.
+;so we'll reduce the bullet firing frequency on those levels, but DO increase it on the other levels.
 ;
-;   30 is equivalent to firing  0.45 bullets / sec.  Or 1 bullet every 2.22 seconds
+;   30 is equivalent to firing  0.48 bullets / sec.  Or 1 bullet every 2.07 seconds
 ;   0 is equivalent to firing 15 bullets / sec  Or 1 bullet every 0.07 seconds
-;   values below chosen to start at 30 and go to 0 in steps of as close to 10% as possible.
-;   so for example, the change from 30 to 27 is a 10.71% increase in firing rate, and
-;   27 to 24 is a 12% increase, and so on.  Obviously, near the end the increase is much greater.
+;   values below chosen to start at 30 and go to 0 in steps of as close to 5% as possible.
+;   so for example, the change from 30 to 28 is a 6.90% increase in firing rate, and
+;   18 to 17 is a 5.56% increase, and so on.  Obviously, near the end the increase is much greater.
 ;   E.g., going from 2 to 1 is a 50% increase.
     .byte 30, 30, 30, 30, 30    ;levels 1-5
     .byte 28, 26, 24, 26        ;levels 6-9
