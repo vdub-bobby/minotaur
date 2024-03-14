@@ -3944,13 +3944,13 @@ DoNotMoveBulletsThisFrame
 	
 PreventReverses ;= *-1	;--the FF are wasted bytes EXCEPT for the first!
     .byte $FF
-	.byte 	~J0DOWN, ~J0UP, $FF, ~J0RIGHT, $FF, $FF, $FF, ~J0LEFT
+	.byte ~J0DOWN, ~J0UP, $FF, ~J0RIGHT ;df ef ff 7f
+	.byte $FF, $FF, $FF, ~J0LEFT        ;ff ff ff bf
 ReverseDirection = *-1	;--the FF are wasted bytes
-	.byte 	J0DOWN, J0UP, $FF, J0RIGHT, $FF, $FF, $FF, J0LEFT
+	.byte J0DOWN, J0UP, $FF, J0RIGHT    ;20 10 ff 80
+	.byte $FF, $FF, $FF, J0LEFT         ;ff ff ff 40
 
 	
-BulletDirectionMaskBank0
-	.byte %11, %11<<2, %11<<4, %11<<6
 	
 			
 	PAGEALIGN 1
@@ -4000,7 +4000,7 @@ TankTitleScreenStatus
     .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN ;83 43 83 30
 
 
-	
+BulletDirectionMaskBank0
 BulletDirectionClear
 BulletUp
 	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6             ;03 0c 30 c0
@@ -4081,9 +4081,15 @@ EnemyBulletDebounce ;these (value + 1) * 4 is number of frames between enemy bul
     .byte 7, 6, 5, 6            ;levels 42-45
     .byte 5, 4, 3, 4            ;levels 46-49
     .byte 3, 2, 1, 2            ;levels 50-53
-    .byte 1, 0                  ;levels 54-55 and higher
+    .byte 1;, 0                  ;levels 54-55 and higher   ;uses 1 byte of following table
 EnemyBulletDebounceEnd
-    
+   
+SilencePattern
+    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+    .byte VOLUME0, VOLUME0;, VOLUME0, VOLUME0   ;uses 10 bytes of following table
+;     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+;     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
+ 
     ;--boost at 10 tanks killed
     ;--boost at 16, 17, 18, 19
 TanksKilledSpeedBoost
@@ -4097,7 +4103,7 @@ TanksKilledSpeedBoost
 
 	
 NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2
+	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2 ;08 07 07
 	
 	
 	
@@ -4208,11 +4214,6 @@ keep 6-bars as "intro"
     
     
 
-SilencePattern
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
-    .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
  
   
 LevelStartFanfarePattern
