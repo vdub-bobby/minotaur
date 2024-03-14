@@ -269,7 +269,7 @@ NTSC        = 0
 PAL60       = 2
 SECAM       = 3
 
-SYSTEM      = PAL60
+SYSTEM      = NTSC
 
     IF SYSTEM = NTSC || SYSTEM = PAL60
 SYSTEMSPEED =   60
@@ -3956,18 +3956,17 @@ BulletDirectionMaskBank0
 	PAGEALIGN 1
 	
 	
-	
-;--can combine these two tables, and probably otherwise make this much smaller.  left for later lol :)
-TankTargetAdjustmentX 
-    .byte 0, 0, 0, 0
+BulletRight
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6 ;00 00 00 00
+
+TankTargetAdjustmentX = * - 4 ; uses 4 bytes of previous table
+;     .byte 0, 0, 0, 0
     .byte -PINKYADJUSTMENTX, 0, 0, 0
     .byte PINKYADJUSTMENTX
 TankTargetAdjustmentY 
     .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
     .byte 0, 0, 0, 0
     .byte 0
-
-
 PFRegisterLookup = * - 4
 ; 	.byte 0, 0, 0, 0
 	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
@@ -3998,19 +3997,21 @@ TankTitleScreenX
 TankTitleScreenY
     .byte 20, 40, 30, 20
 TankTitleScreenStatus
-    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN
+    .byte TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKLEFT|TANKINPLAY|TANKSPEED2, TANKRIGHT|TANKINPLAY|TANKSPEED2, TANKUP|TANKDOWN ;83 43 83 30
 
 
 	
 BulletDirectionClear
 BulletUp
-	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6
+	.byte	BULLETUP, BULLETUP<<2, BULLETUP<<4, BULLETUP<<6             ;03 0c 30 c0
 BulletDown
-	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6
+	.byte	BULLETDOWN, BULLETDOWN<<2, BULLETDOWN<<4, BULLETDOWN<<6     ;02 08 20 80
 BulletLeft
-	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4, BULLETLEFT<<6
-BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6
+	.byte	BULLETLEFT, BULLETLEFT<<2, BULLETLEFT<<4;, BULLETLEFT<<6     ;01 04 10 40
+DirectionBlock
+;     .byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP    ;=40, 80, 20, 10
+TankDirection
+	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP ;=40, 80, 20, 10
 
 CheckForBrickColumnShift    ;we'll go around top, bottom, right, left.   indexing in from last to first.  
                             ;First check (4th value) no adjustment needed; second check (third value) is adjusted manually in code.
@@ -4018,8 +4019,6 @@ CheckForBrickColumnShift    ;we'll go around top, bottom, right, left.   indexin
     .byte -2, 1
 CheckForBrickRowShift
     .byte 0, -1  
-DirectionBlock
-    .byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP    
 
 	
 PFMaskLookup
@@ -4095,8 +4094,6 @@ TanksKilledSpeedBoost
     .byte 6, 8, 10, 15
 
 
-TankDirection
-	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP
 
 	
 NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
@@ -4122,7 +4119,7 @@ NumberOfBitsSet
 	.byte 1, 2, 2, 3
 	.byte 2, 3, 3, 4
 MovementMask
-	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT
+	.byte J0UP, J0DOWN, J0LEFT, J0RIGHT ;=10, 20, 40, 80
 	
 ; RotationTablesBank1
 ; 	.word RotationEvenBank1, RotationOddBank1	
@@ -4139,10 +4136,10 @@ TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pat
     .word SilencePattern
     .word SilencePattern
     
-    .word SilencePattern
-    .word Fanfare2PatternC1
-    .word Fanfare4Pattern
-    .word SilencePattern
+;     .word SilencePattern
+;     .word Fanfare2PatternC1
+;     .word Fanfare4Pattern
+;     .word SilencePattern
     
     .word Fanfare4Pattern
     .word Fanfare2Pattern
@@ -4159,10 +4156,10 @@ TitleScreenSong
     .word SilencePattern
     .word SilencePattern
     
-    .word Fanfare1PatternC1    
-    .word Fanfare1PatternC1    
-    .word Fanfare2PatternC1    
-    .word SilencePattern    
+;     .word Fanfare1PatternC1    
+;     .word Fanfare1PatternC1    
+;     .word Fanfare2PatternC1    
+;     .word SilencePattern    
 
     .word Fanfare3PatternC1    
     .word Fanfare4PatternC1   
@@ -4171,9 +4168,45 @@ TitleScreenSong
     
     .word Fanfare2PatternC1
     .word Fanfare4Pattern
+    ;silence
+    ;1
+    ;2
+    ;3
+    
+    ;4
+    ;5
+    ;6
+    ;7
+    
+    ;8
+    
+    
     .word $FFFF
     .byte 0<<4
 
+    
+/*
+
+2 bars of silence (for explosion start)
+throw out current 4-bar "intro"
+keep 6-bars as "intro"
+1 bar of silence
+7 bars of something OR
+    4 bars of something, 2 bar of silence and then repeat this forever
+
+| silence | silence |
+| intro | intro | intro | intro |
+| intro | intro | silence |
+
+
+
+
+
+
+
+*/    
+    
+    
 
 SilencePattern
     .byte VOLUME0, VOLUME0, VOLUME0, VOLUME0
@@ -4464,7 +4497,7 @@ TankDeadStatusBank0
 ArticulationTable   ;--routine as currently written will never read the first and fourth values
 	.byte 0,4, 2;, 0
 	;.byte 0,0,0,0      ;--uses 5 bytes of next table
-DivideBySevenBank0    
+DivideBySevenBank0    ;blockheight = 7
 	ds BLOCKHEIGHT, 0
 	ds BLOCKHEIGHT, 1
 	ds BLOCKHEIGHT, 2
