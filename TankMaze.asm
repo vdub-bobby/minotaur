@@ -4051,9 +4051,6 @@ PowerUpFrequencyTable
     
     Overall an issue is the possible range of levels is 1-99, but the effective range of levels (at least right now) is 1-15, maybe.  I don't think I've ever gotten past level 13.
         
-    
-
-
 */	
 
 		
