@@ -3949,9 +3949,6 @@ PreventReverses ;= *-1	;--the FF are wasted bytes EXCEPT for the first!
 ReverseDirection = *-1	;--the FF are wasted bytes
 	.byte J0DOWN, J0UP, $FF, J0RIGHT    ;20 10 ff 80
 	.byte $FF, $FF, $FF, J0LEFT         ;ff ff ff 40
-
-	
-	
 			
 	PAGEALIGN 1
 	
