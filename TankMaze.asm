@@ -596,19 +596,24 @@ VOLUME12    =   12
 VOLUME14    =   14
 
 
+A5      =   $C0
 G5      =   $00
 Fs5     =   $10
 E5      =   $20
 D5      =   $30
+C5      =   $B0
 B4      =   $40
-E4      =   $50
-D4      =   $60
 A4      =   $70
 Fs4     =   $80
+E4      =   $50
+D4      =   $60
 A3      =   $90
 G3      =   $A0
-C5      =   $B0
-A5      =   $C0
+E3      =   $D0
+D2      =   $E0
+E1      =   $F0
+
+SILENCE = 0
 
 
 PATTERNEND  =   255
@@ -2928,6 +2933,9 @@ SnareBeatsOnly
     sta MiscPtr+1
     bne LoadDrumPattern ;branch always
 BeatPattern
+    tya
+    and #3
+    tay
     lda BeatPatternTable,Y
     sta MiscPtr
     lda BeatPatternTable+1,Y
@@ -3948,6 +3956,112 @@ PreventReverses ;= *-1	;--the FF are wasted bytes EXCEPT for the first!
 ReverseDirection = *-1	;--the FF are wasted bytes
 	.byte J0DOWN, J0UP, $FF, J0RIGHT    ;20 10 ff 80
 	.byte $FF, $FF, $FF, J0LEFT         ;ff ff ff 40
+	
+TitleScreen1
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4|ARTICULATE
+TitleScreen2
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+TitleScreen3
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4
+    .byte VOLUME6|D4|ARTICULATE
+TitleScreen4
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte VOLUME6|E3
+;     .byte VOLUME6|E3|ARTICULATE
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3|ARTICULATE
+;     .byte VOLUME6|A3
+;     .byte VOLUME6|A3|ARTICULATE
+TitleScreen5
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3
+;     .byte VOLUME6|G3|ARTICULATE
+;     .byte SILENCE
+;     .byte SILENCE
+;     .byte VOLUME6|E3
+;     .byte VOLUME6|E3|ARTICULATE
+;     .byte VOLUME6|A3
+;     .byte VOLUME6|A3|ARTICULATE
+;     .byte VOLUME6|D4
+;     .byte VOLUME6|D4|ARTICULATE
+TitleScreen6
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4|ARTICULATE
+; 	
 			
 	PAGEALIGN 1
 	
@@ -4146,6 +4260,14 @@ TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pat
     .word Fanfare4Pattern
     .word Fanfare5Pattern
     
+    .word SilencePattern
+    .word TitleScreen1
+    .word TitleScreen2
+    .word TitleScreen3
+    .word TitleScreen4
+    .word TitleScreen5
+    .word TitleScreen6
+    
     ;--don't need end-of-song bytes for channel 1
 
     
@@ -4165,6 +4287,19 @@ TitleScreenSong
     
     .word Fanfare2PatternC1
     .word Fanfare4Pattern
+
+    .word $FFFF
+    .byte 0<<4
+
+    
+    
+    .word BassPattern1
+    .word BassPattern1
+    .word BassPattern1
+    .word BassPattern2
+    .word BassPattern2
+    .word BassPattern2
+    .word BassPattern3    
     ;silence
     ;1
     ;2
@@ -4178,8 +4313,8 @@ TitleScreenSong
     ;8
     
     
-    .word $FFFF
-    .byte 0<<4
+;     .word $FFFF
+;     .byte 0<<4
 
     
 /*
@@ -4197,7 +4332,7 @@ keep 6-bars as "intro"
 
 
 
-
+4 bass lines = 64 bytes
 
 
 
@@ -4205,7 +4340,23 @@ keep 6-bars as "intro"
     
     
 
- 
+Fanfare2PatternC1
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
+;     .byte VOLUME4|E4
+;     .byte VOLUME4|E4|ARTICULATE
   
 LevelStartFanfarePattern
     .byte VOLUME6|E4
@@ -4222,12 +4373,27 @@ LevelStartFanfarePattern
     .byte VOLUME6|E4
     .byte VOLUME6|E4
     .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4|ARTICULATE
+;     .byte VOLUME6|E4
+;     .byte VOLUME6|E4|ARTICULATE
     
  
-    
-    
+Fanfare1Pattern
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
+;     .byte VOLUME6|A3
+;     .byte VOLUME6|A3|ARTICULATE
 Fanfare1PatternC1
     .byte VOLUME4|A3
     .byte VOLUME4|A3|ARTICULATE
@@ -4246,23 +4412,7 @@ Fanfare1PatternC1
     .byte VOLUME4|A3
     .byte VOLUME4|A3|ARTICULATE
     
-Fanfare2PatternC1
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|D4
-    .byte VOLUME4|D4|ARTICULATE
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4|ARTICULATE
+
     
 Fanfare3PatternC1
     .byte VOLUME4|A4
@@ -4279,8 +4429,8 @@ Fanfare3PatternC1
     .byte VOLUME4|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4|ARTICULATE
+;     .byte VOLUME4|A4
+;     .byte VOLUME4|A4|ARTICULATE
 Fanfare4PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
@@ -4317,23 +4467,7 @@ Fanfare5PatternC1
     .byte VOLUME6|D4|ARTICULATE
 
          
-Fanfare1Pattern
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
+
 Fanfare2Pattern
     .byte VOLUME6|E5
     .byte VOLUME6|E5|ARTICULATE
@@ -4351,7 +4485,23 @@ Fanfare2Pattern
     .byte VOLUME6|Fs5
     .byte VOLUME6|Fs5
     .byte VOLUME6|Fs5|ARTICULATE
-
+Fanfare4Pattern
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+    .byte VOLUME6|E5
+;     .byte VOLUME6|E5
+;     .byte VOLUME6|E5|ARTICULATE
 Fanfare3Pattern
     .byte VOLUME6|E5
     .byte VOLUME6|E5|ARTICULATE
@@ -4370,23 +4520,7 @@ Fanfare3Pattern
     .byte VOLUME6|D5
     .byte VOLUME6|D5|ARTICULATE
        
-Fanfare4Pattern
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
+
 
 Fanfare5Pattern
     .byte VOLUME6|A5
@@ -4406,8 +4540,57 @@ Fanfare5Pattern
     .byte VOLUME6|A5
     .byte VOLUME6|A5|ARTICULATE
     
+BassPattern3   
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1    ;uses two bytes from next table
+BassPattern1   
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1|ARTICULATE
+
+BassPattern2
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE
+;     .byte VOLUME6|D2
+;     .byte VOLUME6|D2|ARTICULATE    
     
-        
 LevelStartSong
     .word LevelStartFanfarePattern
     .word SilencePattern
@@ -4424,9 +4607,9 @@ FillPatternTable
     .word DrumFillSnaresOnly1, DrumFillWithKick1
 BeatPatternTable
     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
-    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
-    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
-    .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+;     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+;     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
+;     .word DrumBeatSnaresOnly1, DrumBeatWithKick1
 
  ;bits: each byte is four 32nds, reading left to right, 2-bit groups.
  ;  two-byte groups are each one beat
@@ -4454,37 +4637,45 @@ DrumFillWithKick3
     .byte %11011001, %10000100
     
 
-    ;for the following three tables, zero is not used as in index into them
-PercussionVolumeTable = * - 1
-    .byte PERCUSSIONVOLUME, PERCUSSIONVOLUME, PERCUSSIONVOLUME
-PercussionDistortionTable = * - 1
-    .byte SNARESOUND, SNARE2SOUND, KICKSOUND
-PercussionFrequencyTable = * - 1
-    .byte SNAREPITCH, SNARE2PITCH, KICKPITCH
     
-    
-	
+  
+
+
+
+
+
 	
 	;--notes: 
 	;   G5, F#5, E5, D5
 	;   B4, E4, D4, A4
 	;   F#4, A3, G3, C5
-	;   A5
+	;   A5, E3, D2, E1
+	;SQUARESOUND=04
+	;LEADSOUND=0C
+	;BASSSOUND=06
 DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
     .byte SQUARESOUND, LEADSOUND, LEADSOUND, LEADSOUND
     .byte LEADSOUND, LEADSOUND, LEADSOUND, SQUARESOUND
-    .byte SQUARESOUND
+    .byte SQUARESOUND, BASSSOUND, BASSSOUND, LEADSOUND
+    ;for the following three tables, zero is not used as an index into them
+    ;if we end the previous table with SQUARESOUND, SQUARESOUND, SQUARESOUND, BASSOUND, LEADSOUND we can save 5 bytes
+PercussionVolumeTable = * - 1
+    .byte PERCUSSIONVOLUME, PERCUSSIONVOLUME, PERCUSSIONVOLUME  ;04 04 04
+PercussionFrequencyTable = * - 1
+    .byte SNAREPITCH, SNARE2PITCH, KICKPITCH    ;06 0c 1e
+PercussionDistortionTable = * - 1
+    .byte SNARESOUND, SNARE2SOUND, KICKSOUND    ;08 08 0f
 
 FrequencyTable
     .byte 19, 20, 23, 26
     .byte 31, 15, 17, 11
     .byte 13, 23, 26, 29
-    .byte 17
+    .byte 17, 24, 13, 31
 
     
 TankDeadStatusBank0
-    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT
+    .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT ;18 12 12 12
     
 ArticulationTable   ;--routine as currently written will never read the first and fourth values
 	.byte 0,4, 2;, 0
