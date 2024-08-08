@@ -1048,12 +1048,13 @@ VSYNCWaitLoop2
 	
     dec FrameCounter
 
-	lda GameStatus
+	lax GameStatus
 	and #GAMEOFF|LEVELCOMPLETE|GAMEOVER|GENERATINGMAZE
 	beq GameOnVBLANK	
 	and #GAMEOFF
 	beq InBetweenLevels
-	lda GameStatus
+; 	lda GameStatus
+    txa
 	and #GENERATINGMAZE|GAMEOVER
 	bne GameAlreadyStarted
 
@@ -1094,18 +1095,19 @@ TriggerNotDebouncedYet
     jsr GoImmediatelyToCompleteTitleScreen
     ;--and then update game variation
     lda SWCHA
-    asl
-    asl
-    asl
-    bcc DecreaseGameVariation
+;     asl
+;     asl
+;     asl
+    and #J0DOWN
+    beq DecreaseGameVariation
     ;--if here, up must be pressed so increase the game variation
-    lda #1
-    jsr UpdateGameVariationSubroutine
-    jmp DoneChangingGameVariations
+;     lda #1
+    jsr UpdateGameVariationSubroutineUp ;last commands are ORA $A0 STA ZP RTS so NE flag should always be set
+    bne DoneChangingGameVariations  ;branch always
 DecreaseGameVariation
     lda #-1
-    jsr UpdateGameVariationSubroutine
-    jmp DoneChangingGameVariations
+    jsr UpdateGameVariationSubroutine ;last commands are ORA $A0 STA ZP RTS so NE flag should always be set
+    bne DoneChangingGameVariations  ;branch always
 NoJoystickForGameVariations
     ;--so reset joystick debounce
     lda Debounce
@@ -1196,13 +1198,14 @@ OverscanRoutine
     ;   remove tanks from screen
     ;   wait a bit, and then go back to title screen routine
 	jsr MoveAllTanksOffScreenSubroutine
-    ldx #3
-    lda #0
-RemoveBulletsFromScreenGameOverLoop
-	sta BulletX,X
-	sta BulletY,X
-	dex
-	bpl RemoveBulletsFromScreenGameOverLoop
+	jsr MoveBulletsOffscreen
+;     ldx #3
+;     lda #0
+; RemoveBulletsFromScreenGameOverLoop
+; 	sta BulletX,X
+; 	sta BulletY,X
+; 	dex
+; 	bpl RemoveBulletsFromScreenGameOverLoop
 	;   reuse TankMovementCounter as a wait counter
 	lda #WALLDONEFLASHING|GAMEOVERWAIT
 	sta TankMovementCounter
@@ -1255,7 +1258,7 @@ ClearMazeLoop
 	;--also turn off sound
 ; 	sta AUDV0
 	sta TanksRemaining
-	lda #$00
+; 	lda #$00 ;A still holds zero
 	sta MazeNumber
 GameOverRoutineStillGoing
 NoChangeToGameOverVolume
@@ -1280,8 +1283,48 @@ BackFromCollisionsSubroutine
 	and #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	bne GameNotOn	
 	jsr PlayerTankMovementRoutine
+;--actually, inline this routine to save 4 bytes (JSR ADDRESS & RTS)
+; 	jsr PowerUpBonusRoutine
+	SUBROUTINE
+; PowerUpBonusRoutine
 
-	jsr PowerUpBonusRoutine
+    ;--if player tank not in play, immediately return
+    lda TankStatus
+    lsr
+    bcc .PlayerNotInPlayNoBonus
+
+    ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
+    ;--new routine: if powerup activated, player gets speed boost 
+    lda MazeGenerationPass
+    and #POWERUPACTIVATEDBITS
+    beq .PowerUpNotActivated
+;     cmp #%10000000
+;     bne .OnlySpeedBonus
+;     
+;     ;--kill all tanks (also gives score bonus there)
+;     brk
+;     .word KillAllTanksBonus
+;     ;--also play some kind of sound effect
+;     
+;     
+;     lda MazeGenerationPass
+;     and #~POWERUPACTIVATEDBITS
+;     ora #%01000000
+;     sta MazeGenerationPass
+; .OnlySpeedBonus    
+    ;--don't apply powerup if tank isn't moving!
+    lax TankStatus
+    and #TANKSPEED
+    beq .PlayerNotMovingNoSpeedBoost   
+;     lda TankStatus
+    txa
+    and #~TANKSPEED
+    ora #PLAYERTANKSPEED+SPEEDBONUS
+    sta TankStatus
+.PlayerHasDiedNoBonus    
+.PowerUpNotActivated
+.PlayerNotInPlayNoBonus
+.PlayerNotMovingNoSpeedBoost
 
 	
 	jmp CheckTimeForSound
@@ -1289,14 +1332,16 @@ GameNotOn
 	;--A still holds GameStatus AND #GAMEOFF|LEVELCOMPLETE|GENERATINGMAZE
 	and #LEVELCOMPLETE
 	bne .LevelComplete
-	jmp .LevelNotComplete
+; 	jmp .LevelNotComplete
+    beq .LevelNotCompleteBounce
 .LevelComplete
 	;--level complete
 	;--wait until level-ending explosion sound is mostly died down
 	lda Channel1Decay
 	cmp #SCORESOUNDLENGTH
 	bcc .LevelExplosionComplete
-	jmp .LevelNotComplete
+; 	jmp .LevelNotComplete
+    bcs .LevelNotCompleteBounce
 .LevelExplosionComplete
 	;--move all tanks (and explosion gfx) offscreen
 	;--move tanks offscreen
@@ -1312,7 +1357,8 @@ MoveTanksOffScreenLoop
 	lda FrameCounter
 	and #$3
 	beq .RemoveBrick 
-	jmp .LevelNotComplete
+; 	jmp .LevelNotComplete
+    bne .LevelNotCompleteBounce
 .RemoveBrick
 	lda GameStatus
 	and #LEVELCOMPLETETIMER
@@ -1356,6 +1402,7 @@ FoundBrick
 	sta Temp
 	lda #<LEVELENDBRICKSCORE
 	jsr IncreaseScoreSubroutineBank0
+.LevelNotCompleteBounce
 	jmp .LevelNotComplete
 FoundAllBricks
     ;--remove base and give score for level
@@ -1413,7 +1460,7 @@ NotGeneratingMaze
 	lda MazeGenerationPass
 	bmi NoLongerDrawingTitleScreen
 	lda FrameCounter
-	and #$7
+	and #7
 	cmp #1
 	bne WaitToDrawTitleScreen
 	brk
@@ -1430,8 +1477,6 @@ NoLongerDrawingTitleScreen
 MazeNumberOne
     lda #$01    
     sta MazeNumber
-    
-    
     
     lda TankStatus
     lsr
@@ -1463,7 +1508,6 @@ PutTanksOnTitleScreenLoop
     dex
     bpl PutTanksOnTitleScreenLoop
 TanksAlreadyOnScreen
-    ;--right here let's check to see if left difficulty switch = A.  If so, display third tank (not powerup)
     lda GameStatus2
     and #POWERUPSDISABLED
     bne DisplayTankInsteadOfPowerUp
@@ -1497,13 +1541,13 @@ CheckTimeForSound
 
 	;--keep playing sound even when game not on
 	ldx #0              ;choose channel (0 or 1) for music
-	jsr PlaySoundSubroutine
+	jsr PlaySoundSubroutine     ;routine doesn't seem to preserve X so can't use a loop here
 	;--if no sound effects, play music in channel 1
     ldx #1
     jsr PlaySoundSubroutine
-    jmp WaitForOverscanEnd      ;--for testing
+;     jmp WaitForOverscanEnd      ;--for testing
 NoTimeForSoundThisFrame
-    nop                         ;--for testing
+;     nop                         ;--for testing
 WaitForOverscanEnd
 	lda INTIM
  	bpl WaitForOverscanEnd
@@ -1568,31 +1612,27 @@ StartNewGame
 	and #HARDSTARTINGLEVEL
 	beq SetMazeNumberToOne
 	lda #$10
-	sta MazeNumber
-; 	
-; 	lda MazeNumber
-; 	beq SetMazeNumberToOne
-; 	lda GameStatus
-; 	and #TITLESCREEN
-	bne ResetConsoleSwitchDebounce
+; 	sta MazeNumber
+; 	bne ResetConsoleSwitchDebounce
+    .byte $2C
 SetMazeNumberToOne	
     lda #$01
     sta MazeNumber
-    bne ResetConsoleSwitchDebounce  ;branch always
+    jmp ResetConsoleSwitchDebounce  ;branch always (note that ".byte $2C" above sets flags, I don't think predictably)
 SELECTPressed
 	lda Debounce
 	and #CONSOLEDEBOUNCEFLAG
 	bne RESETNotReleased
     ;--new: always go to title screen when SELECT is pressed (if not there already)
-    lda GameStatus
-    and #TITLESCREEN
-    beq NotOnTitleScreenTakeUsThere
-NotOnTitleScreenTakeUsThere
+;     lda GameStatus
+;     and #TITLESCREEN
+;     beq NotOnTitleScreenTakeUsThere
+; NotOnTitleScreenTakeUsThere
     jsr GoImmediatelyToCompleteTitleScreen
     
     ;--new: pressing select cycles through 8 game variations
-    lda #1
-    jsr UpdateGameVariationSubroutine
+;     lda #1
+    jsr UpdateGameVariationSubroutineUp
     
  	lda Debounce
 	ora #CONSOLEDEBOUNCEFLAG
@@ -1608,7 +1648,8 @@ ResetConsoleSwitchDebounce
 	;--reset score here 
 	lda #0
 	ldx #3
-	bne NewGameZeroLoopEntryPoint
+; 	bne NewGameZeroLoopEntryPoint
+    .byte $2C
 NewGameZeroLoop
 	sta Score,X
 NewGameZeroLoopEntryPoint
@@ -1658,10 +1699,22 @@ AlreadyStartingNewLevel
     sta RandomNumber
     rts
 
-	
 ;*******************************************************************
     
+    SUBROUTINE
+MoveBulletsOffscreen
+    lda #BALLOFFSCREEN      ;<-- this is zero
+    ldx #3
+.loop
+    sta BulletY,X
+    sta BulletY,Y
+    dex
+    bpl .loop
+    rts
+        
+;*******************************************************************
     
+    SUBROUTINE
 GoImmediatelyToCompleteTitleScreen
     ;--if we are already there, then we don't need to do anything
     lda GameStatus
@@ -1672,11 +1725,18 @@ GoImmediatelyToCompleteTitleScreen
     bpl OnTitleScreenButImmediatelyDraw
     bmi AlreadyOnTitleScreenWeAreFine
 GameOnGoingJumpToTitleScreen
-    lda #BALLOFFSCREEN      ;<-- this is zero
-    sta BulletY
-    sta BulletY+1
-    sta BulletY+2
-    sta BulletY+3
+    jsr MoveBulletsOffscreen
+;     lda #BALLOFFSCREEN      ;<-- this is zero
+;     ldx #3
+; .movebulletsoffscreenloop
+;     sta BulletY,X
+;     dex
+;     bpl .movebulletsoffscreenloop
+    
+;     sta BulletY
+;     sta BulletY+1
+;     sta BulletY+2
+;     sta BulletY+3
     sta TanksRemaining
     jsr MoveAllTanksOffScreenSubroutine
     
@@ -1958,8 +2018,9 @@ DoNotShoot
 	rts	
 	
 ;****************************************************************************
-
-UpdateGameVariationSubroutine
+UpdateGameVariationSubroutineUp
+    lda #1
+UpdateGameVariationSubroutine   ;can JSR here with something other than 1 in accumulator (like -1) to change variation
     clc
     adc GameStatus2
     and #GAMEVARIATIONBITS
@@ -3787,46 +3848,46 @@ IncreaseScoreSubroutineBank0
 	rts
 
 ;****************************************************************************
-	SUBROUTINE
-PowerUpBonusRoutine
-
-    ;--if player tank not in play, immediately return
-    lda TankStatus
-    lsr
-    bcc .PlayerNotInPlayNoBonus
-
-    ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
-    ;--new routine: if powerup activated, player gets speed boost 
-    lda MazeGenerationPass
-    and #POWERUPACTIVATEDBITS
-    beq .PowerUpNotActivated
-;     cmp #%10000000
-;     bne .OnlySpeedBonus
-;     
-;     ;--kill all tanks (also gives score bonus there)
-;     brk
-;     .word KillAllTanksBonus
-;     ;--also play some kind of sound effect
-;     
-;     
+; 	SUBROUTINE
+; PowerUpBonusRoutine
+; 
+;     ;--if player tank not in play, immediately return
+;     lda TankStatus
+;     lsr
+;     bcc .PlayerNotInPlayNoBonus
+; 
+;     ;--routine for now - if player kills half the tanks on the level (or the tanks die) without dying, player gets speed boost.
+;     ;--new routine: if powerup activated, player gets speed boost 
 ;     lda MazeGenerationPass
-;     and #~POWERUPACTIVATEDBITS
-;     ora #%01000000
-;     sta MazeGenerationPass
-; .OnlySpeedBonus    
-    ;--don't apply powerup if tank isn't moving!
-    lda TankStatus
-    and #TANKSPEED
-    beq .PlayerNotMovingNoSpeedBoost   
-    lda TankStatus
-    and #~TANKSPEED
-    ora #PLAYERTANKSPEED+SPEEDBONUS
-    sta TankStatus
-.PlayerHasDiedNoBonus    
-.PowerUpNotActivated
-.PlayerNotInPlayNoBonus
-.PlayerNotMovingNoSpeedBoost
-    rts
+;     and #POWERUPACTIVATEDBITS
+;     beq .PowerUpNotActivated
+; ;     cmp #%10000000
+; ;     bne .OnlySpeedBonus
+; ;     
+; ;     ;--kill all tanks (also gives score bonus there)
+; ;     brk
+; ;     .word KillAllTanksBonus
+; ;     ;--also play some kind of sound effect
+; ;     
+; ;     
+; ;     lda MazeGenerationPass
+; ;     and #~POWERUPACTIVATEDBITS
+; ;     ora #%01000000
+; ;     sta MazeGenerationPass
+; ; .OnlySpeedBonus    
+;     ;--don't apply powerup if tank isn't moving!
+;     lda TankStatus
+;     and #TANKSPEED
+;     beq .PlayerNotMovingNoSpeedBoost   
+;     lda TankStatus
+;     and #~TANKSPEED
+;     ora #PLAYERTANKSPEED+SPEEDBONUS
+;     sta TankStatus
+; .PlayerHasDiedNoBonus    
+; .PowerUpNotActivated
+; .PlayerNotInPlayNoBonus
+; .PlayerNotMovingNoSpeedBoost
+;     rts
 
     
 ;****************************************************************************
@@ -4067,16 +4128,15 @@ TitleScreen6
 	
 	
 BulletRight
-	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6 ;00 00 00 00
-
+	.byte	BULLETRIGHT, BULLETRIGHT<<2, BULLETRIGHT<<4, BULLETRIGHT<<6 ;00 00 00 00    
 TankTargetAdjustmentX = * - 4 ; uses 4 bytes of previous table
 ;     .byte 0, 0, 0, 0
     .byte -PINKYADJUSTMENTX, 0, 0, 0
     .byte PINKYADJUSTMENTX
 TankTargetAdjustmentY 
-    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0
+    .byte 0, PINKYADJUSTMENTY, -PINKYADJUSTMENTY, 0 ;this uses the next ***FIVE*** bytes
     .byte 0, 0, 0, 0
-    .byte 0
+    .byte 0 
 PFRegisterLookup = * - 4
 ; 	.byte 0, 0, 0, 0
 	.byte MAZEROWS-1, MAZEROWS-1, MAZEROWS-1, MAZEROWS-1
@@ -4373,8 +4433,8 @@ LevelStartFanfarePattern
     .byte VOLUME6|E4
     .byte VOLUME6|E4
     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
     
  
 Fanfare1Pattern
@@ -4556,22 +4616,22 @@ BassPattern3
     .byte VOLUME6|E1
     .byte VOLUME6|E1    ;uses two bytes from next table
 BassPattern1   
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
 
 BassPattern2
 ;     .byte VOLUME6|D2
@@ -4677,8 +4737,9 @@ FrequencyTable
 TankDeadStatusBank0
     .byte TANKUP|TANKDEADWAITPLAYER, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT, TANKUP|TANKDEADWAIT ;18 12 12 12
     
-ArticulationTable   ;--routine as currently written will never read the first and fourth values
-	.byte 0,4, 2;, 0
+ArticulationTable   = * - 1   ;--routine as currently written will never read the first and fourth values
+	;.byte 0
+	.byte 4, 2;, 0
 	;.byte 0,0,0,0      ;--uses 5 bytes of next table
 DivideBySevenBank0    ;blockheight = 7
 	ds BLOCKHEIGHT, 0
