@@ -1006,12 +1006,39 @@ Start
 ;--Some Initial Setup
 
 
-	jsr InitialSetupSubroutine
+; 	jsr InitialSetupSubroutine  ;--inline to save 4 bytes
+; InitialSetupSubroutine
 
-		
+	lda #TANKOFFSCREEN
+	ldx #3
+SetUpTankInitialValues
+	sta TankX,X
+	sta TankY,X
+	dex
+	bpl SetUpTankInitialValues
 	
-;	lda #BASECOLOR
-;	sta BaseColor
+	stx SongIndex       ;just need to set top bit here so music starts OFF
+	stx VDELBL          ;bit 0 is set so VDELBL is on
+	
+	sta RandomNumber        ;seed with non-zero number, using 127 (TANKOFFSCREEN) for now
+	
+	lda #GAMEOFF|TITLESCREEN
+	sta GameStatus
+
+	if DEBUGPFPRIORITY = 1
+	    lda #REFLECTEDPF|DOUBLEWIDTHBALL
+	else
+	    lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
+	endif    
+	
+	sta CTRLPF
+	
+	lda #TitleGraphicsEnd-TitleGraphics-1
+	sta MazeGenerationPass
+	
+	
+; 	rts
+
 
 ;----------------------------------------------------------------------------
 ;--------------------GAME MAIN LOOP------------------------------------------
@@ -1023,10 +1050,6 @@ Start
 ; 	.word KernelRoutineGame
 ; 	jsr OverscanRoutine
 ; 	jmp MainGameLoop
-
-
-
-	
 
 
 ;----------------------------------------------------------------------------
@@ -1726,17 +1749,7 @@ GoImmediatelyToCompleteTitleScreen
     bmi AlreadyOnTitleScreenWeAreFine
 GameOnGoingJumpToTitleScreen
     jsr MoveBulletsOffscreen
-;     lda #BALLOFFSCREEN      ;<-- this is zero
-;     ldx #3
-; .movebulletsoffscreenloop
-;     sta BulletY,X
-;     dex
-;     bpl .movebulletsoffscreenloop
-    
-;     sta BulletY
-;     sta BulletY+1
-;     sta BulletY+2
-;     sta BulletY+3
+
     sta TanksRemaining
     jsr MoveAllTanksOffScreenSubroutine
     
@@ -1785,37 +1798,37 @@ AlreadyOnTitleScreenWeAreFine
     
 ;*******************************************************************
 
-InitialSetupSubroutine
-
-	lda #TANKOFFSCREEN
-	ldx #3
-SetUpTankInitialValues
-	sta TankX,X
-	sta TankY,X
-	dex
-	bpl SetUpTankInitialValues
-	
-	stx SongIndex       ;just need to set top bit here so music starts OFF
-	stx VDELBL          ;bit 0 is set so VDELBL is on
-	
-	sta RandomNumber        ;seed with non-zero number, using 127 (TANKOFFSCREEN) for now
-	
-	lda #GAMEOFF|TITLESCREEN
-	sta GameStatus
-
-	if DEBUGPFPRIORITY = 1
-	    lda #REFLECTEDPF|DOUBLEWIDTHBALL
-	else
-	    lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
-	endif    
-	
-	sta CTRLPF
-	
-	lda #TitleGraphicsEnd-TitleGraphics-1
-	sta MazeGenerationPass
-	
-	
-	rts
+; InitialSetupSubroutine
+; 
+; 	lda #TANKOFFSCREEN
+; 	ldx #3
+; SetUpTankInitialValues
+; 	sta TankX,X
+; 	sta TankY,X
+; 	dex
+; 	bpl SetUpTankInitialValues
+; 	
+; 	stx SongIndex       ;just need to set top bit here so music starts OFF
+; 	stx VDELBL          ;bit 0 is set so VDELBL is on
+; 	
+; 	sta RandomNumber        ;seed with non-zero number, using 127 (TANKOFFSCREEN) for now
+; 	
+; 	lda #GAMEOFF|TITLESCREEN
+; 	sta GameStatus
+; 
+; 	if DEBUGPFPRIORITY = 1
+; 	    lda #REFLECTEDPF|DOUBLEWIDTHBALL
+; 	else
+; 	    lda #REFLECTEDPF|DOUBLEWIDTHBALL|PRIORITYPF
+; 	endif    
+; 	
+; 	sta CTRLPF
+; 	
+; 	lda #TitleGraphicsEnd-TitleGraphics-1
+; 	sta MazeGenerationPass
+; 	
+; 	
+; 	rts
 	
 ;****************************************************************************
 
@@ -2735,13 +2748,14 @@ MusicIsPlaying
     sta MiscPtr+2
     lda #TitleScreenSongPointers+1,X
     sta MiscPtr+3
-    bne PlayMusic
+    bne PlayMusic   ;branch always
 NotOnTitleScreenAtAll
-    ;--during level start?
-    lda GameStatus
-    and #GENERATINGMAZE|GAMEOFF|DRAWBASE|LEVELCOMPLETE
-    cmp #DRAWBASE       ;not generating maze, game is on, base is drawn, and level is not complete
-    bne DoNotPlayLevelStartMusic
+    ;--if not on title screen, we always play level (start) music
+;     ;--during level start?
+;     lda GameStatus
+;     and #GENERATINGMAZE|GAMEOFF|DRAWBASE|LEVELCOMPLETE
+;     cmp #DRAWBASE       ;not generating maze, game is on, base is drawn, and level is not complete
+;     bne DoNotPlayLevelStartMusic
     ;--no channel 1 music if not on title screen
     lda Temp+10
     beq LevelStartMusicChannel0
@@ -2752,13 +2766,15 @@ LevelStartMusicChannel0
     sta MiscPtr+2
     lda #>LevelStartSong
     sta MiscPtr+3
-    bne PlayMusic   ;branch always
-DoNotPlayLevelStartMusic
+;     bne PlayMusic   ;branch always
+; DoNotPlayLevelStartMusic
+    ;do we ever reach here????
+    
     ;--this is default and is incorrect, need additional logic or different default here.
-    lda TitleScreenSongPointers,X
-    sta MiscPtr+2
-    lda #TitleScreenSongPointers+1,X
-    sta MiscPtr+3
+;     lda TitleScreenSongPointers,X
+;     sta MiscPtr+2
+;     lda #TitleScreenSongPointers+1,X
+;     sta MiscPtr+3
 
     
 
@@ -3191,14 +3207,6 @@ ReadControllersSubroutine
     jmp PlayerTankBulletFiring
 TryingToMove
 SkipReadingControllers
-; 	ldx #PLAYERTANKENGINEVOLUME
-; NotTryingToMove
-; 	stx AUDV0	
-;     tax ;save joystick directions
-;     ldy #PLAYERTANKENGINESOUND
-;     jsr StartSoundSubroutine
-;     txa ;restore joystick directions
-
 
 	sta Temp			;--save original desired direction of tank
     ;--and set player speed which we set to zero when he stopped
@@ -3206,16 +3214,10 @@ SkipReadingControllers
     lda TankStatus
     and #TANKDIRECTION
     ora #PLAYERTANKSPEED
-;     ldx TankX
-;     cpx #16
-;     bcs RegularPlayerTankSpeed
-;     ;and #$F1          ;change from TANKSPEED3 to TANKSPEED1
-; RegularPlayerTankSpeed    
     sta TankStatus 
 
 	ldx #0		;index into which tank	
 
-        
 	lda Temp
 	pha         ;push desired directions onto stack (player tank)
 	
@@ -4019,14 +4021,14 @@ ReverseDirection = *-1	;--the FF are wasted bytes
 	.byte $FF, $FF, $FF, J0LEFT         ;ff ff ff 40
 	
 TitleScreen1
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5|ARTICULATE
     .byte VOLUME6|B4
     .byte VOLUME6|B4
     .byte VOLUME6|B4
@@ -4036,22 +4038,22 @@ TitleScreen1
     .byte VOLUME6|B4
     .byte VOLUME6|B4|ARTICULATE
 TitleScreen2
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
+    .byte VOLUME2|A4
+    .byte VOLUME2|A4
+    .byte VOLUME2|A4;|ARTICULATE
     .byte VOLUME6|E4
     .byte VOLUME6|E4|ARTICULATE
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4|ARTICULATE
 TitleScreen3
     .byte VOLUME6|E4
     .byte VOLUME6|E4
@@ -4061,68 +4063,88 @@ TitleScreen3
     .byte VOLUME6|E4
     .byte VOLUME6|E4
     .byte VOLUME6|E4|ARTICULATE
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
+    .byte VOLUME2|D4
+    .byte VOLUME2|D4;|ARTICULATE
 TitleScreen4
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte VOLUME6|E3
-;     .byte VOLUME6|E3|ARTICULATE
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3|ARTICULATE
-;     .byte VOLUME6|A3
-;     .byte VOLUME6|A3|ARTICULATE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte SILENCE
+    .byte VOLUME4|E3
+    .byte VOLUME4|E3|ARTICULATE
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3|ARTICULATE
+    .byte VOLUME8|A3
+    .byte VOLUME8|A3|ARTICULATE
 TitleScreen5
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3
-;     .byte VOLUME6|G3|ARTICULATE
-;     .byte SILENCE
-;     .byte SILENCE
-;     .byte VOLUME6|E3
-;     .byte VOLUME6|E3|ARTICULATE
-;     .byte VOLUME6|A3
-;     .byte VOLUME6|A3|ARTICULATE
-;     .byte VOLUME6|D4
-;     .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3
+    .byte VOLUME6|G3|ARTICULATE
+    .byte SILENCE
+    .byte SILENCE
+    .byte VOLUME4|E3
+    .byte VOLUME4|E3|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
+    .byte VOLUME8|D4
+    .byte VOLUME8|D4|ARTICULATE
 TitleScreen6
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4
-;     .byte VOLUME6|E4|ARTICULATE
-; 	
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4|ARTICULATE
+	
+    
+    
+NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
+	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2 ;08 07 07
+	
+	
+CheckForBrickColumnShift    ;we'll go around top, bottom, right, left.   indexing in from last to first.  
+                            ;First check (4th value) no adjustment needed; second check (third value) is adjusted manually in code.
+                            ;So only two values are needed, and adjustments are from the top (not bottom!)
+    .byte -2, 1
+CheckForBrickRowShift
+    .byte 0, -1  
+	
+	
+	;tank 0 = player, so don't need initial byte
+	;tank 1 (pinky) target = base (center bottom)
+	;tank 2 (blinky) target = upper left corner
+	;tank 3 (clyde) target = upper right corner
+SwitchMovementX = * - 1
+	.byte 80, 0, 255
+SwitchMovementY = * - 3
+	.byte /*0, 255, */255    
 			
 	PAGEALIGN 1
 	
@@ -4181,12 +4203,6 @@ DirectionBlock
 TankDirection
 	.byte TANKLEFT, TANKRIGHT, TANKDOWN, TANKUP ;=40, 80, 20, 10
 
-CheckForBrickColumnShift    ;we'll go around top, bottom, right, left.   indexing in from last to first.  
-                            ;First check (4th value) no adjustment needed; second check (third value) is adjusted manually in code.
-                            ;So only two values are needed, and adjustments are from the top (not bottom!)
-    .byte -2, 1
-CheckForBrickRowShift
-    .byte 0, -1  
 
 	
 PFMaskLookup
@@ -4267,21 +4283,7 @@ TanksKilledSpeedBoost
 
 
 	
-NewTankSpeed = *-1	;--don't use this for player tank, so don't need initial byte
-	.byte ENEMYTANKBASESPEED0, ENEMYTANKBASESPEED1, ENEMYTANKBASESPEED2 ;08 07 07
-	
-	
-	
-	
-	
-	;tank 0 = player, so don't need initial byte
-	;tank 1 (pinky) target = base (center bottom)
-	;tank 2 (blinky) target = upper left corner
-	;tank 3 (clyde) target = upper right corner
-SwitchMovementX = * - 1
-	.byte 80, 0, 255
-SwitchMovementY = * - 3
-	.byte /*0, 255, */255
+
 	
 	
 NumberOfBitsSet
@@ -4311,14 +4313,19 @@ TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pat
 ;     .word Fanfare2PatternC1
 ;     .word Fanfare4Pattern
 ;     .word SilencePattern
+  
+
+    .word Fanfare3PatternC1    
+    .word Fanfare4PatternC1   
+    .word Fanfare3PatternC1   
+    .word Fanfare5PatternC1   
     
+    .word Fanfare2PatternC1
     .word Fanfare4Pattern
-    .word Fanfare2Pattern
-    .word Fanfare4Pattern
-    .word Fanfare3Pattern
+
+  
     
-    .word Fanfare4Pattern
-    .word Fanfare5Pattern
+    .word SilencePattern
     
     .word SilencePattern
     .word TitleScreen1
@@ -4340,18 +4347,19 @@ TitleScreenSong
 ;     .word Fanfare2PatternC1    
 ;     .word SilencePattern    
 
-    .word Fanfare3PatternC1    
-    .word Fanfare4PatternC1   
-    .word Fanfare3PatternC1   
-    .word Fanfare5PatternC1   
-    
-    .word Fanfare2PatternC1
     .word Fanfare4Pattern
+    .word Fanfare2Pattern
+    .word Fanfare4Pattern
+    .word Fanfare3Pattern
+    
+    .word Fanfare4Pattern
+    .word Fanfare5Pattern
 
-    .word $FFFF
-    .byte 0<<4
+;     .word $FFFF
+;     .byte 0<<4
 
     
+    .word SilencePattern
     
     .word BassPattern1
     .word BassPattern1
@@ -4376,7 +4384,11 @@ TitleScreenSong
 ;     .word $FFFF
 ;     .byte 0<<4
 
-    
+LevelStartSong
+    .word LevelStartFanfarePattern
+    .word SilencePattern
+    .word $FFFF
+    .byte 1<<4
 /*
 
 2 bars of silence (for explosion start)
@@ -4455,16 +4467,16 @@ Fanfare1Pattern
 ;     .byte VOLUME6|A3
 ;     .byte VOLUME6|A3|ARTICULATE
 Fanfare1PatternC1
-    .byte VOLUME4|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
     .byte VOLUME4|A3|ARTICULATE
     .byte VOLUME4|A3|ARTICULATE
-    .byte VOLUME4|A3|ARTICULATE
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3|ARTICULATE
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3|ARTICULATE
     .byte VOLUME4|G3
     .byte VOLUME4|G3|ARTICULATE
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3
+    .byte VOLUME6|A3
+    .byte VOLUME6|A3
     .byte VOLUME4|A3
     .byte VOLUME4|A3
     .byte VOLUME4|A3
@@ -4475,16 +4487,16 @@ Fanfare1PatternC1
 
     
 Fanfare3PatternC1
-    .byte VOLUME4|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
     .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME4|A4|ARTICULATE
-    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4|ARTICULATE
     .byte VOLUME4|A4
     .byte VOLUME4|A4|ARTICULATE
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4|ARTICULATE
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4
@@ -4494,168 +4506,179 @@ Fanfare3PatternC1
 Fanfare4PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|C5
     .byte VOLUME6|C5
-    .byte VOLUME6|C5
-    .byte VOLUME6|C5|ARTICULATE
+    .byte VOLUME4|C5
+    .byte VOLUME4|C5|ARTICULATE
     .byte VOLUME6|D5
     .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
+    .byte VOLUME4|D5
+    .byte VOLUME4|D5|ARTICULATE
 Fanfare5PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|E4
     .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4|ARTICULATE
     .byte VOLUME6|D4
     .byte VOLUME6|D4
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4|ARTICULATE
 
          
 
 Fanfare2Pattern
-    .byte VOLUME6|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|G5
-    .byte VOLUME6|G5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
+    .byte VOLUME4|D5
+    .byte VOLUME4|D5|ARTICULATE
+    .byte VOLUME8|G5
+    .byte VOLUME8|G5
     .byte VOLUME6|G5
     .byte VOLUME6|G5|ARTICULATE
-    .byte VOLUME6|Fs5
-    .byte VOLUME6|Fs5
+    .byte VOLUME8|Fs5
+    .byte VOLUME8|Fs5
     .byte VOLUME6|Fs5
     .byte VOLUME6|Fs5|ARTICULATE
 Fanfare4Pattern
-    .byte VOLUME6|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
+    .byte VOLUME4|D5
+    .byte VOLUME4|D5|ARTICULATE
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5
 ;     .byte VOLUME6|E5
 ;     .byte VOLUME6|E5|ARTICULATE
 Fanfare3Pattern
-    .byte VOLUME6|E5
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|E5
-    .byte VOLUME6|E5|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|B4
-    .byte VOLUME6|B4
+    .byte VOLUME8|E5
+    .byte VOLUME8|E5|ARTICULATE
+    .byte VOLUME4|D5
+    .byte VOLUME4|D5|ARTICULATE
+    .byte VOLUME8|B4
+    .byte VOLUME8|B4
     .byte VOLUME6|B4
     .byte VOLUME6|B4|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
     .byte VOLUME6|D5
     .byte VOLUME6|D5|ARTICULATE
        
 
 
 Fanfare5Pattern
-    .byte VOLUME6|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5|ARTICULATE
     .byte VOLUME6|A5|ARTICULATE
     .byte VOLUME6|A5|ARTICULATE
-    .byte VOLUME6|A5|ARTICULATE
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5|ARTICULATE
-    .byte VOLUME6|G5
-    .byte VOLUME6|G5|ARTICULATE
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5|ARTICULATE
+    .byte VOLUME4|G5
+    .byte VOLUME4|G5|ARTICULATE
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5
     .byte VOLUME6|A5
     .byte VOLUME6|A5|ARTICULATE
     
 BassPattern3   
+    .byte VOLUME8|E1
+    .byte VOLUME8|E1|ARTICULATE
+    .byte VOLUME8|E1
+    .byte VOLUME8|E1|ARTICULATE
     .byte VOLUME6|E1
+    .byte VOLUME6|E1|ARTICULATE
     .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1    ;uses two bytes from next table
+    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME4|E1
+    .byte VOLUME4|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1;|ARTICULATE
+    .byte VOLUME0|E1
+    .byte VOLUME0|E1;|ARTICULATE
+    .byte VOLUME0|E1
+    .byte VOLUME0|E1;|ARTICULATE
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1
+;     .byte VOLUME6|E1
+;     .byte VOLUME8|E1
+;     .byte VOLUME8|E1
+;     .byte VOLUME8|E1
+;     .byte VOLUME8|E1
+;     .byte VOLUME10|E1
+;     .byte VOLUME10|E1
+;     .byte VOLUME10|E1
+;     .byte VOLUME10|E1
+;     .byte VOLUME10|E1
+;     .byte VOLUME10|E1    ;uses two bytes from next table
 BassPattern1   
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME4|E1
+    .byte VOLUME4|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
+    .byte VOLUME4|E1
+    .byte VOLUME4|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
+    .byte VOLUME2|E1
+    .byte VOLUME2|E1|ARTICULATE
 
 BassPattern2
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE
-;     .byte VOLUME6|D2
-;     .byte VOLUME6|D2|ARTICULATE    
+    .byte VOLUME6|D2
+    .byte VOLUME6|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME6|D2
+    .byte VOLUME6|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME4|D2
+    .byte VOLUME4|D2|ARTICULATE    
     
-LevelStartSong
-    .word LevelStartFanfarePattern
-    .word SilencePattern
-    .word $FFFF
-    .byte 1<<4
     
     
     
@@ -4717,7 +4740,7 @@ DistortionTable
     .byte SQUARESOUND, SQUARESOUND, SQUARESOUND, SQUARESOUND
     .byte SQUARESOUND, LEADSOUND, LEADSOUND, LEADSOUND
     .byte LEADSOUND, LEADSOUND, LEADSOUND, SQUARESOUND
-    .byte SQUARESOUND, BASSSOUND, BASSSOUND, LEADSOUND
+    .byte SQUARESOUND, LEADSOUND, BASSSOUND, BASSSOUND
     ;for the following three tables, zero is not used as an index into them
     ;if we end the previous table with SQUARESOUND, SQUARESOUND, SQUARESOUND, BASSOUND, LEADSOUND we can save 5 bytes
 PercussionVolumeTable = * - 1
@@ -4731,7 +4754,7 @@ FrequencyTable
     .byte 19, 20, 23, 26
     .byte 31, 15, 17, 11
     .byte 13, 23, 26, 29
-    .byte 17, 24, 13, 31
+    .byte 17, 31, 13, 24
 
     
 TankDeadStatusBank0
