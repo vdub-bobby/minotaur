@@ -588,12 +588,15 @@ FREQUENCY_BITS      =   %11110000       ;--lookup into a table, probably.
 
 VOLUME0     =   0
 VOLUME2     =   2
-VOLUME4     =   4
-VOLUME6     =   6
-VOLUME8     =   8
-VOLUME10    =   10
-VOLUME12    =   12
-VOLUME14    =   14
+VOLUME3     =   4
+VOLUME4     =   6
+VOLUME5     =   8
+VOLUME6     =   10
+VOLUME7     =   12
+VOLUME8     =   14
+; VOLUME10    =   10
+; VOLUME12    =   12
+; VOLUME14    =   14
 
 
 A5      =   $C0
@@ -1792,6 +1795,11 @@ DrawTitleScreenWhenSELECTPressed
 SetSongIndexTo20    
     lda #$20
     sta SongIndex
+    
+    ;--and -- a little scary -- reset frame counter so we start at the right part of the beat
+    lda #255
+    sta FrameCounter
+    
 NoChangeNecessaryToSongIndex    
 AlreadyOnTitleScreenWeAreFine
     rts    
@@ -2832,6 +2840,10 @@ PlayRegularNote
     tay
     lda (MiscPtr+4),Y
     and #VOLUME_BITS
+    beq VolumeIsZero1
+    lsr
+    adc #1
+VolumeIsZero1  
     sta Temp
     lda (MiscPtr+4),Y
     lsr
@@ -2911,6 +2923,10 @@ NoChangeToSavedRandomNumber
     tay
     lda (MiscPtr+4),Y    
     and #VOLUME_BITS
+    beq VolumeIsZero2
+    lsr
+    adc #1
+VolumeIsZero2
     sta Temp+1
     lda (MiscPtr+4),Y
     lsr
@@ -4021,14 +4037,14 @@ ReverseDirection = *-1	;--the FF are wasted bytes
 	.byte $FF, $FF, $FF, J0LEFT         ;ff ff ff 40
 	
 TitleScreen1
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5|ARTICULATE
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5
+    .byte VOLUME7|D5|ARTICULATE
     .byte VOLUME6|B4
     .byte VOLUME6|B4
     .byte VOLUME6|B4
@@ -4038,10 +4054,10 @@ TitleScreen1
     .byte VOLUME6|B4
     .byte VOLUME6|B4|ARTICULATE
 TitleScreen2
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4
@@ -4063,9 +4079,9 @@ TitleScreen3
     .byte VOLUME6|E4
     .byte VOLUME6|E4
     .byte VOLUME6|E4|ARTICULATE
-    .byte VOLUME4|D4
-    .byte VOLUME4|D4
-    .byte VOLUME4|D4
+    .byte VOLUME5|D4
+    .byte VOLUME5|D4
+    .byte VOLUME5|D4
     .byte VOLUME4|D4
     .byte VOLUME4|D4
     .byte VOLUME4|D4
@@ -4094,9 +4110,9 @@ TitleScreen5
     .byte VOLUME6|G3
     .byte VOLUME6|G3
     .byte VOLUME6|G3
-    .byte VOLUME6|G3
-    .byte VOLUME6|G3
-    .byte VOLUME6|G3|ARTICULATE
+    .byte VOLUME5|G3
+    .byte VOLUME5|G3
+    .byte VOLUME5|G3|ARTICULATE
     .byte SILENCE
     .byte SILENCE
     .byte VOLUME4|E3
@@ -4105,23 +4121,7 @@ TitleScreen5
     .byte VOLUME6|A3|ARTICULATE
     .byte VOLUME8|D4
     .byte VOLUME8|D4|ARTICULATE
-TitleScreen6
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4|ARTICULATE
+
 	
     
     
@@ -4309,11 +4309,6 @@ TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pat
     .word SilencePattern
     .word SilencePattern
     
-;     .word SilencePattern
-;     .word Fanfare2PatternC1
-;     .word Fanfare4Pattern
-;     .word SilencePattern
-  
 
     .word Fanfare3PatternC1    
     .word Fanfare4PatternC1   
@@ -4341,46 +4336,25 @@ TitleScreenSongChannel1      ; ;--must be same length as matching channel 0  pat
 TitleScreenSong    
     .word SilencePattern
     .word SilencePattern
-    
-;     .word Fanfare1PatternC1    
-;     .word Fanfare1PatternC1    
-;     .word Fanfare2PatternC1    
-;     .word SilencePattern    
-
     .word Fanfare4Pattern
     .word Fanfare2Pattern
+    
     .word Fanfare4Pattern
     .word Fanfare3Pattern
-    
     .word Fanfare4Pattern
     .word Fanfare5Pattern
-
-;     .word $FFFF
-;     .byte 0<<4
-
     
     .word SilencePattern
+    .word BassPattern1
+    .word BassPattern1
+    .word BassPattern1
     
-    .word BassPattern1
-    .word BassPattern1
-    .word BassPattern1
     .word BassPattern2
     .word BassPattern2
     .word BassPattern2
     .word BassPattern3    
-    ;silence
-    ;1
-    ;2
-    ;3
     
-    ;4
-    ;5
-    ;6
-    ;7
-    
-    ;8
-    
-    
+    ;--not needed if song is exactly 16 patterns (=measures) long
 ;     .word $FFFF
 ;     .byte 0<<4
 
@@ -4389,56 +4363,51 @@ LevelStartSong
     .word SilencePattern
     .word $FFFF
     .byte 1<<4
-/*
-
-2 bars of silence (for explosion start)
-throw out current 4-bar "intro"
-keep 6-bars as "intro"
-1 bar of silence
-7 bars of something OR
-    4 bars of something, 2 bar of silence and then repeat this forever
-
-| silence | silence |
-| intro | intro | intro | intro |
-| intro | intro | silence |
-
-
-
-4 bass lines = 64 bytes
-
-
-
-*/    
     
-    
-
+TitleScreen6
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME6|E4
+    .byte VOLUME7|E4
+    .byte VOLUME7|E4
+    .byte VOLUME7|E4
+    .byte VOLUME7|E4
+    .byte VOLUME8|E4
+    .byte VOLUME8|E4
+    .byte VOLUME8|E4
+    .byte VOLUME8|E4
+    .byte VOLUME8|E4
+    .byte VOLUME8|E4
+    .byte VOLUME6|E4
+    .byte VOLUME4|E4|ARTICULATE
 Fanfare2PatternC1
-    .byte VOLUME4|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4|ARTICULATE
+    .byte VOLUME5|E4|ARTICULATE
     .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4|ARTICULATE
     .byte VOLUME4|D4
     .byte VOLUME4|D4|ARTICULATE
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-    .byte VOLUME4|E4
-;     .byte VOLUME4|E4
-;     .byte VOLUME4|E4|ARTICULATE
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4
+    .byte VOLUME5|E4|ARTICULATE
   
 LevelStartFanfarePattern
     .byte VOLUME6|E4
     .byte VOLUME6|E4|ARTICULATE
     .byte VOLUME6|E4|ARTICULATE
-    .byte VOLUME6|E4|ARTICULATE
+    .byte VOLUME4|E4|ARTICULATE
     .byte VOLUME6|E4
     .byte VOLUME6|E4|ARTICULATE
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4|ARTICULATE
+    .byte VOLUME5|D4
+    .byte VOLUME5|D4|ARTICULATE
     .byte VOLUME6|E4
     .byte VOLUME6|E4
     .byte VOLUME6|E4
@@ -4449,92 +4418,56 @@ LevelStartFanfarePattern
     .byte VOLUME6|E4|ARTICULATE
     
  
-Fanfare1Pattern
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-;     .byte VOLUME6|A3
-;     .byte VOLUME6|A3|ARTICULATE
-Fanfare1PatternC1
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME4|A3|ARTICULATE
-    .byte VOLUME4|A3|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3|ARTICULATE
-    .byte VOLUME4|G3
-    .byte VOLUME4|G3|ARTICULATE
-    .byte VOLUME6|A3
-    .byte VOLUME6|A3
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3
-    .byte VOLUME4|A3|ARTICULATE
-    
-
     
 Fanfare3PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
     .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4|ARTICULATE
+    .byte VOLUME6|A4
+    .byte VOLUME6|A4
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4
+    .byte VOLUME4|A4
+    .byte VOLUME4|A4
     .byte VOLUME4|A4
     .byte VOLUME4|A4|ARTICULATE
-    .byte VOLUME6|A4
-    .byte VOLUME6|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4
-;     .byte VOLUME4|A4
-;     .byte VOLUME4|A4|ARTICULATE
 Fanfare4PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
     .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4|ARTICULATE
     .byte VOLUME6|C5
     .byte VOLUME6|C5
-    .byte VOLUME4|C5
-    .byte VOLUME4|C5|ARTICULATE
-    .byte VOLUME6|D5
-    .byte VOLUME6|D5
-    .byte VOLUME4|D5
-    .byte VOLUME4|D5|ARTICULATE
+    .byte VOLUME6|C5
+    .byte VOLUME6|C5|ARTICULATE
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5
+    .byte VOLUME8|D5|ARTICULATE
 Fanfare5PatternC1
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME4|A4|ARTICULATE
+    .byte VOLUME6|A4|ARTICULATE
     .byte VOLUME4|A4|ARTICULATE
     .byte VOLUME6|A4
     .byte VOLUME6|A4|ARTICULATE
-    .byte VOLUME4|A4
-    .byte VOLUME4|A4|ARTICULATE
-    .byte VOLUME6|E4
-    .byte VOLUME6|E4
+    .byte VOLUME5|A4
+    .byte VOLUME5|A4|ARTICULATE
+    .byte VOLUME4|E4
+    .byte VOLUME4|E4
     .byte VOLUME4|E4
     .byte VOLUME4|E4|ARTICULATE
-    .byte VOLUME6|D4
-    .byte VOLUME6|D4
+    .byte VOLUME4|D4
+    .byte VOLUME4|D4
     .byte VOLUME4|D4
     .byte VOLUME4|D4|ARTICULATE
 
@@ -4543,7 +4476,7 @@ Fanfare5PatternC1
 Fanfare2Pattern
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
@@ -4551,16 +4484,16 @@ Fanfare2Pattern
     .byte VOLUME4|D5|ARTICULATE
     .byte VOLUME8|G5
     .byte VOLUME8|G5
-    .byte VOLUME6|G5
-    .byte VOLUME6|G5|ARTICULATE
-    .byte VOLUME8|Fs5
-    .byte VOLUME8|Fs5
+    .byte VOLUME8|G5
+    .byte VOLUME8|G5|ARTICULATE
+    .byte VOLUME6|Fs5
+    .byte VOLUME6|Fs5
     .byte VOLUME6|Fs5
     .byte VOLUME6|Fs5|ARTICULATE
 Fanfare4Pattern
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
@@ -4577,18 +4510,18 @@ Fanfare4Pattern
 Fanfare3Pattern
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
-    .byte VOLUME6|E5|ARTICULATE
+    .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME6|E5|ARTICULATE
     .byte VOLUME8|E5
     .byte VOLUME8|E5|ARTICULATE
     .byte VOLUME4|D5
     .byte VOLUME4|D5|ARTICULATE
-    .byte VOLUME8|B4
-    .byte VOLUME8|B4
+    .byte VOLUME6|B4
+    .byte VOLUME6|B4
     .byte VOLUME6|B4
     .byte VOLUME6|B4|ARTICULATE
-    .byte VOLUME8|D5
-    .byte VOLUME8|D5
+    .byte VOLUME6|D5
+    .byte VOLUME6|D5
     .byte VOLUME6|D5
     .byte VOLUME6|D5|ARTICULATE
        
@@ -4597,7 +4530,7 @@ Fanfare3Pattern
 Fanfare5Pattern
     .byte VOLUME8|A5
     .byte VOLUME8|A5|ARTICULATE
-    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME8|A5|ARTICULATE
     .byte VOLUME6|A5|ARTICULATE
     .byte VOLUME8|A5
     .byte VOLUME8|A5|ARTICULATE
@@ -4609,40 +4542,26 @@ Fanfare5Pattern
     .byte VOLUME8|A5
     .byte VOLUME8|A5
     .byte VOLUME8|A5
-    .byte VOLUME6|A5
-    .byte VOLUME6|A5|ARTICULATE
+    .byte VOLUME8|A5
+    .byte VOLUME8|A5|ARTICULATE
     
 BassPattern3   
     .byte VOLUME8|E1
     .byte VOLUME8|E1|ARTICULATE
-    .byte VOLUME8|E1
-    .byte VOLUME8|E1|ARTICULATE
+    .byte VOLUME7|E1
+    .byte VOLUME7|E1|ARTICULATE
     .byte VOLUME6|E1
     .byte VOLUME6|E1|ARTICULATE
-    .byte VOLUME6|E1
-    .byte VOLUME6|E1|ARTICULATE
+    .byte VOLUME5|E1
+    .byte VOLUME5|E1|ARTICULATE
     .byte VOLUME4|E1
     .byte VOLUME4|E1|ARTICULATE
+    .byte VOLUME3|E1
+    .byte VOLUME3|E1;|ARTICULATE
     .byte VOLUME2|E1
     .byte VOLUME2|E1;|ARTICULATE
     .byte VOLUME0|E1
     .byte VOLUME0|E1;|ARTICULATE
-    .byte VOLUME0|E1
-    .byte VOLUME0|E1;|ARTICULATE
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1
-;     .byte VOLUME6|E1
-;     .byte VOLUME8|E1
-;     .byte VOLUME8|E1
-;     .byte VOLUME8|E1
-;     .byte VOLUME8|E1
-;     .byte VOLUME10|E1
-;     .byte VOLUME10|E1
-;     .byte VOLUME10|E1
-;     .byte VOLUME10|E1
-;     .byte VOLUME10|E1
-;     .byte VOLUME10|E1    ;uses two bytes from next table
 BassPattern1   
     .byte VOLUME4|E1
     .byte VOLUME4|E1|ARTICULATE
@@ -4664,20 +4583,20 @@ BassPattern1
 BassPattern2
     .byte VOLUME6|D2
     .byte VOLUME6|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE
     .byte VOLUME6|D2
     .byte VOLUME6|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE
-    .byte VOLUME4|D2
-    .byte VOLUME4|D2|ARTICULATE    
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE
+    .byte VOLUME3|D2
+    .byte VOLUME3|D2|ARTICULATE    
     
     
     
